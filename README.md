@@ -1,169 +1,107 @@
-# 🤖 SmartVision AI – Intelligent Multi-Class Object Recognition System
-🔍 Deep Learning • Transfer Learning • CNN • YOLO • Computer Vision • Streamlit • Hugging Face Deployment
+# 🤖 Smart Vision AI
 
 ![Python](https://img.shields.io/badge/Python-3.x-blue?logo=python)
-![TensorFlow](https://img.shields.io/badge/Deep%20Learning-TensorFlow-orange?logo=tensorflow)
 ![PyTorch](https://img.shields.io/badge/Deep%20Learning-PyTorch-red?logo=pytorch)
-![CNN](https://img.shields.io/badge/Architecture-CNN-yellow)
 ![YOLO](https://img.shields.io/badge/Object%20Detection-YOLOv8-green)
-![TransferLearning](https://img.shields.io/badge/Method-Transfer%20Learning-purple)
 ![Streamlit](https://img.shields.io/badge/Web%20App-Streamlit-red?logo=streamlit)
-![HuggingFace](https://img.shields.io/badge/Deployment-HuggingFace-blue?logo=huggingface)
-![Domain](https://img.shields.io/badge/Domain-Computer%20Vision%20%7C%20AI-brightgreen)
+![License](https://img.shields.io/badge/License-MIT-purple)
+
+**Smart Vision AI** is an intelligent, multi-class object recognition and detection platform. By combining the power of **YOLO (You Only Look Once)** for real-time object detection and **MobileNetV2** for high-accuracy image classification, this application provides a robust and interactive web interface built with **Streamlit**.
 
 ---
 
-## 📘 Overview
-**SmartVision AI** is a next-gen **computer vision platform** built to perform:
-- 🟩 Multi-class Image Classification  
-- 🔶 Multi-object Detection in a single image  
+## 🌟 Features
 
-Trained on **25 diverse COCO object classes**, the system integrates:
-- CNN-based **Transfer Learning models** (VGG16, ResNet50, MobileNet, EfficientNet)
-- **YOLO-based object detection** for bounding boxes and confidence scoring
-- **Streamlit multipage UI** for image upload + model comparison
-- **Deployment on Hugging Face / Cloud** for real-time inference
-
-This project demonstrates a **full deep learning lifecycle** — from dataset building to cloud deployment.
+- **🎯 Real-Time Object Detection**: Upload images or use your webcam to instantly detect multiple objects within a single frame using a custom-trained YOLO model.
+- **🧠 Image Classification**: Quickly classify images into one of 25 diverse COCO categories using a fine-tuned MobileNetV2 architecture.
+- **📷 Multi-Modal Inputs**: Seamlessly switch between file uploads (JPG, PNG) and live webcam capture.
+- **✨ Modern UI/UX**: Enjoy a sleek, responsive, and intuitive interface with custom CSS styling and interactive elements.
 
 ---
 
-## 🎯 Problem Statement
-Industries require visual AI systems that can:
-- Detect **multiple objects in an image**
-- Classify across **multiple categories**
-- Run **real-time inference**
-- Maintain **high accuracy under varying lighting & angles**
-- Scale **for cloud-based global usage**
+## 🛠️ Technology Stack
 
-SmartVision AI solves this by combining **classification + object detection** into one deployable solution.
+- **Frontend**: Streamlit, HTML/CSS
+- **Deep Learning Framework**: PyTorch, Torchvision
+- **Computer Vision**: OpenCV, Ultralytics (YOLO)
+- **Data Manipulation**: NumPy, Pillow (PIL)
 
 ---
 
-## 💼 Business Use Cases
-| Industry | Application |
-|---------|-------------|
-| 🚦 Smart Cities | Vehicle detection, pedestrian monitoring, traffic analytics |
-| 🛒 Retail | Product recognition, automated checkout, shelf analytics |
-| 🛡 Security | Intrusion & suspicious object alerts, surveillance automation |
-| 🐾 Wildlife | Animal identification & behavior monitoring from camera traps |
-| 🏥 Healthcare | PPE compliance, patient fall detection |
-| 🏠 IoT & Smart Home | Object-triggered automation & real-time alerts |
-| 🚚 Logistics | Package sorting, barcode detection, damage detection |
+## 🚀 Getting Started
 
----
+### Prerequisites
 
-## 🧠 Skills Takeaway
-- TensorFlow & PyTorch Deep Learning
-- Transfer Learning with **VGG16 / ResNet50 / MobileNet / EfficientNet**
-- **YOLO Object Detection**
-- OpenCV for image transformation
-- Confusion Matrix & visual evaluation
-- Streamlit multi-page UI development
-- Deployment on **Hugging Face / Streamlit Cloud**
+Make sure you have Python 3.8+ installed on your system.
 
----
+### 1. Clone the Repository
 
-## ⚙️ Approach Summary
-
-### 🔹 Dataset Preparation
-- Curated **25 COCO classes**
-- Normalized/resized images
-- Augmentation: rotation, flipping, gamma correction, zoom, motion blur
-
-### 🔹 CNN-Based Image Classification
-4 deep learning models trained:
-- **VGG16**
-- **ResNet50**
-- **MobileNet**
-- **EfficientNet**
-
-Dataset passed through:
-- Data generators
-- Transfer learning
-- Fine-tuning stage
-- Side-by-side model output comparison
-
-### 🔹 YOLO Object Detection
-- Trained for bounding box + class + confidence score
-- Supports **multi-object recognition**
-- Optimized for **real-time inference & low latency**
-
-### 🔹 Streamlit Multi-Page Web App
-Contains:
-1️⃣ Home / Overview  
-2️⃣ Image Classification (upload → predictions)  
-3️⃣ YOLO Object Detection  
-4️⃣ Model Performance Dashboard  
-5️⃣ About / System Documentation  
-
-### 🔹 Cloud Deployment
-- Hosted on **Hugging Face Spaces / Streamlit Cloud**
-- Integrated with GitHub for CI/CD
-- Supports GPU inference where available
-
----
-
-<summary>📸 Click to view Streamlit UI screenshots</summary>
-
-#### Home Page  
-![Home Page](https://github.com/user-attachments/assets/d4ed0614-4b9e-4d31-9c60-6c94550c7c99)
-
-
-#### Detection Results Page 1
-![Result Page](https://github.com/user-attachments/assets/8e8884b4-db95-4fde-a077-7c14f82cd9f1)
-
-
-####  Detection Results Page 2
-![Dashboard](https://github.com/user-attachments/assets/c4acb123-7f31-48a7-8f2e-ea620dcce65b)
-
-
-####  Detection Results Page 3
-![Dashboard](https://github.com/user-attachments/assets/d7269bff-963b-4c16-9617-0ace8d8534a6)
-
-
-
----
-
-## 🧩 Project Structure
 ```bash
-SmartVision_AI/
-│
-├── datasets codes/
-│   └── Smart_Vision_Data_Code.ipynb
-│
-├── Traninig Codes/
-│   └── SmartVision_Train_Code.ipynb
-│
-├── classification/
-│   ├── test/
-│   └── train/
-│
-├── smart vision detection/
-│   ├── train
-│   ├── valid
-│   └── data.yaml
-│
-├── SmartVision_Train.ipynb
-├── app.py
-└── requirements.txt
+git clone https://github.com/soumyajali/SmartVision.git
+cd SmartVision
 ```
 
----
+### 2. Set Up a Virtual Environment (Recommended)
 
-## 🛠️ Run Locally
-Install dependencies:
+```bash
+python -m venv venv
+source venv/bin/activate  # On Windows use `venv\Scripts\activate`
 ```
+
+### 3. Install Dependencies
+
+```bash
 pip install -r requirements.txt
 ```
 
-Launch Streamlit app:
-```
+### 4. Run the Application
+
+```bash
 streamlit run app.py
 ```
 
----
-arring the repository!
+The app will launch in your default web browser at `http://localhost:8501`.
 
 ---
 
+## 📂 Project Structure
+
+```text
+SmartVision/
+├── app.py                      # Main Streamlit application
+├── requirements.txt            # Python dependencies
+├── SmartVision_v3.pt           # Custom YOLO detection model weights
+├── MobileNET_best.pth          # Fine-tuned MobileNet classification weights
+├── Datasets Codes/             # Data preparation scripts and notebooks
+├── Traninig Codes/             # Model training notebooks
+└── README.md                   # Project documentation
+```
+
+---
+
+## 🎯 Supported Classes
+
+The models are trained to recognize and classify the following 25 categories:
+*Chair, Bottle, Cat, Cup, Bench, Horse, Person, Bed, Truck, Airplane, Cycle, Bird, Bike, Bus, Potted Plant, Pizza, Stop Signal, Bowl, Traffic Signal, Couch, Elephant, Cake, Dog, Cow, Car.*
+
+---
+
+## 🤝 Contributing
+
+Contributions, issues, and feature requests are welcome! Feel free to check the [issues page](../../issues).
+
+1. Fork the Project
+2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the Branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
+
+---
+
+## 📜 License
+
+Distributed under the MIT License. See `LICENSE` for more information.
+
+---
+
+*If you found this project helpful, please consider giving it a ⭐ on GitHub!*
