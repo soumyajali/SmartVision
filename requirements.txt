@@ -1,0 +1,13 @@
+streamlit
+torch
+torchvision
+opencv-python
+ultralytics
+Pillow
+numpy
+typing_extensions
+protobuf
+pandas
+matplotlib
+
+

@@ -1,0 +1,4 @@
+train: train/images
+val: valid/images
+nc: 25
+names: ["Chair", "bottle", "Cat", "Cup", "Bench", "Horse", "Person", "bed", "Truck", "Airplane", "Cycle", "Bird", "bike", "bus", "potted plant", "Pizza", "Stop Signal", "Bowl", "Traffic Signal", "couch", "elephant", "Cake", "dog", "cow", "Car"]
