@@ -6,7 +6,7 @@ from torchvision import models, transforms
 from PIL import Image
 import numpy as np
 import cv2
-
+# Removed insecure SSL certificate workaround as per requirements
 # ---------------- CLASS LABELS ----------------
 CLASS_NAMES = [
 'Chair','bottle','Cat','Cup','Bench','Horse','Person','bed','Truck','Airplane',
@@ -29,7 +29,18 @@ def load_detection_model():
 
 @st.cache_resource
 def load_classification_model():
-    model = models.mobilenet_v2(pretrained=True)
+    try:
+        import urllib.error
+        # Use the latest torchvision API to load weights instead of deprecated pretrained=True
+        # This will automatically use cached weights if available in ~/.cache/torch/hub/checkpoints/
+        weights = models.MobileNet_V2_Weights.DEFAULT
+        model = models.mobilenet_v2(weights=weights)
+    except urllib.error.URLError as e:
+        # Handle SSL certificate verification failures on macOS or offline scenarios gracefully
+        # Fallback to weights=None to prevent the app from crashing, though model performance will be degraded initially
+        st.error(f"Failed to download pretrained weights: {e}. Falling back to uninitialized model. Note: On macOS, you may need to run 'Install Certificates.command' in your Python folder.")
+        model = models.mobilenet_v2(weights=None)
+        
     for param in model.features.parameters():
         param.requires_grad = False
     model.classifier = nn.Sequential(
@@ -54,22 +65,22 @@ st.markdown("""
 <style>
 .section-title {
     font-size: 52px; font-weight: 900; text-align: center;
-    color: #004aad;           
+    color: var(--primary-color);           
     margin-bottom: 5px;
 }
 .sub-text {
-    text-align: center; font-size: 21px; color: #444; margin-bottom: 30px;
+    text-align: center; font-size: 21px; color: var(--text-color); opacity: 0.8; margin-bottom: 30px;
 }
 .card-box {
-    background: white; padding: 22px; border-radius: 16px;
-    box-shadow: 0px 3px 14px rgba(0,0,0,0.17);
+    background: var(--secondary-background-color); padding: 22px; border-radius: 12px;
+    border: 1px solid rgba(128, 128, 128, 0.2);
     margin-top: 10px; margin-bottom: 18px;
 }
 .result-label {
-    font-size: 32px; font-weight: 900; text-align:center; color: #004aad;
+    font-size: 32px; font-weight: 900; text-align:center; color: var(--primary-color);
 }
 .confidence-label {
-    font-size: 20px; text-align:center; margin-top: 3px; color:#404040;
+    font-size: 20px; text-align:center; margin-top: 3px; color: var(--text-color); opacity: 0.8;
 }
 </style>
 """, unsafe_allow_html=True)
