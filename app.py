@@ -32,6 +32,10 @@ NUM_CLASSES = len(CLASS_NAMES)
 # ---------------- PAGE CONFIG ----------------
 st.set_page_config(page_title="Smart Vision AI", page_icon="🤖", layout="wide")
 
+# ---------------- PREMIUM 3D UI (background only — no AI changes) ----------------
+from integration import inject_premium_ui
+inject_premium_ui()
+
 # ---------------- SESSION STATE ----------------
 if "page" not in st.session_state:
     st.session_state["page"] = "🏠 Home"

@@ -1,49 +1,48 @@
-# shadcn/ui-inspired Streamlit Theme
-# Beautifully designed components aesthetic
-# Minimal, accessible, elegant with neutral palette
+# Smart Vision AI — Futuristic Dark Theme
+# Glassmorphism UI with cyan/purple AI palette
 
 [theme]
-base = "light"
-primaryColor = "#18181B"
-backgroundColor = "#FFFFFF"
-secondaryBackgroundColor = "#FAFAFA"
-codeBackgroundColor = "#F4F4F5"
-textColor = "#09090B"
-linkColor = "#18181B"
-borderColor = "#E4E4E7"
+base = "dark"
+primaryColor = "#00E5FF"
+backgroundColor = "#050816"
+secondaryBackgroundColor = "#080E23"
+codeBackgroundColor = "#0C142D"
+textColor = "#E8F4FF"
+linkColor = "#00E5FF"
+borderColor = "#1E3A5F"
 showWidgetBorder = true
 showSidebarBorder = true
-baseRadius = "6px"
-buttonRadius = "6px"
-font = "'Inter':https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap"
+baseRadius = "16px"
+buttonRadius = "12px"
+font = "'Inter':https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+headingFont = "'Orbitron':https://fonts.googleapis.com/css2?family=Orbitron:wght@500;600;700;800&display=swap"
 codeFont = "'JetBrains Mono':https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap"
 codeFontSize = "0.875rem"
-codeTextColor = "#18181B"
+codeTextColor = "#4FD1FF"
 baseFontSize = 14
 baseFontWeight = 400
-headingFontSizes = ["36px", "30px", "24px", "20px", "16px", "14px"]
-headingFontWeights = [600, 600, 600, 600, 600, 600]
-linkUnderline = true
-chartCategoricalColors = ["#18181B", "#71717A", "#A1A1AA", "#D4D4D8", "#3B82F6", "#EF4444", "#22C55E"]
+headingFontSizes = ["36px", "28px", "22px", "18px", "16px", "14px"]
+headingFontWeights = [700, 600, 600, 600, 500, 500]
+linkUnderline = false
+chartCategoricalColors = ["#00E5FF", "#7B61FF", "#00FFC6", "#4FD1FF", "#3B82F6", "#EF4444", "#22C55E"]
 
-# shadcn zinc palette
-grayColor = "#71717A"
-blueColor = "#3B82F6"
-greenColor = "#22C55E"
-redColor = "#EF4444"
-yellowColor = "#EAB308"
-orangeColor = "#F97316"
-violetColor = "#8B5CF6"
+grayColor = "#94A3B8"
+blueColor = "#00E5FF"
+greenColor = "#00FFC6"
+redColor = "#FF4D6D"
+yellowColor = "#FFD166"
+orangeColor = "#FF8C42"
+violetColor = "#7B61FF"
 
-dataframeBorderColor = "#E4E4E7"
-dataframeHeaderBackgroundColor = "#FAFAFA"
+dataframeBorderColor = "#1E3A5F"
+dataframeHeaderBackgroundColor = "#080E23"
 
 [theme.sidebar]
-backgroundColor = "#FAFAFA"
-secondaryBackgroundColor = "#F4F4F5"
-codeBackgroundColor = "#E4E4E7"
-textColor = "#09090B"
-borderColor = "#E4E4E7"
-primaryColor = "#18181B"
-dataframeHeaderBackgroundColor = "#F4F4F5"
-dataframeBorderColor = "#E4E4E7"
+backgroundColor = "#060A18"
+secondaryBackgroundColor = "#0C142D"
+codeBackgroundColor = "#0C142D"
+textColor = "#E8F4FF"
+borderColor = "#1E3A5F"
+primaryColor = "#00E5FF"
+dataframeHeaderBackgroundColor = "#0C142D"
+dataframeBorderColor = "#1E3A5F"
