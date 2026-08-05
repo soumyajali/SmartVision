@@ -127,7 +127,7 @@ def _inject_background_html(show_loader: bool = True) -> None:
 {scripts}
 """
 
-    st.html(html, unsafe_allow_javascript=True, height=0)
+    st.components.v1.html(html, height=0)
 
 
 # ============================================================

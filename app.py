@@ -446,7 +446,7 @@ elif page == "🎯 Object Detection":
         detected_objects = set()
         detected_objects_with_conf = []
         detections_for_recording = []
-        dangerous_objects = {"Knife", "Scissors", "Fire", "Gas Cylinder", "Gun"}
+        dangerous_objects = {"Knife", "Scissors", "Fire", "Gas Cylinder", "Gun", "Cat", "Bottle", "Person"}
         found_dangerous = False
         
         if results and len(results) > 0:
