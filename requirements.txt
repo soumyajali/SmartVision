@@ -25,3 +25,4 @@ google-auth-oauthlib
 supabase
 mediapipe
 pyttsx3
+streamlit-webrtc

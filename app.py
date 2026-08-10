@@ -7,6 +7,7 @@ from PIL import Image
 import numpy as np
 import cv2
 import os
+import subprocess
 import time
 from datetime import datetime
 from voice_assistant import get_voice_assistant
@@ -18,16 +19,12 @@ from utils import (
 from utils.recorder import get_video_recorder
 from services.email_service import get_email_service
 from services.telegram_service import get_telegram_service
+from services.face_service import FaceService
 import plotly.graph_objects as go
 import plotly.express as px
 # Removed insecure SSL certificate workaround as per requirements
 # ---------------- CLASS LABELS ----------------
-CLASS_NAMES = [name.title() for name in [
-'Chair','bottle','Cat','Cup','Bench','Horse','Person','bed','Truck','Airplane',
-'Cycle','Bird','bike','bus','potted plant','Pizza','Stop Signal','Bowl',
-'Traffic Signal','couch','elephant','Cake','dog','cow','Car'
-]]
-NUM_CLASSES = len(CLASS_NAMES)
+
 
 # ---------------- PAGE CONFIG ----------------
 st.set_page_config(page_title="Smart Vision AI", page_icon="🤖", layout="wide")
@@ -37,6 +34,8 @@ from integration import inject_premium_ui
 inject_premium_ui()
 
 # ---------------- SESSION STATE ----------------
+if "face_service" not in st.session_state:
+    st.session_state["face_service"] = FaceService()
 if "page" not in st.session_state:
     st.session_state["page"] = "🏠 Home"
 if "voice_enabled" not in st.session_state:
@@ -44,7 +43,7 @@ if "voice_enabled" not in st.session_state:
 if "dark_mode" not in st.session_state:
     st.session_state["dark_mode"] = False
 if "confidence_threshold" not in st.session_state:
-    st.session_state["confidence_threshold"] = 0.50
+    st.session_state["confidence_threshold"] = 0.25
 if "search_object" not in st.session_state:
     st.session_state["search_object"] = ""
 if "search_mode" not in st.session_state:
@@ -69,7 +68,7 @@ if "recording_dir" not in st.session_state:
 # ---------------- LOAD MODELS ----------------
 @st.cache_resource
 def load_detection_model():
-    return YOLO("SmartVision_v3.pt")
+    return YOLO("yolov8m.pt")
 
 @st.cache_resource
 def load_classification_model():
@@ -104,7 +103,16 @@ def load_classification_model():
     model.eval()
     return model
 
+
+CLS_CLASS_NAMES = [name.title() for name in [
+'Chair','bottle','Cat','Cup','Bench','Horse','Person','bed','Truck','Airplane',
+'Cycle','Bird','bike','bus','potted plant','Pizza','Stop Signal','Bowl',
+'Traffic Signal','couch','elephant','Cake','dog','cow','Car'
+]]
+
 det_model = load_detection_model()
+CLASS_NAMES = det_model.names
+NUM_CLASSES = len(CLS_CLASS_NAMES)
 cls_model = load_classification_model()
 transform = transforms.Compose([
     transforms.Resize((224, 224)),
@@ -115,232 +123,289 @@ transform = transforms.Compose([
 
 # ---------------- GLOBAL MODERN CSS ----------------
 def get_theme_css():
-    """Return CSS based on current theme."""
-    if st.session_state.get("dark_mode", False):
-        return """
+    return """
 <style>
 .stApp {
-    background-color: #1e1e1e;
+    background-color: #0e1117;
 }
 .section-title {
-    font-size: 52px; font-weight: 900; text-align: center;
-    color: #4a9eff;           
+    font-size: 32px; font-weight: 700; color: #f8fafc;
     margin-bottom: 5px;
 }
 .sub-text {
-    text-align: center; font-size: 21px; color: #e0e0e0; opacity: 0.8; margin-bottom: 30px;
+    font-size: 16px; color: #94a3b8; margin-bottom: 30px;
 }
 .card-box {
-    background: #2d2d2d; padding: 22px; border-radius: 12px;
-    border: 1px solid rgba(128, 128, 128, 0.2);
-    margin-top: 10px; margin-bottom: 18px;
-    color: #e0e0e0;
+    background: #1e293b; padding: 20px; border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    margin-bottom: 15px;
+    color: #e2e8f0;
 }
-.result-label {
-    font-size: 32px; font-weight: 900; text-align:center; color: #4a9eff;
+.kpi-card {
+    background: #1e293b; padding: 15px; border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    text-align: center;
 }
-.confidence-label {
-    font-size: 20px; text-align:center; margin-top: 3px; color: #e0e0e0; opacity: 0.8;
+.kpi-value {
+    font-size: 24px; font-weight: bold; color: #f8fafc;
+}
+.kpi-label {
+    font-size: 14px; color: #94a3b8;
+}
+.model-info-card {
+    background: #1e293b; padding: 15px; border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    margin-top: 20px;
+    font-size: 14px;
+}
+.model-info-row {
+    display: flex; justify-content: space-between; margin-bottom: 5px;
+}
+.model-info-label { color: #94a3b8; }
+.model-info-val { color: #e2e8f0; }
+.status-ready { color: #22c55e; font-weight: bold; }
+div.stButton > button:first-child {
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
 }
 </style>
 """
-    else:
-        return """
-<style>
-.section-title {
-    font-size: 52px; font-weight: 900; text-align: center;
-    color: var(--primary-color);           
-    margin-bottom: 5px;
-}
-.sub-text {
-    text-align: center; font-size: 21px; color: var(--text-color); opacity: 0.8; margin-bottom: 30px;
-}
-.card-box {
-    background: var(--secondary-background-color); padding: 22px; border-radius: 12px;
-    border: 1px solid rgba(128, 128, 128, 0.2);
-    margin-top: 10px; margin-bottom: 18px;
-}
-.result-label {
-    font-size: 32px; font-weight: 900; text-align:center; color: var(--primary-color);
-}
-.confidence-label {
-    font-size: 20px; text-align:center; margin-top: 3px; color: var(--text-color); opacity: 0.8;
-}
-</style>
-"""
-
 st.markdown(get_theme_css(), unsafe_allow_html=True)
 
 
 # ---------------- SIDEBAR ----------------
+st.sidebar.markdown("### SMART VISION")
+st.sidebar.markdown("<small style='color: #94a3b8;'>Real-Time Object Detection</small>", unsafe_allow_html=True)
+
 page = st.sidebar.radio(
-    "Navigation",
-    ["🏠 Home", "🧠 Classification", "🎯 Object Detection", "📊 Analytics", "📜 History", "🔍 OCR", "📷 QR Scanner"],
-    index=["🏠 Home", "🧠 Classification", "🎯 Object Detection", "📊 Analytics", "📜 History", "🔍 OCR", "📷 QR Scanner"].index(st.session_state["page"])
+    "",
+    ["🏠 Dashboard", "📷 Live Detection", "📋 Detections", "🔔 Alerts", "📜 History", "👤 Face Registration", "⚙️ Settings", "ℹ️ About"],
+    index=0
 )
 st.session_state["page"] = page
 
 st.sidebar.markdown("---")
 
-# Voice Assistant Toggle
-st.session_state["voice_enabled"] = st.sidebar.toggle(
-    "🔊 Voice Assistant",
-    value=st.session_state.get("voice_enabled", False),
-    help="Enable voice announcements for detected objects"
-)
+if page == "⚙️ Settings":
+    st.session_state["voice_enabled"] = st.sidebar.toggle("🔊 Voice Assistant", value=st.session_state.get("voice_enabled", False))
+    st.session_state["confidence_threshold"] = st.sidebar.slider("🎯 Confidence Threshold", 0.05, 1.00, st.session_state.get("confidence_threshold", 0.10), 0.05)
+    st.session_state["search_mode"] = st.sidebar.checkbox("Enable Search Mode")
+    if st.session_state["search_mode"]:
+        st.session_state["search_object"] = st.sidebar.text_input("Search Object", placeholder="e.g., Bottle")
 
-# Dark/Light Theme Toggle
-st.session_state["dark_mode"] = st.sidebar.toggle(
-    "🌙 Dark Mode",
-    value=st.session_state.get("dark_mode", False),
-    help="Toggle between dark and light theme"
-)
+st.sidebar.markdown("""
+<div class="model-info-card">
+    <div style="color: #22c55e; margin-bottom: 10px; font-weight: bold;">Model Info</div>
+    <div class="model-info-row"><span class="model-info-label">Model</span><span class="model-info-val">YOLOv8</span></div>
+    <div class="model-info-row"><span class="model-info-label">Version</span><span class="model-info-val">8.1.0</span></div>
+    <div class="model-info-row"><span class="model-info-label">Backend</span><span class="model-info-val">PyTorch</span></div>
+    <div class="model-info-row"><span class="model-info-label">Device</span><span class="model-info-val">CPU</span></div>
+    <div class="model-info-row"><span class="model-info-label">Status</span><span class="status-ready">Ready</span></div>
+</div>
+""", unsafe_allow_html=True)
 
-# Confidence Threshold Slider
-st.session_state["confidence_threshold"] = st.sidebar.slider(
-    "🎯 Confidence Threshold",
-    min_value=0.10,
-    max_value=1.00,
-    value=st.session_state.get("confidence_threshold", 0.50),
-    step=0.05,
-    help="Set the minimum confidence threshold for object detection"
-)
 
-st.sidebar.markdown("---")
-
-# Object Search Mode
-st.sidebar.markdown("### 🔍 Object Search")
-st.session_state["search_mode"] = st.sidebar.checkbox("Enable Search Mode")
-if st.session_state["search_mode"]:
-    st.session_state["search_object"] = st.sidebar.text_input(
-        "Search Object",
-        value=st.session_state.get("search_object", ""),
-        placeholder="e.g., Bottle, Chair, Person"
-    )
-
-st.sidebar.markdown("---")
-
-# Performance Monitor Toggle
-show_performance = st.sidebar.checkbox("📈 Show Performance")
-if show_performance:
-    perf_stats = st.session_state["performance_monitor"].get_stats()
-    st.sidebar.metric("FPS", f"{perf_stats['fps']:.1f}")
-    st.sidebar.metric("CPU", f"{perf_stats['cpu_percent']:.1f}%")
-    st.sidebar.metric("Memory", f"{perf_stats['memory_percent']:.1f}%")
-    st.sidebar.metric("Inference Time", f"{perf_stats['avg_inference_time']*1000:.1f}ms")
-
-st.sidebar.markdown("---")
-
-# Email Alert Configuration
-st.sidebar.markdown("### 📧 Email Alerts")
-st.session_state["email_alerts_enabled"] = st.sidebar.checkbox(
-    "Enable Email Alerts",
-    value=st.session_state.get("email_alerts_enabled", False),
-    help="Send email alerts when dangerous objects are detected"
-)
-
-if st.session_state["email_alerts_enabled"]:
-    with st.sidebar.expander("Email Configuration"):
-        sender_email = st.text_input("Sender Email", value=st.session_state.get("sender_email", ""))
-        sender_password = st.text_input("Email Password/App Password", type="password", 
-                                       value=st.session_state.get("sender_password", ""))
-        recipient_emails = st.text_input("Recipient Emails (comma-separated)", 
-                                        value=st.session_state.get("recipient_emails", ""))
+# 🏠 HOME PAGE (Dashboard)
+if page in ["🏠 Dashboard", "🏠 Home"]:
+    st.markdown("""
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+                <div class='section-title'>Dashboard</div>
+                <div class='sub-text'>Real-time detection from camera</div>
+            </div>
+            <div style="text-align: right;">
+                <div style="color: #22c55e; font-weight:bold;">● System Active</div>
+                <div style="color: #e2e8f0; font-size:14px; margin-top:2px;">""" + datetime.now().strftime("%I:%M:%S %p") + """</div>
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    col_main, col_side = st.columns([3, 1])
+    
+    input_type = st.radio("Choose Input", ["Webcam", "Upload Image"], horizontal=True)
+    img_cv = None
+    
+    with col_main:
+        st.markdown("<div class='card-box'><b style='color:#22c55e;'>🎥 Live Camera Feed</b><br/>", unsafe_allow_html=True)
         
-        if st.button("Save Email Config"):
-            if sender_email and sender_password and recipient_emails:
-                email_service = get_email_service()
-                recipient_list = [email.strip() for email in recipient_emails.split(",")]
-                email_service.configure(sender_email, sender_password, recipient_list)
-                st.session_state["sender_email"] = sender_email
-                st.session_state["sender_password"] = sender_password
-                st.session_state["recipient_emails"] = recipient_emails
-                st.session_state["email_configured"] = True
-                st.success("Email configuration saved!")
-            else:
-                st.error("Please fill in all fields")
-        
-        if st.session_state.get("email_configured", False):
-            if st.button("Send Test Email"):
-                email_service = get_email_service()
-                if email_service.send_test_email():
-                    st.success("Test email sent successfully!")
-                else:
-                    st.error("Failed to send test email")
+        if input_type == "Upload Image":
+            file = st.file_uploader("Upload Image", type=["jpg","jpeg","png"])
+            if file:
+                data = np.frombuffer(file.read(), np.uint8)
+                img_cv = cv2.imdecode(data, cv2.IMREAD_COLOR)
+        else:
+            snap = st.camera_input("Take a snapshot for detection")
+            if snap:
+                pil = Image.open(snap)
+                img_cv = cv2.cvtColor(np.array(pil), cv2.COLOR_RGB2BGR)
 
-st.sidebar.markdown("---")
-
-# Telegram Alert Configuration
-st.sidebar.markdown("### 📱 Telegram Alerts")
-st.session_state["telegram_alerts_enabled"] = st.sidebar.checkbox(
-    "Enable Telegram Alerts",
-    value=st.session_state.get("telegram_alerts_enabled", False),
-    help="Send Telegram alerts when dangerous objects are detected"
-)
-
-if st.session_state["telegram_alerts_enabled"]:
-    with st.sidebar.expander("Telegram Configuration"):
-        bot_token = st.text_input("Bot Token", value=st.session_state.get("bot_token", ""), 
-                               help="Get from BotFather on Telegram")
-        chat_id = st.text_input("Chat ID", value=st.session_state.get("chat_id", ""),
-                              help="Your Telegram chat ID")
+        video_placeholder = st.empty()
         
-        if st.button("Save Telegram Config"):
-            if bot_token and chat_id:
-                telegram_service = get_telegram_service()
-                telegram_service.configure(bot_token, chat_id)
-                st.session_state["bot_token"] = bot_token
-                st.session_state["chat_id"] = chat_id
-                st.session_state["telegram_configured"] = True
-                st.success("Telegram configuration saved!")
-            else:
-                st.error("Please fill in all fields")
-        
-        if st.session_state.get("telegram_configured", False):
-            if st.button("Send Test Message"):
-                telegram_service = get_telegram_service()
-                if telegram_service.send_test_message():
-                    st.success("Test message sent successfully!")
-                else:
-                    st.error("Failed to send test message")
+        # Controls
+        ctrl_c1, ctrl_c2, ctrl_c3, ctrl_c4, ctrl_c5 = st.columns(5)
+        with ctrl_c1:
+            st.button("▶️ Start Detection", width="stretch", type="primary")
+        with ctrl_c2:
+            st.button("⏹️ Stop Detection", width="stretch")
+        with ctrl_c3:
+            capture_btn = st.button("📸 Save Detection", width="stretch")
+        with ctrl_c4:
+            st.button("⏺️ Record", width="stretch")
+        with ctrl_c5:
+            st.button("⛶ Fullscreen", width="stretch")
             
-            if st.button("Verify Bot"):
-                telegram_service = get_telegram_service()
-                bot_info = telegram_service.get_bot_info()
-                if bot_info:
-                    st.success(f"Bot verified: {bot_info.get('first_name')} (@{bot_info.get('username')})")
-                else:
-                    st.error("Failed to verify bot")
+        st.markdown("</div>", unsafe_allow_html=True)
+        
+    # Variables for stats
+    detected_objects_with_conf = []
+    dangerous_objects = {"person", "knife", "fire", "gun", "cat", "bottle", "scissors"}
+    found_dangerous = False
+    alerts_html = ""
+    object_counts = {}
+    total_detections = 0
+    accuracy = 0.0
+
+    if img_cv is not None:
+        start_time = time.time()
+        results = det_model(img_cv, conf=st.session_state["confidence_threshold"])
+        inference_time = time.time() - start_time
+        st.session_state["performance_monitor"].record_inference(inference_time)
+        
+        detected_img = results[0].plot()
+        
+        for result in results:
+            if result.boxes is not None:
+                for box in result.boxes:
+                    class_id = int(box.cls[0])
+                    confidence = float(box.conf[0])
+                    if class_id < len(CLASS_NAMES):
+                        obj_name = CLASS_NAMES[class_id]
+                        detected_objects_with_conf.append((obj_name, confidence))
+                        object_counts[obj_name] = object_counts.get(obj_name, 0) + 1
+                        total_detections += 1
+
+                        if obj_name == "person":
+                            x1, y1, x2, y2 = map(int, box.xyxy[0])
+                            face_service = st.session_state.get("face_service")
+                            if face_service and face_service.is_trained:
+                                person_name = face_service.recognize(img_cv, (x1, y1, x2, y2))
+                                if person_name:
+                                    # Override the label on the image with a prominent solid background
+                                    text_size = cv2.getTextSize(person_name, cv2.FONT_HERSHEY_SIMPLEX, 0.9, 2)[0]
+                                    cv2.rectangle(detected_img, (x1, max(y1-30, 0)), (x1 + text_size[0], max(y1-30, 0) + text_size[1] + 10), (0, 200, 0), -1)
+                                    cv2.putText(detected_img, person_name, (x1, max(y1-5, 25)), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 255), 2)
+                                    # Update the detected objects list with the specific person's name
+                                    obj_name = person_name
+
+                        if obj_name in dangerous_objects:
+                            found_dangerous = True
+                            alerts_html += f"""
+                            <div style='display:flex; align-items:flex-start; margin-bottom:10px;'>
+                                <span style='margin-right:10px;'>⚠️</span>
+                                <div>
+                                    <div style='color: #f8fafc; font-size: 14px;'>{obj_name} Detected</div>
+                                    <div style='color: #94a3b8; font-size: 12px;'>""" + datetime.now().strftime("%I:%M:%S %p") + """</div>
+                                </div>
+                            </div>
+                            """
+
+        # Update image AFTER drawing faces
+        video_placeholder.image(cv2.cvtColor(detected_img, cv2.COLOR_BGR2RGB), width="stretch")
+        
+        if total_detections > 0:
+            accuracy = sum(conf for _, conf in detected_objects_with_conf) / total_detections * 100
+            
+        if capture_btn:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filepath = os.path.join(st.session_state["detections_dir"], f"detection_{timestamp}.jpg")
+            cv2.imwrite(filepath, detected_img)
+            st.toast(f"Saved to {filepath}", icon="✅")
+            db = get_database()
+            for obj, conf in detected_objects_with_conf:
+                db.add_detection(obj, conf, filepath)
+    else:
+        video_placeholder.info("Upload an image or use the webcam to start detecting.")
+        
+    with col_side:
+        # Build summary HTML
+        summary_items_html = ""
+        for obj, count in object_counts.items():
+            summary_items_html += f"<div style='display:flex; justify-content:space-between; margin-bottom:10px;'><span>{obj}</span><span>{count}</span></div>"
+            
+        st.markdown(f"""
+        <div class='card-box' style='height: 100%;'>
+            <div style='color: #22c55e; margin-bottom: 15px; font-weight: bold;'>📊 Detection Summary</div>
+            {summary_items_html if total_detections > 0 else "<div style='color:#94a3b8; font-size:12px;'>No detections yet</div>"}
+            <hr style='border-color: rgba(255,255,255,0.1); margin: 15px 0;'/>
+            <div style='display:flex; justify-content:space-between; font-weight:bold; color: #22c55e;'><span>Total Detections</span><span>{total_detections}</span></div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        st.markdown(f"""
+        <div class='card-box' style='height: 100%;'>
+            <div style='color: #22c55e; margin-bottom: 15px; font-weight: bold;'>🔔 Recent Alerts</div>
+            {alerts_html if found_dangerous else "<div style='font-size: 12px; color: #94a3b8;'>No recent alerts.</div>"}
+            <div style='text-align:center; margin-top:15px;'>
+                <button style='background: transparent; color: #e2e8f0; border: 1px solid rgba(255,255,255,0.2); padding: 5px 15px; border-radius: 5px; cursor: pointer; width: 100%;'>View All Alerts →</button>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    # KPI Row
+    perf_stats = st.session_state["performance_monitor"].get_stats()
+    fps = perf_stats['fps'] if perf_stats else 0.0
+    cpu = perf_stats['cpu_percent'] if perf_stats else 0.0
+
+    st.markdown("<br/>", unsafe_allow_html=True)
+    k1, k2, k3, k4 = st.columns(4)
+    with k1:
+        st.markdown("<div class='kpi-card'><div class='kpi-label'>🚀 Real-time</div><div class='kpi-value'>Active</div></div>", unsafe_allow_html=True)
+    with k2:
+        st.markdown(f"<div class='kpi-card'><div class='kpi-label'>🎯 Average Accuracy</div><div class='kpi-value'>{accuracy:.1f}%</div></div>", unsafe_allow_html=True)
+    with k3:
+        st.markdown(f"<div class='kpi-card'><div class='kpi-label'>⚡ Processing Speed</div><div class='kpi-value'>{fps:.1f} FPS</div></div>", unsafe_allow_html=True)
+    with k4:
+        st.markdown(f"<div class='kpi-card'><div class='kpi-label'>💻 CPU Usage</div><div class='kpi-value'>{cpu:.1f}%</div></div>", unsafe_allow_html=True)
 
 
 
-
-# 🏠 HOME PAGE
-
-if page == "🏠 Home":
-
-    st.markdown("<div class='section-title'>Smart Vision AI</div>", unsafe_allow_html=True)
-    st.markdown("<div class='sub-text'>Advanced Deep Learning for Object Detection & Image Classification</div>", unsafe_allow_html=True)
-
-    col1, col2, col3 = st.columns(3)
+# 👤 FACE REGISTRATION
+elif page == "👤 Face Registration":
+    st.markdown("<div class='section-title'>👤 Face Registration</div>", unsafe_allow_html=True)
+    st.markdown("<div class='sub-text'>Register faces so the AI can recognize them by name</div>", unsafe_allow_html=True)
+    
+    col1, col2 = st.columns(2)
     with col1:
-        st.markdown("<div class='card-box'><img src='https://cdn-icons-png.flaticon.com/512/2103/2103658.png' width='80'><h4>YOLO Detection</h4><p>Detect multiple objects instantly</p></div>", unsafe_allow_html=True)
+        st.markdown("<div class='card-box'>", unsafe_allow_html=True)
+        reg_name = st.text_input("Name of the Person", placeholder="e.g. John Doe")
+        reg_image = st.camera_input("Take a clear picture of their face")
+        
+        if st.button("Register Face", type="primary", width="stretch"):
+            if reg_name and reg_image:
+                import numpy as np
+                import cv2
+                from PIL import Image
+                
+                # Convert uploaded image to opencv format
+                pil_img = Image.open(reg_image)
+                cv_img = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
+                
+                # Register
+                saved_path = st.session_state["face_service"].register_face(reg_name, cv_img)
+                st.success(f"Successfully registered {reg_name}!")
+            else:
+                st.error("Please provide both a name and a photo.")
+        st.markdown("</div>", unsafe_allow_html=True)
+        
     with col2:
-        st.markdown("<div class='card-box'><img src='https://cdn-icons-png.flaticon.com/512/4305/4305434.png' width='80'><h4>MobileNet Classification</h4><p>Predict object class with high accuracy</p></div>", unsafe_allow_html=True)
-    with col3:
-        st.markdown("<div class='card-box'><img src='https://cdn-icons-png.flaticon.com/512/3602/3602145.png' width='80'><h4>Upload / Webcam</h4><p>Multiple input modes supported</p></div>", unsafe_allow_html=True)
-
-    colA, colB = st.columns(2)
-    with colA:
-        if st.button("🚀 Start Object Detection"):
-            st.session_state["page"] = "🎯 Object Detection"
-            st.rerun()
-    with colB:
-        if st.button("🧠 Start Classification"):
-            st.session_state["page"] = "🧠 Classification"
-            st.rerun()
-
-
+        st.markdown("<div class='card-box'><b>Registered People</b><br/>", unsafe_allow_html=True)
+        # Display unique registered names
+        if st.session_state["face_service"].is_trained:
+            for name in set(st.session_state["face_service"].label_map.values()):
+                st.markdown(f"<li>{name}</li>", unsafe_allow_html=True)
+        else:
+            st.markdown("No faces registered yet.")
+        st.markdown("</div>", unsafe_allow_html=True)
 
 
 # 🧠 CLASSIFICATION 
@@ -378,12 +443,12 @@ elif page == "🧠 Classification":
 
         with col2:
             st.markdown("<div class='card-box'><b>🎯 Result</b></div>", unsafe_allow_html=True)
-            st.markdown(f"<div class='result-label'>{CLASS_NAMES[idx]}</div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='result-label'>{CLS_CLASS_NAMES[idx]}</div>", unsafe_allow_html=True)
             st.markdown(f"<div class='confidence-label'>Confidence: {probs[idx]:.2f}</div>", unsafe_allow_html=True)
             
             # Save classification to database
             db = get_database()
-            db.add_detection(CLASS_NAMES[idx], float(probs[idx]))
+            db.add_detection(CLS_CLASS_NAMES[idx], float(probs[idx]))
 
 
 # 🎯 OBJECT DETECTION 
@@ -446,7 +511,7 @@ elif page == "🎯 Object Detection":
         detected_objects = set()
         detected_objects_with_conf = []
         detections_for_recording = []
-        dangerous_objects = {"Knife", "Scissors", "Fire", "Gas Cylinder", "Gun", "Cat", "Bottle", "Person"}
+        dangerous_objects = {"person", "knife", "fire", "gun", "cat", "bottle", "scissors"}
         found_dangerous = False
         
         if results and len(results) > 0:
@@ -455,8 +520,8 @@ elif page == "🎯 Object Detection":
                     for box in result.boxes:
                         class_id = int(box.cls[0])
                         confidence = float(box.conf[0])
-                        if class_id < len(CLASS_NAMES):
-                            obj_name = CLASS_NAMES[class_id]
+                        if class_id in det_model.names:
+                            obj_name = det_model.names[class_id]
                             detected_objects.add(obj_name)
                             detected_objects_with_conf.append((obj_name, confidence))
                             
@@ -469,7 +534,21 @@ elif page == "🎯 Object Detection":
                             })
                             
                             # Check for dangerous objects
-                            if obj_name in dangerous_objects:
+    
+                        if obj_name == "person":
+                            x1, y1, x2, y2 = map(int, box.xyxy[0])
+                            face_service = st.session_state.get("face_service")
+                            if face_service and face_service.is_trained:
+                                person_name = face_service.recognize(img_cv, (x1, y1, x2, y2))
+                                if person_name:
+                                    # Override the label on the image with a prominent solid background
+                                    text_size = cv2.getTextSize(person_name, cv2.FONT_HERSHEY_SIMPLEX, 0.9, 2)[0]
+                                    cv2.rectangle(detected_img, (x1, max(y1-30, 0)), (x1 + text_size[0], max(y1-30, 0) + text_size[1] + 10), (0, 200, 0), -1)
+                                    cv2.putText(detected_img, person_name, (x1, max(y1-5, 25)), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 255), 2)
+                                    # Update the detected objects list with the specific person's name
+                                    obj_name = person_name
+
+                        if obj_name in dangerous_objects:
                                 found_dangerous = True
         
         # Voice Assistant integration
@@ -482,6 +561,10 @@ elif page == "🎯 Object Detection":
         # Dangerous Object Alert
         if found_dangerous:
             st.error("⚠️ DANGEROUS OBJECT DETECTED!")
+            
+            # Immediately trigger the siren using Streamlit's native audio
+            st.audio("siren.wav", format="audio/wav", autoplay=True)
+
             if st.session_state["voice_enabled"]:
                 voice_assistant = get_voice_assistant()
                 voice_assistant.speak("Dangerous object detected. Please exercise caution.")
@@ -613,7 +696,7 @@ elif page == "📊 Analytics":
             hole=0.3
         )])
         fig_pie.update_layout(title="Object Detection Distribution")
-        st.plotly_chart(fig_pie, use_container_width=True)
+        st.plotly_chart(fig_pie, width="stretch")
     
     # Bar Chart
     if object_counts:
@@ -628,7 +711,7 @@ elif page == "📊 Analytics":
             xaxis_title="Object",
             yaxis_title="Count"
         )
-        st.plotly_chart(fig_bar, use_container_width=True)
+        st.plotly_chart(fig_bar, width="stretch")
     
     # Timeline
     if timeline:
@@ -644,7 +727,7 @@ elif page == "📊 Analytics":
             xaxis_title="Date",
             yaxis_title="Count"
         )
-        st.plotly_chart(fig_line, use_container_width=True)
+        st.plotly_chart(fig_line, width="stretch")
     
     # Export Reports
     st.markdown("---")
