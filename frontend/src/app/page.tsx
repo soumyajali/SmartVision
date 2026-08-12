@@ -5,7 +5,7 @@ import { LoadingScreen } from '@/components/ui/LoadingScreen';
 
 export default function Home() {
   return (
-    <main className="relative min-h-screen bg-slate-950 text-white selection:bg-cyan-500/30">
+    <main className="relative min-h-screen bg-white text-slate-900 selection:bg-blue-500/30">
       <LoadingScreen />
       
       <CanvasContainer />

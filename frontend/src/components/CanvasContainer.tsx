@@ -87,19 +87,19 @@ export function CanvasContainer() {
         gl={{ antialias: false, alpha: true, powerPreference: 'high-performance' }} // antialias false for postprocessing
         dpr={[1, 1.5]}
       >
-        <color attach="background" args={['#020617']} />
-        <fog attach="fog" args={['#020617', 5, 40]} />
+        <color attach="background" args={['#ffffff']} />
+        <fog attach="fog" args={['#ffffff', 5, 40]} />
         
-        <ambientLight intensity={0.2} />
-        <pointLight position={[10, 10, 10]} intensity={1.5} color="#06b6d4" />
-        <pointLight position={[-10, -10, -10]} intensity={0.5} color="#818cf8" />
+        <ambientLight intensity={1.5} />
+        <directionalLight position={[10, 10, 10]} intensity={2.0} color="#ffffff" castShadow />
+        <pointLight position={[-10, -10, -10]} intensity={1.0} color="#e2e8f0" />
         
         <SceneManager />
         
         <EffectComposer>
-          <Bloom luminanceThreshold={0.2} mipmapBlur intensity={1.2} />
-          <Noise opacity={0.025} />
-          <Vignette eskil={false} offset={0.1} darkness={1.1} />
+          <Bloom luminanceThreshold={0.8} mipmapBlur intensity={0.5} />
+          <Noise opacity={0.01} />
+          <Vignette eskil={false} offset={0.1} darkness={0.3} />
         </EffectComposer>
 
         <Preload all />

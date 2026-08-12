@@ -491,3 +491,268 @@ class ReportGenerator:
         
         doc.build(story)
         return filepath
+
+
+class ImageQualityAnalyzer:
+    """
+    Analyzes image quality metrics such as blurriness and brightness.
+    """
+    
+    @staticmethod
+    def analyze(image: np.ndarray) -> Dict[str, any]:
+        """
+        Analyze the given image for blurriness and brightness.
+        
+        Args:
+            image: Input image as numpy array (BGR format)
+            
+        Returns:
+            Dictionary containing quality metrics and warnings.
+        """
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        
+        # Calculate blurriness using variance of Laplacian
+        laplacian_var = cv2.Laplacian(gray, cv2.CV_64F).var()
+        is_blurry = laplacian_var < 100.0  # Threshold for blurriness
+        
+        # Calculate brightness
+        brightness = np.mean(gray)
+        is_dark = brightness < 40.0
+        is_bright = brightness > 210.0
+        
+        return {
+            "blur_score": laplacian_var,
+            "is_blurry": is_blurry,
+            "brightness_score": brightness,
+            "is_dark": is_dark,
+            "is_bright": is_bright,
+            "quality_warning": "Blurry image" if is_blurry else ("Too dark" if is_dark else ("Too bright" if is_bright else None))
+        }
+
+
+class SceneDescriber:
+    """
+    Generates a natural language description of the current scene based on detected objects.
+    """
+    
+    @staticmethod
+    def generate_description(detections: List[Dict]) -> str:
+        """
+        Generate a scene description from a list of detections.
+        
+        Args:
+            detections: List of detection dictionaries (requires 'object_name' key)
+            
+        Returns:
+            String description of the scene.
+        """
+        if not detections:
+            return "The scene appears to be empty."
+            
+        object_counts = {}
+        for det in detections:
+            name = det.get('object_name', 'unknown').lower()
+            object_counts[name] = object_counts.get(name, 0) + 1
+            
+        descriptions = []
+        for obj, count in object_counts.items():
+            if count == 1:
+                descriptions.append(f"one {obj}")
+            else:
+                # Basic pluralization
+                plural = f"{obj}es" if obj.endswith(('s', 'sh', 'ch', 'x', 'z')) else f"{obj}s"
+                descriptions.append(f"{count} {plural}")
+                
+        if len(descriptions) == 1:
+            scene_text = f"I can see {descriptions[0]} in the scene."
+        elif len(descriptions) == 2:
+            scene_text = f"The scene contains {descriptions[0]} and {descriptions[1]}."
+        else:
+            scene_text = f"In this scene, I see {', '.join(descriptions[:-1])}, and {descriptions[-1]}."
+            
+        return scene_text
+
+
+class VisionChatbot:
+    """
+    A rule-based conversational agent that can answer questions about the current scene's context.
+    """
+    
+    def __init__(self):
+        self.history = []
+        
+    def ask(self, question: str, context_detections: List[Dict]) -> str:
+        """
+        Answer a question based on current detection context.
+        
+        Args:
+            question: User's question
+            context_detections: Current frame's detections
+            
+        Returns:
+            Chatbot response string
+        """
+        q_lower = question.lower()
+        self.history.append({"role": "user", "content": question})
+        
+        object_counts = {}
+        for det in context_detections:
+            name = det.get('object_name', 'unknown').lower()
+            object_counts[name] = object_counts.get(name, 0) + 1
+            
+        response = ""
+        
+        # Rule-based processing
+        if "how many" in q_lower:
+            found = False
+            for obj, count in object_counts.items():
+                if obj in q_lower:
+                    response = f"I see {count} {obj}{'s' if count > 1 else ''}."
+                    found = True
+                    break
+            if not found:
+                response = "I don't see any of those right now."
+                
+        elif "what do you see" in q_lower or "describe" in q_lower:
+            response = SceneDescriber.generate_description(context_detections)
+            
+        elif "where is" in q_lower:
+            # Simple spatial inference if bounding boxes exist
+            target = q_lower.replace("where is the ", "").replace("where is a ", "").replace("where is ", "").strip()
+            target = target.rstrip("?")
+            
+            locations = []
+            for det in context_detections:
+                if det.get('object_name', '').lower() == target and 'bbox' in det:
+                    # Bbox is typically [x1, y1, x2, y2]
+                    box = det['bbox']
+                    # Simplified positioning (requires image dimensions for true relative pos, assuming center roughly)
+                    if len(box) >= 4:
+                        x_center = (box[0] + box[2]) / 2
+                        if x_center < 320: # Assuming 640 width
+                            locations.append("on the left side")
+                        else:
+                            locations.append("on the right side")
+            
+            if locations:
+                response = f"The {target} is {locations[0]}."
+            else:
+                response = f"I cannot locate the {target} in the current view."
+                
+        elif "danger" in q_lower or "safe" in q_lower:
+            dangerous_objects = ["knife", "scissors", "gun", "fire", "gas cylinder"]
+            detected_danger = [obj for obj in object_counts.keys() if obj in dangerous_objects]
+            
+            if detected_danger:
+                response = f"Warning! I detect potentially dangerous objects: {', '.join(detected_danger)}."
+            else:
+                response = "The scene appears safe. No dangerous objects detected."
+                
+        else:
+            response = "I'm a simple vision assistant. You can ask me 'what do you see?', 'how many [objects] are there?', or 'where is the [object]?'"
+            
+        self.history.append({"role": "assistant", "content": response})
+        return response
+
+
+class AdaptiveEngine:
+    """
+    Monitors processing time (FPS) and dynamically scales image resolution 
+    if performance drops below thresholds.
+    """
+    def __init__(self, target_fps: int = 15):
+        self.target_fps = target_fps
+        self.current_scale = 1.0
+        self.history = []
+        
+    def adapt(self, img: np.ndarray, processing_time: float) -> np.ndarray:
+        current_fps = 1.0 / (processing_time + 0.001)
+        self.history.append(current_fps)
+        if len(self.history) > 10:
+            self.history.pop(0)
+            
+        avg_fps = sum(self.history) / len(self.history)
+        
+        # Scale down if FPS is too low, scale back up if plenty of headroom
+        if avg_fps < self.target_fps * 0.8 and self.current_scale > 0.4:
+            self.current_scale -= 0.1
+            self.history.clear()  # reset to avoid bouncing
+        elif avg_fps > self.target_fps * 1.2 and self.current_scale < 1.0:
+            self.current_scale += 0.1
+            self.history.clear()
+            
+        if self.current_scale < 1.0:
+            h, w = img.shape[:2]
+            new_h, new_w = int(h * self.current_scale), int(w * self.current_scale)
+            return cv2.resize(img, (new_w, new_h))
+        return img
+
+
+class LowLightEnhancer:
+    """
+    Enhances images detected as 'low light' using CLAHE.
+    """
+    @staticmethod
+    def enhance(img: np.ndarray) -> np.ndarray:
+        # Convert to LAB color space
+        lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
+        l_channel, a, b = cv2.split(lab)
+        
+        # Apply CLAHE to L channel
+        clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
+        cl = clahe.apply(l_channel)
+        
+        # Merge back and convert to BGR
+        limg = cv2.merge((cl, a, b))
+        return cv2.cvtColor(limg, cv2.COLOR_LAB2BGR)
+
+
+class DistanceEstimator:
+    """
+    Estimates distance based on bounding box height relative to image height.
+    Assumes standard camera focal length projection approximation.
+    """
+    @staticmethod
+    def estimate(bbox: List[int], img_height: int) -> float:
+        # box format: [x1, y1, x2, y2]
+        h = bbox[3] - bbox[1]
+        
+        # Avoid division by zero
+        if h <= 0: return 99.9
+        
+        # Mock formula: distance is inversely proportional to relative height
+        # A person taking up full frame is ~1m away. 
+        relative_height = h / img_height
+        
+        # Base constant chosen for approximation (Focal Length * Real Height)
+        distance = 1.0 / (relative_height + 0.001)
+        return round(distance, 1)
+
+
+class UnknownObjectDetector:
+    """
+    Flags tracked objects with consistently low confidence as 'Unknown'.
+    """
+    def __init__(self, confidence_threshold: float = 0.4):
+        self.threshold = confidence_threshold
+        self.unknown_track_ids = set()
+        
+    def detect(self, detections: List[Dict]) -> List[Dict]:
+        for det in detections:
+            conf = det.get('confidence', 1.0)
+            
+            if conf < self.threshold:
+                # Mark it as unknown
+                det['object_name'] = 'Unknown Object'
+                det['confidence'] = conf
+                
+                if 'id' in det:
+                    self.unknown_track_ids.add(det['id'])
+            elif 'id' in det and det['id'] in self.unknown_track_ids:
+                # If it was previously unknown but now has high conf, unflag it
+                if conf >= self.threshold + 0.1:
+                    self.unknown_track_ids.remove(det['id'])
+                else:
+                    det['object_name'] = 'Unknown Object'
+                    
+        return detections
