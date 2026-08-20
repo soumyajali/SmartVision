@@ -79,7 +79,7 @@ class VoiceAssistant:
         if self.engine:
             self.message_queue.put(text)
     
-    def announce_detection(self, object_name: str):
+    def announce_detection(self, object_name: str) -> bool:
         """
         Announce a newly detected object if it hasn't been announced recently.
         
@@ -89,11 +89,14 @@ class VoiceAssistant:
         # Normalize object name for consistent tracking
         normalized_name = object_name.lower().strip()
         
-        # Only announce if this is a new detection
-        if normalized_name not in self.announced_objects:
-            self.announced_objects.add(normalized_name)
-            message = f"{object_name} detected"
-            self.speak(message)
+        # Only announce if this is a new detection.
+        if normalized_name in self.announced_objects:
+            return False
+
+        self.announced_objects.add(normalized_name)
+        message = f"{object_name} detected"
+        self.speak(message)
+        return True
     
     def reset_announced_objects(self, current_objects: Set[str]):
         """

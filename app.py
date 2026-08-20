@@ -9,7 +9,10 @@ import cv2
 import os
 import subprocess
 import time
+import json
+import hashlib
 from datetime import datetime
+import streamlit.components.v1 as components
 from voice_assistant import get_voice_assistant
 from database import get_database
 from utils import (
@@ -41,7 +44,7 @@ if "face_service" not in st.session_state:
 if "page" not in st.session_state:
     st.session_state["page"] = "🏠 Home"
 if "voice_enabled" not in st.session_state:
-    st.session_state["voice_enabled"] = False
+    st.session_state["voice_enabled"] = True
 if "dark_mode" not in st.session_state:
     st.session_state["dark_mode"] = False
 if "confidence_threshold" not in st.session_state:
@@ -202,6 +205,71 @@ div.stButton > button:first-child:hover {
 st.markdown(get_theme_css(), unsafe_allow_html=True)
 
 
+def speak_in_browser(message: str):
+    """Speak through the visitor's browser instead of the Streamlit server."""
+    components.html(
+        f"""
+        <script>
+        const message = {json.dumps(message)};
+        if ("speechSynthesis" in window) {{
+            window.speechSynthesis.cancel();
+            const utterance = new SpeechSynthesisUtterance(message);
+            utterance.rate = 0.95;
+            utterance.volume = 1;
+            window.speechSynthesis.speak(utterance);
+        }}
+        </script>
+        """,
+        height=0,
+    )
+
+
+def image_description(object_counts: dict) -> str:
+    """Create a concise, spoken description from the image detector results."""
+    if not object_counts:
+        return "I could not identify any supported objects in this image."
+
+    items = []
+    for name, count in object_counts.items():
+        label = name.replace("_", " ")
+        if count == 1:
+            items.append(f"one {label}")
+        else:
+            plural = label if label.endswith("s") else f"{label}s"
+            items.append(f"{count} {plural}")
+
+    if len(items) == 1:
+        object_list = items[0]
+    elif len(items) == 2:
+        object_list = " and ".join(items)
+    else:
+        object_list = ", ".join(items[:-1]) + f", and {items[-1]}"
+    return f"I can see {object_list} in this image."
+
+
+def answer_image_question(question: str, object_counts: dict) -> str:
+    """Answer common questions using the objects detected in the current image."""
+    if not object_counts:
+        return "I could not detect any supported objects, so I cannot answer questions about this image yet."
+
+    normalized_question = question.lower().strip()
+    description = image_description(object_counts)
+    normalized_names = {name.lower().replace("_", " "): (name, count) for name, count in object_counts.items()}
+
+    for normalized_name, (name, count) in normalized_names.items():
+        singular = normalized_name.rstrip("s")
+        if normalized_name in normalized_question or singular in normalized_question:
+            label = name.replace("_", " ")
+            if any(phrase in normalized_question for phrase in ("how many", "number of", "count")):
+                return f"I found {count} {label}{'' if count == 1 else 's'} in this image."
+            if any(phrase in normalized_question for phrase in ("is there", "are there", "do you see", "can you see", "have")):
+                return f"Yes. I found {count} {label}{'' if count == 1 else 's'} in this image."
+
+    if any(word in normalized_question for word in ("describe", "what", "show", "objects", "see")):
+        return description
+    return f"Based on the objects I detected, {description} I can answer questions about these detected objects and their counts."
+
+
 # ---------------- SIDEBAR ----------------
 st.sidebar.markdown("### SMART VISION")
 st.sidebar.markdown("<small style='color: #64748b;'>Real-Time Object Detection</small>", unsafe_allow_html=True)
@@ -229,6 +297,16 @@ st.sidebar.markdown("---")
 
 if page == "⚙️ Settings":
     st.session_state["voice_enabled"] = st.sidebar.toggle("🔊 Voice Assistant", value=st.session_state.get("voice_enabled", False))
+    st.sidebar.caption("Announces newly detected objects through this computer's speakers.")
+    voice_col1, voice_col2 = st.sidebar.columns(2)
+    with voice_col1:
+        if st.button("Test voice", width="stretch"):
+            get_voice_assistant().speak("Voice assistant is ready.")
+            st.toast("Voice test queued", icon="🔊")
+    with voice_col2:
+        if st.button("Reset voice", width="stretch"):
+            get_voice_assistant().clear_all_announcements()
+            st.toast("Voice announcements reset", icon="✅")
     st.session_state["confidence_threshold"] = st.sidebar.slider("🎯 Confidence Threshold", 0.05, 1.00, st.session_state.get("confidence_threshold", 0.10), 0.05)
     st.session_state["search_mode"] = st.sidebar.checkbox("Enable Search Mode")
     if st.session_state["search_mode"]:
@@ -265,6 +343,22 @@ if page in ["🏠 Dashboard", "🏠 Home"]:
     col_main, col_side = st.columns([3, 1])
     
     input_type = st.radio("Choose Input", ["Webcam", "Upload Image"], horizontal=True)
+    st.markdown("#### 🔊 Image Voice Assistant")
+    voice_control, voice_test = st.columns([3, 1])
+    with voice_control:
+        dashboard_voice_enabled = st.toggle(
+            "Announce objects detected in this image",
+            value=st.session_state["voice_enabled"],
+            key="dashboard_voice_enabled",
+        )
+        st.session_state["voice_enabled"] = dashboard_voice_enabled
+    with voice_test:
+        st.write("")
+        if st.button("Test voice", key="dashboard_voice_test", width="stretch"):
+            speak_in_browser("Image voice assistant is ready.")
+            st.toast("Voice test queued", icon="🔊")
+    if st.session_state["voice_enabled"]:
+        st.caption("Objects found in the uploaded image or camera snapshot will be announced once.")
     img_cv = None
     
     with col_main:
@@ -409,6 +503,22 @@ if page in ["🏠 Dashboard", "🏠 Home"]:
         
         if total_detections > 0:
             accuracy = sum(conf for _, conf in detected_objects_with_conf) / total_detections * 100
+
+        # Announce each newly seen object once while voice assistance is enabled.
+        # The assistant keeps track of currently visible objects, preventing repeats
+        # when Streamlit reruns for the same image or camera frame.
+        if st.session_state["voice_enabled"]:
+            current_objects = {name for name, _ in detected_objects_with_conf}
+            voice_assistant = get_voice_assistant()
+            voice_assistant.reset_announced_objects(current_objects)
+            new_objects = []
+            for obj_name in current_objects:
+                if voice_assistant.announce_detection(obj_name):
+                    new_objects.append(obj_name)
+            current_image_id = hashlib.sha1(img_cv.tobytes()).hexdigest()
+            if st.session_state.get("last_described_image") != current_image_id:
+                st.session_state["last_described_image"] = current_image_id
+                speak_in_browser(image_description(object_counts))
             
         # Store detections for chatbot context
         context_detections = []
@@ -451,6 +561,20 @@ if page in ["🏠 Dashboard", "🏠 Home"]:
             </div>
         </div>
         """, unsafe_allow_html=True)
+
+    if img_cv is not None:
+        st.markdown("### 🗣️ Ask about this image")
+        st.caption("Ask what objects are visible or how many of a detected object appear in the image.")
+        with st.form("image_question_form", clear_on_submit=True):
+            image_question = st.text_input("Your question", placeholder="For example: What is in this image? or How many people are there?")
+            ask_image_question = st.form_submit_button("Ask voice assistant", type="primary")
+        if ask_image_question:
+            if image_question.strip():
+                image_answer = answer_image_question(image_question, object_counts)
+                st.success(image_answer)
+                speak_in_browser(image_answer)
+            else:
+                st.warning("Type a question about the image first.")
 
     # KPI Row
     perf_stats = st.session_state["performance_monitor"].get_stats()

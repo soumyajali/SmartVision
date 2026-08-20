@@ -4,3 +4,15 @@ __pycache__/
 .DS_Store
 
 .agents/
+
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+.streamlit/secrets.toml
+
+# Runtime-generated data
+detections/
+recordings/
+known_faces/
+*.db-journal
