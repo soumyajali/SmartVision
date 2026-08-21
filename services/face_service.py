@@ -13,6 +13,10 @@ class FaceService:
         self.face_cascade = cv2.CascadeClassifier(cascade_path)
         self.label_map = {}
         self.is_trained = False
+        
+        # Temporal smoothing state
+        self.recognition_history = {} # track_id -> list of predictions
+        
         self.train_model()
         
     def train_model(self):
@@ -62,8 +66,8 @@ class FaceService:
         self.train_model()
         return filepath
         
-    def recognize(self, frame, person_box):
-        """Attempt to recognize a face inside a person bounding box"""
+    def recognize(self, frame, person_box, track_id=None, threshold=60, required_hits=3):
+        """Attempt to recognize a face inside a person bounding box with temporal smoothing"""
         if not self.is_trained:
             return None
             
@@ -84,10 +88,28 @@ class FaceService:
             
             try:
                 label, confidence = self.recognizer.predict(face_roi)
-                # Lower confidence is better in LBPH (distance). Typically < 100 is a good match.
-                if confidence < 120: 
-                    return self.label_map.get(label, None)
+                # Lower confidence is better in LBPH
+                if confidence < threshold: 
+                    predicted_name = self.label_map.get(label, None)
+                    
+                    if track_id is not None and predicted_name is not None:
+                        # Temporal smoothing
+                        history = self.recognition_history.get(track_id, [])
+                        history.append(predicted_name)
+                        
+                        # Keep only recent history
+                        if len(history) > required_hits * 2:
+                            history.pop(0)
+                        self.recognition_history[track_id] = history
+                        
+                        # Check if we have enough consistent hits
+                        if history.count(predicted_name) >= required_hits:
+                            return predicted_name
+                        return None
+                    else:
+                        return predicted_name
             except Exception:
                 pass
                 
         return None
+

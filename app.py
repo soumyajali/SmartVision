@@ -13,6 +13,8 @@ import json
 import hashlib
 from datetime import datetime
 import streamlit.components.v1 as components
+import random
+import pandas as pd
 from voice_assistant import get_voice_assistant
 from database import get_database
 from utils import (
@@ -25,6 +27,11 @@ from utils.recorder import get_video_recorder
 from services.email_service import get_email_service
 from services.telegram_service import get_telegram_service
 from services.face_service import FaceService
+from core.tracker import ObjectTracker
+from core.interactive_3d_viewer import render_interactive_viewer
+from events.alert_manager import AlertManager
+from core.ui_3d_component import render_3d_hud
+from core.analytics_3d_component import render_analytics_viewer
 import plotly.graph_objects as go
 import plotly.express as px
 # Removed insecure SSL certificate workaround as per requirements
@@ -62,6 +69,10 @@ if 'adaptive_engine' not in st.session_state:
     st.session_state['adaptive_engine'] = AdaptiveEngine()
 if 'unknown_detector' not in st.session_state:
     st.session_state['unknown_detector'] = UnknownObjectDetector()
+if 'tracker' not in st.session_state:
+    st.session_state['tracker'] = ObjectTracker(disappearance_grace_period=2.0)
+if 'alert_manager' not in st.session_state:
+    st.session_state['alert_manager'] = AlertManager(cooldown_seconds=10.0)
 if "last_detections" not in st.session_state:
     st.session_state["last_detections"] = []
 if "performance_monitor" not in st.session_state:
@@ -275,7 +286,7 @@ st.sidebar.markdown("### SMART VISION")
 st.sidebar.markdown("<small style='color: #64748b;'>Real-Time Object Detection</small>", unsafe_allow_html=True)
 
 page = st.sidebar.radio(
-    "",
+    "Navigation",
     [
         "🏠 Dashboard", 
         "💬 Vision Chatbot", 
@@ -287,9 +298,12 @@ page = st.sidebar.radio(
         "📊 Analytics",
         "📜 History", 
         "🧪 Research Evaluation",
-        "⚙️ Settings"
+        "⚙️ Settings",
+        "🚗 3D Explorer",
+        "📈 3D Analytics"
     ],
-    index=0
+    index=0,
+    label_visibility="collapsed"
 )
 st.session_state["page"] = page
 
@@ -312,6 +326,14 @@ if page == "⚙️ Settings":
     if st.session_state["search_mode"]:
         st.session_state["search_object"] = st.sidebar.text_input("Search Object", placeholder="e.g., Bottle")
     st.session_state["enable_tracking"] = st.sidebar.toggle("Enable Object Tracking", value=st.session_state.get("enable_tracking", False))
+    
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("#### 🧪 Benchmarking")
+    st.session_state["adaptive_mode"] = st.sidebar.toggle("🧠 Adaptive SmartVision Mode", value=st.session_state.get("adaptive_mode", True), help="Toggle to compare Adaptive AI vs Conventional YOLO")
+    
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("#### 🚫 Restricted Area")
+    st.session_state["enable_restricted"] = st.sidebar.toggle("Enable Restricted Area", value=st.session_state.get("enable_restricted", False))
 
 st.sidebar.markdown("""
 <div class="model-info-card">
@@ -323,6 +345,36 @@ st.sidebar.markdown("""
     <div class="model-info-row"><span class="model-info-label">Status</span><span class="status-ready">Ready</span></div>
 </div>
 """, unsafe_allow_html=True)
+
+
+# 🚗 3D EXPLORER PAGE
+if page == "🚗 3D Explorer":
+    st.title("Interactive 3D Neural Network Pipeline Explorer")
+    st.markdown("Explore the 3D Vision model architecture. Click on the highlighted components to view technical details.")
+    
+    col1, col2 = st.columns([3, 1])
+    
+    with col1:
+        # Render the custom WebGL component
+        result = render_interactive_viewer()
+    
+    with col2:
+        st.markdown("### Component Info")
+        if result and getattr(result, "clicked_part", None):
+            part_data = result.clicked_part
+            st.markdown(f"**{part_data.get('name', 'Unknown')}**")
+            st.info(part_data.get('desc', 'No description available.'))
+        else:
+            st.write("Click on a 3D component to view its technical specifications.")
+
+# 📈 3D ANALYTICS PAGE
+if page == "📈 3D Analytics":
+    st.title("📈 3D Detection Analytics")
+    st.markdown("Interactive 3D visualization of object detection history. Scroll to zoom, drag to rotate.")
+    
+    # We pass empty data to trigger the component's internal mock data generation for demonstration,
+    # or this could be wired up to actual detection history from the database.
+    render_analytics_viewer(history_data=[])
 
 
 # 🏠 HOME PAGE (Dashboard)
@@ -401,6 +453,12 @@ if page in ["🏠 Dashboard", "🏠 Home"]:
     total_detections = 0
     accuracy = 0.0
 
+    detected_objects_with_conf = []
+    object_counts = {}
+    total_detections = 0
+    alerts_html = ""
+    found_dangerous = False
+
     if img_cv is not None:
         start_time = time.time()
         
@@ -424,9 +482,12 @@ if page in ["🏠 Dashboard", "🏠 Home"]:
             </div>
             """
             
-        # Adaptive Resolution Scaling (simulate processing time randomly for demo)
-        mock_proc_time = random.uniform(0.04, 0.12) 
-        img_cv = st.session_state['adaptive_engine'].adapt(img_cv, mock_proc_time)
+        # Adaptive Resolution Scaling (Use actual inference time if available from monitor)
+        if st.session_state.get("adaptive_mode", True):
+            mock_proc_time = st.session_state["performance_monitor"].get_average_inference_time()
+            if mock_proc_time == 0:
+                mock_proc_time = 0.05
+            img_cv = st.session_state['adaptive_engine'].adapt(img_cv, mock_proc_time)
         
         # YOLOv8 Detection / Tracking
         if st.session_state.get("enable_tracking", False):
@@ -446,14 +507,37 @@ if page in ["🏠 Dashboard", "🏠 Home"]:
                     class_id = int(box.cls[0])
                     conf = float(box.conf[0])
                     bbox = list(map(int, box.xyxy[0]))
-                    results_list.append({'class_id': class_id, 'confidence': conf, 'bbox': bbox})
+                    det_dict = {'class_id': class_id, 'confidence': conf, 'bbox': bbox}
+                    if box.id is not None:
+                        det_dict['id'] = int(box.id[0])
+                    results_list.append(det_dict)
         
         # Add labels
         for det in results_list:
             det['object_name'] = CLASS_NAMES[det['class_id']]
                 
         # Detect Unknown Objects based on tracking consistency but low confidence
-        results_list = st.session_state['unknown_detector'].detect(results_list)
+        if st.session_state.get("adaptive_mode", True):
+            results_list = st.session_state['unknown_detector'].detect(results_list)
+        
+        # Update Tracker
+        if st.session_state.get("enable_tracking", False) and st.session_state.get("adaptive_mode", True):
+            results_list = st.session_state['tracker'].update(results_list)
+            object_counts = st.session_state['tracker'].get_current_counts()
+        else:
+            # Fallback for counting if tracking is off or conventional mode
+            for det in results_list:
+                object_counts[det['object_name']] = object_counts.get(det['object_name'], 0) + 1
+        
+        # Restricted Area defined (bottom right quadrant for demo)
+        h_img, w_img = img_cv.shape[:2]
+        restricted_zone = (int(w_img/2), int(h_img/2), w_img, h_img) # x1, y1, x2, y2
+        if st.session_state.get("enable_restricted", False):
+            # Draw semi-transparent red zone
+            overlay = detected_img.copy()
+            cv2.rectangle(overlay, (restricted_zone[0], restricted_zone[1]), (restricted_zone[2], restricted_zone[3]), (0, 0, 255), -1)
+            detected_img = cv2.addWeighted(overlay, 0.2, detected_img, 0.8, 0)
+            cv2.putText(detected_img, "RESTRICTED ZONE", (restricted_zone[0]+10, restricted_zone[1]+30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
         
         for det in results_list:
             total_detections += 1
@@ -470,7 +554,11 @@ if page in ["🏠 Dashboard", "🏠 Home"]:
                 x1, y1, x2, y2 = det['bbox']
                 face_service = st.session_state.get("face_service")
                 if face_service and face_service.is_trained:
-                    person_name = face_service.recognize(img_cv, (x1, y1, x2, y2))
+                    # Pass track_id if available for temporal smoothing
+                    track_id = det.get('id', None)
+                    if not st.session_state.get("adaptive_mode", True):
+                        track_id = None # Disable temporal smoothing in conventional mode
+                    person_name = face_service.recognize(img_cv, (x1, y1, x2, y2), track_id=track_id)
                     if person_name:
                         # Override the label on the image with a prominent solid background
                         text_size = cv2.getTextSize(person_name, cv2.FONT_HERSHEY_SIMPLEX, 0.9, 2)[0]
@@ -483,20 +571,55 @@ if page in ["🏠 Dashboard", "🏠 Home"]:
             if obj_name.lower() in dangerous_objects or obj_name == 'Unknown Object':
                 found_dangerous = True
                 alert_type = "Unknown Entity Detected" if obj_name == 'Unknown Object' else "Security Threat Detected"
-                alerts_html += f"""
-                <div style='background: rgba(239, 68, 68, 0.1); border-left: 3px solid #ef4444; padding: 10px; margin-bottom: 10px; border-radius: 4px;'>
-                    <div style='display:flex; align-items:flex-start; margin-bottom:10px;'>
-                        <span style='margin-right:10px;'>⚠️</span>
-                        <div>
-                            <div style='color: #0f172a; font-size: 14px;'>{alert_type}: {obj_name.title()} ({distance}m)</div>
-                            <div style='color: #64748b; font-size: 12px;'>""" + datetime.now().strftime("%I:%M:%S %p") + """</div>
-                        </div>
+                alert_msg = f"{alert_type}: {obj_name.title()} ({distance}m)"
+                
+                # Centralized alert manager
+                if st.session_state.get("adaptive_mode", True):
+                    st.session_state['alert_manager'].trigger_alert(alert_type, obj_name, alert_msg)
+                else:
+                    # Conventional mode: spam alerts
+                    st.session_state['alert_manager'].alert_history.insert(0, {'timestamp': datetime.now().strftime("%I:%M:%S %p"), 'message': alert_msg})
+                    if len(st.session_state['alert_manager'].alert_history) > 3:
+                        st.session_state['alert_manager'].alert_history.pop()
+                        
+            # Check restricted area violation
+            if st.session_state.get("enable_restricted", False):
+                bx1, by1, bx2, by2 = det['bbox']
+                # Check overlap
+                if (bx2 > restricted_zone[0] and bx1 < restricted_zone[2] and 
+                    by2 > restricted_zone[1] and by1 < restricted_zone[3]):
+                    
+                    st.session_state['alert_manager'].trigger_alert("Zone Violation", obj_name, f"Zone Violation: {obj_name} entered restricted area!")
+                
+            detected_objects_with_conf.append((obj_name, det['confidence']))
+        
+        # Render alerts from AlertManager history
+        recent_alerts = st.session_state['alert_manager'].get_recent_alerts(limit=3)
+        for alert in recent_alerts:
+            alerts_html += f"""
+            <div style='background: rgba(239, 68, 68, 0.1); border-left: 3px solid #ef4444; padding: 10px; margin-bottom: 10px; border-radius: 4px;'>
+                <div style='display:flex; align-items:flex-start; margin-bottom:10px;'>
+                    <span style='margin-right:10px;'>⚠️</span>
+                    <div>
+                        <div style='color: #0f172a; font-size: 14px;'>{alert['message']}</div>
+                        <div style='color: #64748b; font-size: 12px;'>{alert['timestamp']}</div>
                     </div>
                 </div>
-                """
-                
-            object_counts[obj_name] = object_counts.get(obj_name, 0) + 1
-            detected_objects_with_conf.append((obj_name, det['confidence']))
+            </div>
+            """
+            
+        # Compile and pass state to 3D HUD
+        perf_stats = st.session_state["performance_monitor"].get_stats()
+        state_data = {
+            "fps": perf_stats['fps'] if perf_stats else 0.0,
+            "latency": (perf_stats['avg_inference_time'] * 1000) if perf_stats else 0.0,
+            "cpu": perf_stats['cpu_percent'] if perf_stats else 0.0,
+            "ram": perf_stats['memory_percent'] if perf_stats else 0.0,
+            "objects": sum(object_counts.values()) if object_counts else 0,
+            "tracks": len(st.session_state['tracker'].active_tracks) if st.session_state.get('enable_tracking', False) else 0,
+            "alerts": len(st.session_state['alert_manager'].alert_history)
+        }
+        render_3d_hud(state_data)
         
         # Update image AFTER drawing faces
         video_placeholder.image(cv2.cvtColor(detected_img, cv2.COLOR_BGR2RGB), width="stretch")
@@ -1055,11 +1178,59 @@ elif page == "📜 History":
 
 elif page == "🔍 OCR":
     st.markdown("<div class='section-title'>🔍 OCR - Text Extraction</div>", unsafe_allow_html=True)
-    st.markdown("<div class='sub-text'>Extract text from documents using the Digital Manuscript Organizer</div>", unsafe_allow_html=True)
+    st.markdown("<div class='sub-text'>Extract text from documents using local EasyOCR (No API Key Required)</div>", unsafe_allow_html=True)
     
-    # Embed the provided link
-    import streamlit.components.v1 as components
-    components.iframe("https://digital-manuscript-organizer.vercel.app", height=800, scrolling=True)
+    ocr_reader = OCRReader()
+    
+    file = st.file_uploader("Upload Image for OCR", type=["jpg", "jpeg", "png"])
+    
+    if file:
+        img = Image.open(file)
+        img_array = np.array(img)
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("<div class='card-box'><b>📌 Input Image</b></div>", unsafe_allow_html=True)
+            st.image(img, use_container_width=True)
+        
+        with col2:
+            st.markdown("<div class='card-box'><b>📝 Extracted Text</b></div>", unsafe_allow_html=True)
+            
+            if st.button("Extract Text", width="stretch"):
+                with st.spinner("Extracting text locally..."):
+                    text = ocr_reader.extract_text_simple(cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR))
+                    st.session_state["ocr_text"] = text
+            
+            if "ocr_text" in st.session_state:
+                if st.session_state["ocr_text"].strip():
+                    st.success("Extraction Complete")
+                    st.write(st.session_state["ocr_text"])
+                    
+                    st.markdown("---")
+                    target_lang = st.selectbox("Translate to:", [
+                        "Hindi", "Telugu", "Tamil", "Kannada", "Malayalam", "Marathi", "Bengali", "Gujarati", "Punjabi", "Odia", "Urdu",
+                        "Spanish", "French", "German", "Chinese (simplified)", "Japanese", "Russian", "Arabic"
+                    ])
+                    
+                    lang_code_map = {
+                        "Hindi": "hi", "Telugu": "te", "Tamil": "ta", "Kannada": "kn", "Malayalam": "ml", 
+                        "Marathi": "mr", "Bengali": "bn", "Gujarati": "gu", "Punjabi": "pa", "Odia": "or", "Urdu": "ur",
+                        "Spanish": "es", "French": "fr", "German": "de", "Chinese (simplified)": "zh-CN",
+                        "Japanese": "ja", "Russian": "ru", "Arabic": "ar"
+                    }
+                    
+                    if st.button("Translate", type="primary", width="stretch"):
+                        with st.spinner(f"Translating to {target_lang}..."):
+                            try:
+                                from deep_translator import GoogleTranslator
+                                translated = GoogleTranslator(source='auto', target=lang_code_map[target_lang]).translate(st.session_state["ocr_text"])
+                                st.info(f"**{target_lang} Translation:**")
+                                st.write(translated)
+                            except Exception as e:
+                                st.error(f"Translation failed: {e}. Please ensure deep-translator is installed.")
+                else:
+                    st.warning("No text could be extracted from this image.")
 
 
 # 📷 QR SCANNER PAGE
@@ -1150,3 +1321,33 @@ elif page == "🧪 Research Evaluation":
         </ul>
     </div>
     """, unsafe_allow_html=True)
+
+
+# ⚙️ SETTINGS PAGE
+
+elif page == "⚙️ Settings":
+    st.markdown("<div class='section-title'>⚙️ Settings</div>", unsafe_allow_html=True)
+    st.markdown("<div class='sub-text'>Configure system preferences and alerts</div>", unsafe_allow_html=True)
+    
+    st.markdown("### 🔔 Alerts Configuration")
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("<div class='card-box'>", unsafe_allow_html=True)
+        st.markdown("**📧 Email Alerts**")
+        st.session_state["email_alerts_enabled"] = st.toggle("Enable Email Alerts", value=st.session_state.get("email_alerts_enabled", False))
+        if st.session_state["email_alerts_enabled"]:
+            st.session_state["email_configured"] = st.checkbox("Email is configured (Mock)", value=st.session_state.get("email_configured", False))
+        st.markdown("</div>", unsafe_allow_html=True)
+        
+    with col2:
+        st.markdown("<div class='card-box'>", unsafe_allow_html=True)
+        st.markdown("**📱 Telegram Alerts**")
+        st.session_state["telegram_alerts_enabled"] = st.toggle("Enable Telegram Alerts", value=st.session_state.get("telegram_alerts_enabled", False))
+        if st.session_state["telegram_alerts_enabled"]:
+            st.session_state["telegram_configured"] = st.checkbox("Telegram is configured (Mock)", value=st.session_state.get("telegram_configured", False))
+        st.markdown("</div>", unsafe_allow_html=True)
+        
+    st.markdown("---")
+    st.markdown("### 🛠️ General Preferences")
+    st.info("Use the sidebar on this page to adjust other settings like Voice Assistant, Confidence Threshold, and Search Mode.")

@@ -713,7 +713,7 @@ class DistanceEstimator:
     Assumes standard camera focal length projection approximation.
     """
     @staticmethod
-    def estimate(bbox: List[int], img_height: int) -> float:
+    def estimate(bbox: List[int], img_height: int, calibration_factor: float = 1.0) -> float:
         # box format: [x1, y1, x2, y2]
         h = bbox[3] - bbox[1]
         
@@ -725,7 +725,7 @@ class DistanceEstimator:
         relative_height = h / img_height
         
         # Base constant chosen for approximation (Focal Length * Real Height)
-        distance = 1.0 / (relative_height + 0.001)
+        distance = calibration_factor / (relative_height + 0.001)
         return round(distance, 1)
 
 
