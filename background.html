@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Smart Vision AI — Futuristic 3D Background" />
+  <title>Smart Vision AI Background</title>
+
+  <!-- ============================================================
+       STYLES — Glassmorphism & loader
+       ============================================================ -->
+  <link rel="stylesheet" href="background.css" />
+</head>
+<body>
+
+  <!-- ============================================================
+       LOADING SCREEN — Futuristic boot sequence
+       ============================================================ -->
+  <div id="svai-loader" aria-label="Loading Smart Vision AI">
+    <div class="svai-loader-logo">
+      <div class="svai-loader-ring"></div>
+      <div class="svai-loader-ring"></div>
+      <div class="svai-loader-core"></div>
+    </div>
+    <div class="svai-loader-title">Smart Vision AI</div>
+    <div class="svai-loader-sub">Neural Operating System</div>
+    <div class="svai-loader-scan"></div>
+    <div class="svai-loader-progress">
+      <div class="svai-loader-progress-bar" id="svai-progress-bar"></div>
+    </div>
+    <div class="svai-loader-status" id="svai-loader-status">INITIALIZING...</div>
+  </div>
+
+  <!-- ============================================================
+       3D BACKGROUND ROOT — Fixed full-screen WebGL canvas
+       ============================================================ -->
+  <div id="svai-bg-root">
+    <canvas id="svai-bg-canvas" aria-hidden="true"></canvas>
+  </div>
+
+  <div id="svai-mouse-layer" aria-hidden="true"></div>
+
+  <!-- ============================================================
+       THREE.JS — r160 from CDN
+       ============================================================ -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+  <!-- ============================================================
+       GSAP — Animation library
+       ============================================================ -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+
+  <!-- ============================================================
+       SCENE MODULES — Load order matters
+       ============================================================ -->
+  <script src="three_scene.js"></script>
+  <script src="animations.js"></script>
+  <script src="background.js"></script>
+
+</body>
+</html>

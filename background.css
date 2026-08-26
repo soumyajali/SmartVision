@@ -1,0 +1,490 @@
+/**
+ * Smart Vision AI — Premium Futuristic UI Layer
+ * Glassmorphism, typography, buttons, sidebar, cards, loading screen
+ * Palette: #050816 bg | #00E5FF primary | #7B61FF secondary | #00FFC6 accent
+ */
+
+/* ============================================================
+   GOOGLE FONTS — Modern AI typography
+   ============================================================ */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Orbitron:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap');
+
+/* ============================================================
+   CSS CUSTOM PROPERTIES — Design tokens
+   ============================================================ */
+:root {
+  --svai-bg: #050816;
+  --svai-primary: #00E5FF;
+  --svai-secondary: #7B61FF;
+  --svai-accent: #00FFC6;
+  --svai-glow: #4FD1FF;
+  --svai-glass-bg: rgba(8, 14, 35, 0.45);
+  --svai-glass-border: rgba(79, 209, 255, 0.22);
+  --svai-glass-blur: 18px;
+  --svai-radius: 16px;
+  --svai-radius-sm: 10px;
+  --svai-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+  --svai-glow-shadow: 0 0 24px rgba(0, 229, 255, 0.18);
+  --svai-font: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --svai-display: 'Orbitron', 'Inter', sans-serif;
+  --svai-mono: 'JetBrains Mono', monospace;
+  --svai-transition: 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ============================================================
+   STREAMLIT ROOT — Transparent shell over 3D canvas
+   ============================================================ */
+.stApp,
+[data-testid="stAppViewContainer"],
+[data-testid="stAppViewContainer"] > section,
+.main,
+.block-container {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+
+.stApp {
+  font-family: var(--svai-font) !important;
+  color: rgba(255, 255, 255, 0.92) !important;
+}
+
+/* Main content sits above background canvas */
+[data-testid="stAppViewContainer"],
+[data-testid="stHeader"],
+[data-testid="stSidebar"],
+.block-container,
+.stMainBlockContainer {
+  position: relative;
+  z-index: 2;
+}
+
+/* ============================================================
+   THREE.JS CANVAS CONTAINER — Fixed full-screen layer
+   ============================================================ */
+#svai-bg-root {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+#svai-bg-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  pointer-events: none;
+}
+
+/* Mouse layer captures parallax without blocking widgets */
+#svai-mouse-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+
+/* ============================================================
+   FUTURISTIC LOADING SCREEN
+   ============================================================ */
+#svai-loader {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(ellipse at center, #0a1230 0%, #050816 70%);
+  transition: opacity 0.8s ease, visibility 0.8s ease;
+  pointer-events: all;
+}
+
+#svai-loader.svai-hidden {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.svai-loader-logo {
+  position: relative;
+  width: 120px;
+  height: 120px;
+  margin-bottom: 32px;
+}
+
+.svai-loader-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  border-top-color: var(--svai-primary);
+  border-right-color: var(--svai-secondary);
+  animation: svai-spin 1.4s linear infinite;
+}
+
+.svai-loader-ring:nth-child(2) {
+  inset: 12px;
+  border-top-color: var(--svai-accent);
+  border-right-color: var(--svai-glow);
+  animation-duration: 2s;
+  animation-direction: reverse;
+}
+
+.svai-loader-core {
+  position: absolute;
+  inset: 28px;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--svai-glow) 0%, transparent 70%);
+  box-shadow: 0 0 40px var(--svai-primary);
+  animation: svai-pulse-core 2s ease-in-out infinite;
+}
+
+.svai-loader-title {
+  font-family: var(--svai-display);
+  font-size: 1.75rem;
+  font-weight: 700;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  background: linear-gradient(90deg, var(--svai-primary), var(--svai-secondary), var(--svai-accent));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: svai-text-glow 2.5s ease-in-out infinite;
+}
+
+.svai-loader-sub {
+  margin-top: 8px;
+  font-size: 0.85rem;
+  letter-spacing: 0.35em;
+  color: rgba(255, 255, 255, 0.45);
+  text-transform: uppercase;
+}
+
+.svai-loader-scan {
+  position: relative;
+  width: 280px;
+  height: 3px;
+  margin-top: 28px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.svai-loader-scan::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  width: 40%;
+  background: linear-gradient(90deg, transparent, var(--svai-primary), var(--svai-accent), transparent);
+  animation: svai-scan 1.8s ease-in-out infinite;
+}
+
+.svai-loader-progress {
+  width: 280px;
+  height: 4px;
+  margin-top: 12px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.svai-loader-progress-bar {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, var(--svai-secondary), var(--svai-primary), var(--svai-accent));
+  border-radius: 999px;
+  box-shadow: 0 0 12px var(--svai-glow);
+  transition: width 0.3s ease;
+}
+
+.svai-loader-status {
+  margin-top: 14px;
+  font-family: var(--svai-mono);
+  font-size: 0.72rem;
+  color: rgba(79, 209, 255, 0.7);
+  letter-spacing: 0.12em;
+}
+
+/* ============================================================
+   GLASSMORPHISM — Global Streamlit widgets
+   ============================================================ */
+[data-testid="stSidebar"],
+[data-testid="stSidebar"] > div:first-child {
+  background: var(--svai-glass-bg) !important;
+  backdrop-filter: blur(var(--svai-glass-blur)) saturate(160%) !important;
+  -webkit-backdrop-filter: blur(var(--svai-glass-blur)) saturate(160%) !important;
+  border-right: 1px solid var(--svai-glass-border) !important;
+  box-shadow: var(--svai-shadow), inset 0 1px 0 rgba(255, 255, 255, 0.06) !important;
+}
+
+[data-testid="stSidebar"]::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--svai-primary), var(--svai-secondary), transparent);
+  opacity: 0.6;
+}
+
+/* Glass panels — metrics, expanders, containers */
+[data-testid="stMetric"],
+[data-testid="stExpander"],
+[data-testid="stVerticalBlockBorderWrapper"],
+.stAlert,
+[data-testid="stFileUploader"],
+[data-testid="stCameraInput"] {
+  background: var(--svai-glass-bg) !important;
+  backdrop-filter: blur(14px) saturate(150%) !important;
+  -webkit-backdrop-filter: blur(14px) saturate(150%) !important;
+  border: 1px solid var(--svai-glass-border) !important;
+  border-radius: var(--svai-radius-sm) !important;
+  box-shadow: var(--svai-glow-shadow) !important;
+  transition: transform var(--svai-transition), box-shadow var(--svai-transition), border-color var(--svai-transition) !important;
+}
+
+[data-testid="stMetric"]:hover,
+[data-testid="stExpander"]:hover,
+[data-testid="stVerticalBlockBorderWrapper"]:hover {
+  transform: translateY(-2px);
+  border-color: rgba(0, 229, 255, 0.38) !important;
+  box-shadow: 0 0 28px rgba(0, 229, 255, 0.22) !important;
+}
+
+/* ============================================================
+   CUSTOM CARD CLASSES — Used by existing app markup
+   ============================================================ */
+.card-box {
+  background: var(--svai-glass-bg) !important;
+  backdrop-filter: blur(16px) saturate(160%) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(160%) !important;
+  border: 1px solid var(--svai-glass-border) !important;
+  border-radius: var(--svai-radius) !important;
+  box-shadow: var(--svai-shadow), var(--svai-glow-shadow) !important;
+  color: rgba(255, 255, 255, 0.9) !important;
+  transition: transform 0.4s ease, box-shadow 0.4s ease, border-color 0.4s ease !important;
+  animation: svai-float-card 6s ease-in-out infinite !important;
+}
+
+.card-box:hover {
+  transform: translateY(-6px) scale(1.01) !important;
+  border-color: rgba(123, 97, 255, 0.45) !important;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5), 0 0 32px rgba(123, 97, 255, 0.25) !important;
+}
+
+.card-box:nth-child(2) { animation-delay: -2s !important; }
+.card-box:nth-child(3) { animation-delay: -4s !important; }
+
+/* ============================================================
+   TYPOGRAPHY — Gradient headings with letter glow
+   ============================================================ */
+.section-title {
+  font-family: var(--svai-display) !important;
+  font-size: clamp(2rem, 5vw, 3.25rem) !important;
+  font-weight: 800 !important;
+  text-align: center !important;
+  letter-spacing: 0.06em !important;
+  background: linear-gradient(135deg, #ffffff 0%, var(--svai-primary) 35%, var(--svai-secondary) 65%, var(--svai-accent) 100%) !important;
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+  filter: drop-shadow(0 0 18px rgba(0, 229, 255, 0.35)) !important;
+  animation: svai-title-shimmer 4s ease-in-out infinite !important;
+  margin-bottom: 8px !important;
+}
+
+.sub-text {
+  text-align: center !important;
+  font-size: 1.15rem !important;
+  color: rgba(255, 255, 255, 0.65) !important;
+  letter-spacing: 0.04em !important;
+  margin-bottom: 28px !important;
+}
+
+.result-label {
+  font-family: var(--svai-display) !important;
+  font-size: 2rem !important;
+  font-weight: 800 !important;
+  text-align: center !important;
+  color: var(--svai-primary) !important;
+  text-shadow: 0 0 20px rgba(0, 229, 255, 0.5) !important;
+}
+
+.confidence-label {
+  font-size: 1.1rem !important;
+  text-align: center !important;
+  color: rgba(255, 255, 255, 0.7) !important;
+}
+
+h1, h2, h3, [data-testid="stMarkdownContainer"] h1,
+[data-testid="stMarkdownContainer"] h2,
+[data-testid="stMarkdownContainer"] h3 {
+  font-family: var(--svai-display) !important;
+  letter-spacing: 0.03em !important;
+}
+
+/* ============================================================
+   NEON BUTTONS — Gradient, glow, ripple, hover scale
+   ============================================================ */
+.stButton > button,
+[data-testid="stBaseButton-secondary"],
+[data-testid="stBaseButton-primary"] {
+  position: relative !important;
+  overflow: hidden !important;
+  background: linear-gradient(135deg, rgba(0, 229, 255, 0.18) 0%, rgba(123, 97, 255, 0.22) 50%, rgba(0, 255, 198, 0.14) 100%) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  border: 1px solid rgba(0, 229, 255, 0.35) !important;
+  border-radius: var(--svai-radius-sm) !important;
+  color: #ffffff !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.04em !important;
+  box-shadow: 0 0 20px rgba(0, 229, 255, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
+  transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease !important;
+}
+
+.stButton > button::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(135deg, var(--svai-primary), var(--svai-secondary), var(--svai-accent));
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.stButton > button:hover {
+  transform: scale(1.04) translateY(-1px) !important;
+  border-color: var(--svai-accent) !important;
+  box-shadow: 0 0 32px rgba(0, 229, 255, 0.35), 0 0 48px rgba(123, 97, 255, 0.2) !important;
+}
+
+.stButton > button:active {
+  transform: scale(0.98) !important;
+}
+
+/* ============================================================
+   INPUTS & SELECTS — Glass styling
+   ============================================================ */
+.stTextInput input,
+.stTextArea textarea,
+.stSelectbox [data-baseweb="select"],
+.stNumberInput input,
+[data-testid="stSlider"] {
+  background: rgba(8, 14, 35, 0.55) !important;
+  backdrop-filter: blur(10px) !important;
+  border-color: var(--svai-glass-border) !important;
+  color: #ffffff !important;
+  border-radius: var(--svai-radius-sm) !important;
+}
+
+.stRadio label,
+.stCheckbox label {
+  color: rgba(255, 255, 255, 0.85) !important;
+}
+
+/* ============================================================
+   HEADER — Minimal transparent toolbar
+   ============================================================ */
+[data-testid="stHeader"] {
+  background: rgba(5, 8, 22, 0.35) !important;
+  backdrop-filter: blur(12px) !important;
+  border-bottom: 1px solid var(--svai-glass-border) !important;
+}
+
+[data-testid="stToolbar"] {
+  background: transparent !important;
+}
+
+/* ============================================================
+   PLOTLY / DATA — Glass chart containers
+   ============================================================ */
+[data-testid="stPlotlyChart"],
+.stDataFrame,
+[data-testid="stDataFrame"] {
+  background: var(--svai-glass-bg) !important;
+  backdrop-filter: blur(12px) !important;
+  border-radius: var(--svai-radius) !important;
+  border: 1px solid var(--svai-glass-border) !important;
+  padding: 8px !important;
+}
+
+/* ============================================================
+   SIDEBAR NAV — Animated gradient accents
+   ============================================================ */
+[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p,
+[data-testid="stSidebar"] label {
+  transition: color var(--svai-transition), text-shadow var(--svai-transition) !important;
+}
+
+[data-testid="stSidebar"] label:hover {
+  color: var(--svai-primary) !important;
+  text-shadow: 0 0 12px rgba(0, 229, 255, 0.4) !important;
+}
+
+[data-testid="stSidebar"] hr {
+  border-color: var(--svai-glass-border) !important;
+  opacity: 0.6 !important;
+}
+
+/* ============================================================
+   KEYFRAME ANIMATIONS
+   ============================================================ */
+@keyframes svai-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes svai-pulse-core {
+  0%, 100% { opacity: 0.7; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.08); }
+}
+
+@keyframes svai-text-glow {
+  0%, 100% { filter: drop-shadow(0 0 8px rgba(0, 229, 255, 0.4)); }
+  50% { filter: drop-shadow(0 0 20px rgba(123, 97, 255, 0.6)); }
+}
+
+@keyframes svai-scan {
+  0% { transform: translateX(-120%); }
+  100% { transform: translateX(320%); }
+}
+
+@keyframes svai-float-card {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+
+@keyframes svai-title-shimmer {
+  0%, 100% { filter: drop-shadow(0 0 14px rgba(0, 229, 255, 0.3)); }
+  50% { filter: drop-shadow(0 0 28px rgba(123, 97, 255, 0.45)); }
+}
+
+@keyframes svai-border-flow {
+  0% { background-position: 0% 50%; }
+  100% { background-position: 200% 50%; }
+}
+
+/* ============================================================
+   RESPONSIVE & REDUCED MOTION
+   ============================================================ */
+@media (max-width: 768px) {
+  .section-title { font-size: 1.75rem !important; }
+  .svai-loader-title { font-size: 1.25rem; letter-spacing: 0.15em; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
