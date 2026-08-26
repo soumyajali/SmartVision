@@ -1,0 +1,1 @@
+Copy your generated yolov8n_float16.tflite file into this folder.

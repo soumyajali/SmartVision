@@ -1,0 +1,30 @@
+name: smart_vision
+description: Smart Vision - Real-Time Object Detection mobile app.
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.3.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  camera: ^0.11.0+2
+  tflite_flutter: ^0.11.0
+  flutter_tts: ^4.2.5
+  sqflite: ^2.4.3
+  path_provider: ^2.1.6
+  provider: ^6.1.2
+  animations: ^2.0.0
+  http: ^1.6.0
+  image: ^3.3.0
+  image_picker: ^1.2.3
+  shared_preferences: ^2.5.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/model.tflite
+    - assets/labels.txt
+    - assets/images/

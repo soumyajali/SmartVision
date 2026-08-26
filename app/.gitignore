@@ -1,0 +1,16 @@
+# Flutter generated artifacts
+.dart_tool/
+build/
+.packages
+.pub-cache/
+.pub/
+
+# Platform generated
+android/.gradle/
+android/local.properties
+android/key.properties
+ios/Pods/
+ios/Runner.xcworkspace/
+
+# Secrets
+*.jks

@@ -1,0 +1,2 @@
+ultralytics==8.0.200
+tensorflow==2.13.0
