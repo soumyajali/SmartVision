@@ -41,7 +41,7 @@ export default function (component) {
   scene.add(pointsGroup);
 
   // Default mock data if none provided
-  let historyData = data.history || [];
+  let historyData = (data && data.history) ? data.history : [];
   if (historyData.length === 0) {
       for(let i=0; i<50; i++) {
           historyData.push({
