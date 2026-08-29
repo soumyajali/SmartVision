@@ -32,10 +32,10 @@ class ImageProcessor {
 
   static image_lib.Image _convertBGRA8888ToImage(CameraImage cameraImage) {
     return image_lib.Image.fromBytes(
-      width: cameraImage.width,
-      height: cameraImage.height,
-      bytes: cameraImage.planes[0].bytes.buffer,
-      order: image_lib.ChannelOrder.bgra,
+      cameraImage.width,
+      cameraImage.height,
+      cameraImage.planes[0].bytes,
+      format: image_lib.Format.bgra,
     );
   }
 
@@ -46,7 +46,7 @@ class ImageProcessor {
     final uvRowStride = cameraImage.planes[1].bytesPerRow;
     final uvPixelStride = cameraImage.planes[1].bytesPerPixel ?? 1;
 
-    final image = image_lib.Image(width: width, height: height);
+    final image = image_lib.Image(width, height);
 
     for (var w = 0; w < width; w++) {
       for (var h = 0; h < height; h++) {
@@ -68,7 +68,7 @@ class ImageProcessor {
         g = g.clamp(0, 255);
         b = b.clamp(0, 255);
 
-        image.setPixelRgb(w, h, r, g, b);
+        image.setPixel(w, h, image_lib.getColor(r, g, b));
       }
     }
     return image;

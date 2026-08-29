@@ -49,7 +49,7 @@ class DetectionBoxPainter extends CustomPainter {
       ..style = PaintingStyle.fill;
 
     // YOLO model input size is typically 640x640
-    const double modelInputSize = ImageProcessor.modelInputSize.toDouble();
+    final double modelInputSize = ImageProcessor.modelInputSize.toDouble();
     
     // Calculate scale factors to map model coordinates to screen coordinates
     // Assuming the camera preview uses BoxFit.cover and fills the screen,

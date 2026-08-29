@@ -19,7 +19,7 @@ void main() {
         ChangeNotifierProvider(create: (_) => TFLiteService()..initialize()),
         ChangeNotifierProvider(create: (_) => SpeechService()..initialize()),
         Provider<DatabaseService>(create: (_) => DatabaseService()),
-        ChangeNotifierProxyProvider<DatabaseService, StatisticsService>(
+        ProxyProvider<DatabaseService, StatisticsService>(
           create: (context) => StatisticsService(context.read<DatabaseService>()),
           update: (context, db, previous) => previous ?? StatisticsService(db),
         ),

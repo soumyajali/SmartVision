@@ -75,9 +75,9 @@ class TFLiteService extends ChangeNotifier {
       for (var y = 0; y < height; y++) {
         for (var x = 0; x < width; x++) {
           final pixel = image.getPixel(x, y);
-          inputTensor[index++] = pixel.r / 255.0;
-          inputTensor[index++] = pixel.g / 255.0;
-          inputTensor[index++] = pixel.b / 255.0;
+          inputTensor[index++] = image_lib.getRed(pixel) / 255.0;
+          inputTensor[index++] = image_lib.getGreen(pixel) / 255.0;
+          inputTensor[index++] = image_lib.getBlue(pixel) / 255.0;
         }
       }
 
