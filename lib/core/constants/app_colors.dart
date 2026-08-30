@@ -1,15 +1,21 @@
 import 'package:flutter/material.dart';
 
 class AppColors {
-  static const Color primary = Color(0xFF6200EA);
-  static const Color primaryDark = Color(0xFF3700B3);
-  static const Color secondary = Color(0xFF03DAC6);
-  static const Color secondaryDark = Color(0xFF018786);
-  static const Color backgroundLight = Color(0xFFF5F5F5);
-  static const Color backgroundDark = Color(0xFF121212);
-  static const Color surfaceLight = Colors.white;
-  static const Color surfaceDark = Color(0xFF1E1E1E);
-  static const Color textLight = Colors.black87;
-  static const Color textDark = Colors.white70;
-  static const Color error = Color(0xFFB00020);
+  // Brand
+  static const Color primary = Color(0xFF10B981); // Emerald Green
+  
+  // Semantics
+  static const Color secondary = Color(0xFF3B82F6); // Blue
+  static const Color aiFeature = Color(0xFFA855F7); // Purple
+  static const Color warning = Color(0xFFF59E0B); // Amber/Yellow
+  static const Color error = Color(0xFFEF4444); // Red
+  
+  // Backgrounds & Surfaces
+  static const Color background = Color(0xFFF7F9FC);
+  static const Color card = Color(0xFFFFFFFF);
+  static const Color border = Color(0xFFE6EAF0);
+  
+  // Typography
+  static const Color textMain = Color(0xFF0F172A); // Dark navy/charcoal
+  static const Color textSecondary = Color(0xFF64748B); // Gray
 }

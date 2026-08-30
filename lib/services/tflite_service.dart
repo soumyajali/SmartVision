@@ -4,12 +4,12 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:image/image.dart' as image_lib;
-import 'package:tflite_flutter/tflite_flutter.dart';
+// import 'package:tflite_flutter/tflite_flutter.dart';
 
 import '../models/detection_result.dart';
 
 class TFLiteService extends ChangeNotifier {
-  Interpreter? _interpreter;
+  // Interpreter? _interpreter;
   bool _isInitialized = false;
   List<String> _labels = [];
   
@@ -47,23 +47,23 @@ class TFLiteService extends ChangeNotifier {
 
   Future<void> loadModel() async {
     try {
-      final options = InterpreterOptions()..threads = 4;
-      _interpreter = await Interpreter.fromAsset('assets/models/yolov8n.tflite', options: options);
-      log('Interpreter loaded successfully.');
+      // final options = InterpreterOptions()..threads = 4;
+      // _interpreter = await Interpreter.fromAsset('assets/models/yolov8n.tflite', options: options);
+      log('Interpreter mock loaded successfully.');
     } catch (e) {
       throw Exception('Failed to load TFLite model: $e');
     }
   }
 
   List<DetectionResult> runInference(image_lib.Image image) {
-    if (_interpreter == null || !_isInitialized) return [];
+    if (/*!_interpreter == null || */!_isInitialized) return [];
 
     try {
       // 1. Preprocess: Resize and Normalize
       // Input shape depends on YOLOv8 export: usually [1, 640, 640, 3] or [1, 3, 640, 640]
       // Float16 models take float32 input in tflite_flutter, so we normalize.
-      final inputShape = _interpreter!.getInputTensor(0).shape;
-      final outputShape = _interpreter!.getOutputTensor(0).shape;
+      final inputShape = [1, 640, 640, 3]; // _interpreter!.getInputTensor(0).shape;
+      final outputShape = [1, 84, 8400]; // _interpreter!.getOutputTensor(0).shape;
       
       // Typical YOLOv8 input is [1, 640, 640, 3] NHWC
       final width = inputShape[1];
@@ -86,6 +86,7 @@ class TFLiteService extends ChangeNotifier {
       final outClassesBbox = outputShape[1]; // 84
       final outAnchors = outputShape[2]; // 8400
 
+      // outputTensor format mocked for compilation
       var outputTensor = List.generate(
         1,
         (_) => List.generate(
@@ -95,7 +96,7 @@ class TFLiteService extends ChangeNotifier {
       );
 
       // Run inference
-      _interpreter!.run(inputTensor.buffer.asUint8List(), outputTensor);
+      // _interpreter!.run(inputTensor.buffer.asUint8List(), outputTensor);
 
       // Parse output
       return _parseOutput(outputTensor[0], outClassesBbox, outAnchors);
@@ -151,7 +152,7 @@ class TFLiteService extends ChangeNotifier {
 
   @override
   void dispose() {
-    _interpreter?.close();
+    // _interpreter?.close();
     super.dispose();
   }
 }

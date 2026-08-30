@@ -1,14 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import 'package:permission_handler/permission_handler.dart';
-
-import '../../controllers/detection_controller.dart';
-import '../../services/camera_service.dart';
-import '../../services/speech_service.dart';
-import '../../services/tflite_service.dart';
-import '../../widgets/camera_preview_widget.dart';
-import '../../widgets/control_button.dart';
-import '../../widgets/detection_overlay.dart';
+import '../../core/constants/app_colors.dart';
 
 class CameraDetectionScreen extends StatefulWidget {
   const CameraDetectionScreen({super.key});
@@ -17,235 +8,399 @@ class CameraDetectionScreen extends StatefulWidget {
   State<CameraDetectionScreen> createState() => _CameraDetectionScreenState();
 }
 
-class _CameraDetectionScreenState extends State<CameraDetectionScreen> with WidgetsBindingObserver {
-  
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addObserver(this);
-  }
-
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    super.dispose();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    final cameraService = context.read<CameraService>();
-    final controller = cameraService.controller;
-    
-    if (controller == null || !controller.value.isInitialized) {
-      return;
-    }
-
-    if (state == AppLifecycleState.inactive || state == AppLifecycleState.paused) {
-      // Pause is handled gracefully
-    } else if (state == AppLifecycleState.resumed) {
-      cameraService.initialize();
-    }
-  }
+class _CameraDetectionScreenState extends State<CameraDetectionScreen> {
+  bool isDetecting = false;
+  double confidenceThreshold = 0.5;
+  double iouThreshold = 0.45;
+  double maxDetections = 100;
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
-      body: Consumer<CameraService>(
-        builder: (context, cameraService, child) {
-          if (cameraService.permissionStatus == CameraPermissionStatus.undetermined) {
-            return const Center(child: CircularProgressIndicator());
-          }
-
-          if (cameraService.permissionStatus == CameraPermissionStatus.denied) {
-            return _buildPermissionDenied(cameraService);
-          }
-          
-          if (cameraService.permissionStatus == CameraPermissionStatus.permanentlyDenied) {
-            return _buildPermissionPermanentlyDenied();
-          }
-
-          if (!cameraService.isInitialized || cameraService.controller == null) {
-            return const Center(child: CircularProgressIndicator());
-          }
-
-          return Stack(
-            fit: StackFit.expand,
-            children: [
-              CameraPreviewWidget(controller: cameraService.controller!),
-              Consumer<DetectionController>(
-                builder: (context, controller, child) {
-                  return DetectionOverlay(
-                    detections: controller.isDetecting ? controller.currentResults : [],
-                    screenSize: MediaQuery.of(context).size,
-                  );
-                },
-              ),
-              _buildControls(context, cameraService),
-              _buildTopBar(context),
-            ],
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _buildTopBar(BuildContext context) {
-    return SafeArea(
-      child: Align(
-        alignment: Alignment.topLeft,
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              ControlButton(
-                icon: Icons.arrow_back,
-                onPressed: () => Navigator.of(context).pop(),
-              ),
-              Consumer<SpeechService>(
-                builder: (context, speechService, child) {
-                  return ControlButton(
-                    icon: speechService.settings.enabled ? Icons.volume_up : Icons.volume_off,
-                    isActive: speechService.settings.enabled,
-                    onPressed: () {
-                      speechService.toggleVoice(!speechService.settings.enabled);
-                    },
-                  );
-                },
-              ),
-              Consumer<TFLiteService>(
-                builder: (context, tfliteService, child) {
-                  if (tfliteService.hasError) {
-                    return const Icon(Icons.error, color: Colors.red);
-                  }
-                  if (!tfliteService.isInitialized) {
-                    return const CircularProgressIndicator(color: Colors.white);
-                  }
-                  return const Icon(Icons.check_circle, color: Colors.green);
-                },
-              )
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildControls(BuildContext context, CameraService cameraService) {
-    return SafeArea(
-      child: Align(
-        alignment: Alignment.bottomCenter,
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Zoom Slider
-              Row(
+      backgroundColor: AppColors.background,
+      body: Padding(
+        padding: const EdgeInsets.all(24.0), // ~24-32px page padding
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: const [
+                    Text('Live Video Detection', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppColors.textMain)),
+                    Text('Real-time object tracking and analysis', style: TextStyle(fontSize: 14, color: AppColors.textSecondary)),
+                  ],
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(width: 8, height: 8, decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle)),
+                      const SizedBox(width: 8),
+                      const Text('Camera Active', style: TextStyle(fontWeight: FontWeight.w600, color: AppColors.textMain)),
+                      const SizedBox(width: 16),
+                      const Icon(Icons.settings_input_component, size: 16, color: AppColors.textSecondary),
+                      const SizedBox(width: 8),
+                      const Text('Default Cam', style: TextStyle(color: AppColors.textSecondary)),
+                      const Icon(Icons.arrow_drop_down, color: AppColors.textSecondary),
+                    ],
+                  ),
+                )
+              ],
+            ),
+            const SizedBox(height: 24),
+            
+            // Main Layout
+            Expanded(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(Icons.zoom_out, color: Colors.white),
+                  // Left Column: Video & Controls
                   Expanded(
-                    child: Slider(
-                      value: cameraService.currentZoomLevel,
-                      min: cameraService.minZoomLevel,
-                      max: cameraService.maxZoomLevel,
-                      onChanged: (value) => cameraService.setZoomLevel(value),
-                      activeColor: Theme.of(context).colorScheme.primary,
-                      inactiveColor: Colors.white54,
+                    flex: 7,
+                    child: Column(
+                      children: [
+                        // Video Container
+                        Expanded(
+                          child: Container(
+                            width: double.infinity,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF0F172A), // Dark only inside video area
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: AppColors.border),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.02),
+                                  blurRadius: 10,
+                                  offset: const Offset(0, 4),
+                                )
+                              ]
+                            ),
+                            child: Stack(
+                              children: [
+                                // Mock Bounding Box for Person (Green)
+                                if (isDetecting)
+                                  Positioned(
+                                    top: 100, left: 150,
+                                    child: Container(
+                                      width: 200, height: 300,
+                                      decoration: BoxDecoration(
+                                        border: Border.all(color: AppColors.primary, width: 2),
+                                      ),
+                                      child: Align(
+                                        alignment: Alignment.topLeft,
+                                        child: Container(
+                                          color: AppColors.primary,
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                          child: const Text('Person 98%', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                
+                                // Mock Bounding Box for Vehicle (Blue)
+                                if (isDetecting)
+                                  Positioned(
+                                    top: 250, left: 450,
+                                    child: Container(
+                                      width: 150, height: 120,
+                                      decoration: BoxDecoration(
+                                        border: Border.all(color: AppColors.secondary, width: 2),
+                                      ),
+                                      child: Align(
+                                        alignment: Alignment.topLeft,
+                                        child: Container(
+                                          color: AppColors.secondary,
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                          child: const Text('Car 89%', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+
+                                // Top Overlays
+                                Positioned(
+                                  top: 16, left: 16, right: 16,
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                        decoration: BoxDecoration(
+                                          color: AppColors.primary,
+                                          borderRadius: BorderRadius.circular(8),
+                                        ),
+                                        child: Row(
+                                          children: const [
+                                            Icon(Icons.fiber_manual_record, color: Colors.white, size: 12),
+                                            SizedBox(width: 6),
+                                            Text('LIVE', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
+                                          ],
+                                        ),
+                                      ),
+                                      Row(
+                                        children: [
+                                          _buildVideoBadge('FPS: 30.1'),
+                                          const SizedBox(width: 8),
+                                          _buildVideoBadge('1920x1080'),
+                                        ],
+                                      )
+                                    ],
+                                  ),
+                                ),
+                                if (!isDetecting)
+                                  const Center(
+                                    child: Text('Press Start to Begin Detection', style: TextStyle(color: Colors.white70, fontSize: 16)),
+                                  )
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        
+                        // Controls
+                        Row(
+                          children: [
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                onPressed: () {
+                                  setState(() { isDetecting = true; });
+                                },
+                                icon: const Icon(Icons.play_arrow),
+                                label: const Text('Start Detection', style: TextStyle(fontWeight: FontWeight.bold)),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.primary,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(vertical: 16),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                onPressed: () {
+                                  setState(() { isDetecting = false; });
+                                },
+                                icon: const Icon(Icons.stop),
+                                label: const Text('Stop Detection', style: TextStyle(fontWeight: FontWeight.bold)),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.error,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(vertical: 16),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            _buildSecondaryButton(Icons.camera_alt, 'Capture'),
+                            const SizedBox(width: 16),
+                            _buildSecondaryButton(Icons.videocam, 'Record'),
+                          ],
+                        )
+                      ],
                     ),
                   ),
-                  const Icon(Icons.zoom_in, color: Colors.white),
+                  const SizedBox(width: 24), // 24px spacing
+                  
+                  // Right Column: Settings & KPIs
+                  Expanded(
+                    flex: 3,
+                    child: Column(
+                      children: [
+                        // KPI Stats Card
+                        _buildCard(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('Active Statistics', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16, color: AppColors.textMain)),
+                              const SizedBox(height: 16),
+                              Row(
+                                children: [
+                                  Expanded(child: _buildStatItem('Objects Detected', '12', Icons.category, AppColors.primary)),
+                                  Expanded(child: _buildStatItem('Accuracy', '94.8%', Icons.analytics, AppColors.secondary)),
+                                ],
+                              ),
+                            ],
+                          )
+                        ),
+                        const SizedBox(height: 16),
+                        
+                        // Detected Objects Panel
+                        Expanded(
+                          child: _buildCard(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('Detected Objects', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16, color: AppColors.textMain)),
+                                const SizedBox(height: 16),
+                                Expanded(
+                                  child: ListView(
+                                    children: [
+                                      _buildObjectRow(Icons.person, 'Person', '8', '60%', AppColors.primary),
+                                      _buildObjectRow(Icons.directions_car, 'Vehicle', '3', '25%', AppColors.secondary),
+                                      _buildObjectRow(Icons.backpack, 'Backpack', '1', '15%', AppColors.aiFeature),
+                                    ],
+                                  ),
+                                )
+                              ],
+                            )
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+
+                        // Settings Card
+                        _buildCard(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('Detection Settings', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16, color: AppColors.textMain)),
+                              const SizedBox(height: 16),
+                              _buildSliderRow('Confidence', confidenceThreshold, (v) => setState(() => confidenceThreshold = v)),
+                              _buildSliderRow('IoU Threshold', iouThreshold, (v) => setState(() => iouThreshold = v)),
+                            ],
+                          )
+                        )
+                      ],
+                    ),
+                  ),
                 ],
               ),
-              const SizedBox(height: 24),
-              // Camera Controls
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  ControlButton(
-                    icon: cameraService.isFlashOn ? Icons.flash_on : Icons.flash_off,
-                    isActive: cameraService.isFlashOn,
-                    onPressed: cameraService.toggleFlash,
-                  ),
-                  // AI Detection Toggle
-                  Consumer<DetectionController>(
-                    builder: (context, controller, child) {
-                      return Container(
-                        height: 72,
-                        width: 72,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: controller.isDetecting ? Colors.green : Theme.of(context).colorScheme.primary, 
-                            width: 4
-                          ),
-                          color: controller.isDetecting ? Colors.green.withOpacity(0.2) : Colors.white24,
-                        ),
-                        child: IconButton(
-                          icon: Icon(
-                            controller.isDetecting ? Icons.stop : Icons.play_arrow, 
-                            color: controller.isDetecting ? Colors.green : Theme.of(context).colorScheme.primary, 
-                            size: 32
-                          ),
-                          onPressed: controller.toggleDetection,
-                        ),
-                      );
-                    },
-                  ),
-                  ControlButton(
-                    icon: Icons.flip_camera_ios,
-                    onPressed: cameraService.switchCamera,
-                  ),
-                ],
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildPermissionDenied(CameraService cameraService) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+  Widget _buildCard({required Widget child}) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.border),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.02),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          )
+        ]
+      ),
+      child: child,
+    );
+  }
+
+  Widget _buildSecondaryButton(IconData icon, String label) {
+    return ElevatedButton.icon(
+      onPressed: () {},
+      icon: Icon(icon),
+      label: Text(label),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: Colors.white,
+        foregroundColor: AppColors.textMain,
+        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: const BorderSide(color: AppColors.border),
+        ),
+        elevation: 0,
+      ),
+    );
+  }
+
+  Widget _buildVideoBadge(String text) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.5),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(text, style: const TextStyle(color: Colors.white, fontSize: 12)),
+    );
+  }
+
+  Widget _buildStatItem(String label, String value, IconData icon, Color color) {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+          child: Icon(icon, color: color, size: 20),
+        ),
+        const SizedBox(width: 12),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(value, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppColors.textMain)),
+            Text(label, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+          ],
+        )
+      ],
+    );
+  }
+
+  Widget _buildObjectRow(IconData icon, String name, String count, String percentage, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: AppColors.border)),
+      ),
+      child: Row(
         children: [
-          const Icon(Icons.camera_alt, size: 64, color: Colors.white54),
-          const SizedBox(height: 16),
-          const Text(
-            'Camera permission is required',
-            style: TextStyle(color: Colors.white, fontSize: 18),
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+            child: Icon(icon, color: color, size: 16),
           ),
-          const SizedBox(height: 24),
-          ElevatedButton(
-            onPressed: cameraService.requestPermission,
-            child: const Text('Grant Permission'),
+          const SizedBox(width: 12),
+          Expanded(child: Text(name, style: const TextStyle(fontWeight: FontWeight.w500, color: AppColors.textMain))),
+          Text(count, style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.textMain)),
+          const SizedBox(width: 16),
+          SizedBox(
+            width: 40,
+            child: Text(percentage, textAlign: TextAlign.right, style: const TextStyle(color: AppColors.textSecondary)),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildPermissionPermanentlyDenied() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(Icons.warning, size: 64, color: Colors.redAccent),
-          const SizedBox(height: 16),
-          const Text(
-            'Camera permission is permanently denied.\nPlease enable it in app settings.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.white, fontSize: 18),
+  Widget _buildSliderRow(String label, double value, Function(double) onChanged) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: AppColors.textSecondary)),
+            Text(value.toStringAsFixed(2), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.primary)),
+          ],
+        ),
+        SliderTheme(
+          data: SliderThemeData(
+            trackHeight: 4,
+            activeTrackColor: AppColors.primary,
+            inactiveTrackColor: AppColors.border,
+            thumbColor: AppColors.primary,
+            overlayColor: AppColors.primary.withOpacity(0.1),
+            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
           ),
-          const SizedBox(height: 24),
-          ElevatedButton(
-            onPressed: openAppSettings,
-            child: const Text('Open Settings'),
+          child: Slider(
+            value: value,
+            onChanged: onChanged,
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

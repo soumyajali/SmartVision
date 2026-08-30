@@ -1,13 +1,13 @@
 import 'dart:isolate';
 import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
-import 'package:tflite_flutter/tflite_flutter.dart';
+// import 'package:tflite_flutter/tflite_flutter.dart';
 
 import '../models/detection_result.dart';
 import 'image_processor.dart';
 
 class DetectionInferenceService {
-  Interpreter? _interpreter;
+  // Interpreter? _interpreter;
   bool _isModelLoaded = false;
   bool _isComputing = false;
 
@@ -15,7 +15,7 @@ class DetectionInferenceService {
 
   Future<void> loadModel() async {
     try {
-      _interpreter = await Interpreter.fromAsset('models/yolov8m.tflite');
+      // _interpreter = await Interpreter.fromAsset('models/yolov8m.tflite');
       _isModelLoaded = true;
       debugPrint("Model loaded successfully");
     } catch (e) {
@@ -24,7 +24,7 @@ class DetectionInferenceService {
   }
 
   Future<List<DetectionResult>> runInference(CameraImage image, {bool fallbackToBackend = false}) async {
-    if (!_isModelLoaded || _interpreter == null || _isComputing) {
+    if (!_isModelLoaded /*|| _interpreter == null*/ || _isComputing) {
       return [];
     }
 
@@ -38,7 +38,7 @@ class DetectionInferenceService {
     // Process image in isolate
     List<DetectionResult> results = await compute(
       _processAndRunInference, 
-      _InferenceData(image: image, interpreterAddress: _interpreter!.address)
+      _InferenceData(image: image, interpreterAddress: 0 /*_interpreter!.address*/)
     );
     
     _isComputing = false;

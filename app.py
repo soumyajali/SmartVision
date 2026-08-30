@@ -41,10 +41,6 @@ import plotly.express as px
 # ---------------- PAGE CONFIG ----------------
 st.set_page_config(page_title="Smart Vision AI", page_icon="🤖", layout="wide")
 
-# ---------------- PREMIUM 3D UI (background only — no AI changes) ----------------
-from integration import inject_premium_ui
-inject_premium_ui()
-
 # ---------------- SESSION STATE ----------------
 if "face_service" not in st.session_state:
     st.session_state["face_service"] = FaceService()
@@ -160,56 +156,195 @@ transform = transforms.Compose([
 def get_theme_css():
     return """
 <style>
+/* Hide Streamlit Default UI Elements */
+header[data-testid="stHeader"] {display: none;}
+footer {display: none;}
+
 .stApp {
-    background-color: #f8fafc;
+    background-color: #F7F9FC !important;
+    font-family: 'Inter', sans-serif !important;
+    color: #172033 !important;
+}
+
+/* Main Content Constraints */
+.main .block-container {
+    max-width: 1200px !important;
+    padding-top: 32px !important;
+    padding-bottom: 120px !important;
+}
+
+/* Sidebar Customization */
+[data-testid="stSidebar"] {
+    background-color: #FFFFFF !important;
+    border-right: 1px solid #E2E8F0 !important;
+    min-width: 250px !important;
+    max-width: 280px !important;
+}
+[data-testid="stSidebar"] > div:first-child {
+    padding-top: 50px !important;
+}
+
+/* Navigation Radio Buttons in Sidebar */
+.stRadio > div[role="radiogroup"] > label {
+    padding: 12px 16px !important;
+    border-radius: 8px !important;
+    margin-bottom: 6px !important;
+    background-color: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    transition: all 0.2s ease-in-out;
+    cursor: pointer !important;
+}
+
+/* Force label text color */
+.stRadio > div[role="radiogroup"] > label p {
+    color: #475569 !important;
+    font-weight: 600 !important;
+    font-size: 15px !important;
+}
+
+/* HIDE RADIO CIRCLES - Catch all Streamlit variants */
+.stRadio > div[role="radiogroup"] > label div[data-baseweb="radio"] > div:first-child,
+.stRadio > div[role="radiogroup"] > label input[type="radio"],
+.stRadio > div[role="radiogroup"] > label div[role="radio"] > div:first-child {
+    display: none !important; 
+    width: 0 !important;
+    height: 0 !important;
+    opacity: 0 !important;
+}
+
+/* Fix spacing after hiding radio circle */
+.stRadio > div[role="radiogroup"] > label div[data-baseweb="radio"] {
+    margin-left: 0 !important;
+    padding-left: 0 !important;
+}
+
+/* Simulate Active State in Radio */
+.stRadio > div[role="radiogroup"] > label:hover {
+    background-color: #F8FAFC !important;
+}
+.stRadio > div[role="radiogroup"] > label:hover p {
+    color: #10B981 !important;
+}
+
+.stRadio > div[role="radiogroup"] > label[aria-checked="true"],
+.stRadio > div[role="radiogroup"] > label[data-checked="true"] {
+    background-color: #ECFDF5 !important;
+    border-left: 4px solid #10B981 !important;
+    border-radius: 4px 8px 8px 4px !important;
+}
+.stRadio > div[role="radiogroup"] > label[aria-checked="true"] p,
+.stRadio > div[role="radiogroup"] > label[data-checked="true"] p {
+    color: #10B981 !important;
+    font-weight: 700 !important;
+}
+
+/* Typography Overrides */
+h1, h2, h3, h4, h5, h6, .stMarkdown p {
+    color: #172033 !important;
 }
 .section-title {
-    font-size: 32px; font-weight: 700; color: #0f172a;
-    margin-bottom: 5px;
+    font-size: 28px !important; font-weight: 800 !important; color: #172033 !important;
+    margin-bottom: 4px !important;
 }
 .sub-text {
-    font-size: 16px; color: #64748b; margin-bottom: 30px;
+    font-size: 15px !important; color: #64748B !important; margin-bottom: 24px !important;
 }
-.card-box {
-    background: #ffffff; padding: 20px; border-radius: 12px;
-    border: 1px solid #e2e8f0;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
-    margin-bottom: 15px;
-    color: #334155;
+
+/* Cards (Standard Dashboard Cards) */
+.card-box, div[data-testid="stMetric"], div.stExpander {
+    background-color: #FFFFFF !important; 
+    padding: 24px !important; 
+    border-radius: 16px !important;
+    border: 1px solid #E2E8F0 !important;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02) !important;
+    margin-bottom: 20px !important;
+    color: #172033 !important;
 }
-.kpi-card {
-    background: #ffffff; padding: 20px; border-radius: 12px;
-    border: 1px solid #e2e8f0;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
-    text-align: center;
+
+/* KPIs / Metrics specific styling */
+div[data-testid="stMetricValue"] {
+    font-size: 36px !important; 
+    font-weight: 800 !important; 
+    color: #172033 !important;
 }
-.kpi-value {
-    font-size: 28px; font-weight: 800; color: #0f172a;
+div[data-testid="stMetricLabel"] {
+    font-size: 14px !important; 
+    font-weight: 600 !important; 
+    color: #64748B !important;
 }
-.kpi-label {
-    font-size: 14px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;
+
+/* Buttons */
+.stButton > button {
+    border-radius: 10px !important;
+    font-weight: 600 !important;
+    padding: 0.5rem 1rem !important;
 }
-.model-info-card {
-    background: #ffffff; padding: 15px; border-radius: 12px;
-    border: 1px solid #e2e8f0;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
-    margin-top: 20px;
-    font-size: 14px;
+
+/* Primary Start/Green */
+.btn-start > button {
+    background-color: #10B981 !important;
+    color: white !important;
+    border: none !important;
 }
-.model-info-row {
-    display: flex; justify-content: space-between; margin-bottom: 8px;
+.btn-start > button:hover {
+    background-color: #059669 !important;
 }
-.model-info-label { color: #64748b; font-weight: 500; }
-.model-info-val { color: #334155; font-weight: 600; }
-.status-ready { color: #10b981; font-weight: 700; }
-div.stButton > button:first-child {
-    border-radius: 8px;
-    font-weight: 600;
-    transition: all 0.2s ease-in-out;
+
+/* Danger Stop/Red */
+.btn-stop > button {
+    background-color: #EF4444 !important;
+    color: white !important;
+    border: none !important;
 }
-div.stButton > button:first-child:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+.btn-stop > button:hover {
+    background-color: #DC2626 !important;
+}
+
+/* Chat Input Container Fixes */
+div[data-testid="stChatInput"] {
+    background-color: #FFFFFF !important;
+    border: 1px solid #E2E8F0 !important;
+    border-radius: 16px !important;
+    padding: 4px !important;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05) !important;
+}
+div[data-testid="stChatInput"] textarea {
+    color: #172033 !important;
+    background-color: transparent !important;
+}
+div[data-testid="stChatInput"] button {
+    background-color: #10B981 !important;
+    color: white !important;
+    border-radius: 50% !important;
+}
+div[data-testid="stChatInput"] button:hover {
+    background-color: #059669 !important;
+}
+
+/* Remove dark background around chat input */
+.stChatInputContainer, div[data-testid="stBottomBlockContainer"] {
+    background-color: transparent !important;
+    padding-bottom: 24px !important;
+}
+div[data-testid="stBottom"] {
+    background-color: #F7F9FC !important;
+}
+
+/* Chat Bubbles */
+div[data-testid="stChatMessage"] {
+    background-color: #FFFFFF !important;
+    border: 1px solid #E2E8F0 !important;
+    border-radius: 16px !important;
+    padding: 16px !important;
+    margin-bottom: 12px !important;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.02) !important;
+}
+
+/* Make Video Container Look Pro */
+img, video, canvas {
+    border-radius: 16px;
+    border: 1px solid #E2E8F0;
 }
 </style>
 """
@@ -280,6 +415,19 @@ def answer_image_question(question: str, object_counts: dict) -> str:
         return description
     return f"Based on the objects I detected, {description} I can answer questions about these detected objects and their counts."
 
+def get_image_embedding(image_array):
+    img_rgb = cv2.cvtColor(image_array, cv2.COLOR_BGR2RGB)
+    pil_img = Image.fromarray(img_rgb)
+    tensor = transform(pil_img).unsqueeze(0)
+    with torch.no_grad():
+        features = cls_model.features(tensor)
+        features = nn.functional.adaptive_avg_pool2d(features, (1, 1))
+        embedding = features.view(features.size(0), -1).squeeze().numpy()
+    norm = np.linalg.norm(embedding)
+    if norm > 0:
+        return embedding / norm
+    return embedding
+
 
 # ---------------- SIDEBAR ----------------
 st.sidebar.markdown("### SMART VISION")
@@ -300,7 +448,9 @@ page = st.sidebar.radio(
         "🧪 Research Evaluation",
         "⚙️ Settings",
         "🚗 3D Explorer",
-        "📈 3D Analytics"
+        "📈 3D Analytics",
+        "⏩ Video Fast Review",
+        "😴 Drowsiness Monitor"
     ],
     index=0,
     label_visibility="collapsed"
@@ -378,372 +528,505 @@ if page == "📈 3D Analytics":
 
 
 # 🏠 HOME PAGE (Dashboard)
+# 🏠 HOME PAGE (Dashboard)
 if page in ["🏠 Dashboard", "🏠 Home"]:
-    st.markdown("""
-        <div style="display: flex; justify-content: space-between; align-items: center;">
-            <div>
-                <div class='section-title'>Dashboard</div>
-                <div class='sub-text'>Real-time detection from camera</div>
-            </div>
-            <div style="text-align: right;">
-                <div style="color: #22c55e; font-weight:bold;">● System Active</div>
-                <div style="color: #64748b; font-size:14px; margin-top:2px;">""" + datetime.now().strftime("%I:%M:%S %p") + """</div>
-            </div>
-        </div>
-    """, unsafe_allow_html=True)
+    perf_stats = st.session_state["performance_monitor"].get_stats()
+    fps = perf_stats['fps'] if perf_stats else 0.0
     
-    col_main, col_side = st.columns([3, 1])
+    # Top Header
+    hdr_c1, hdr_c2, hdr_c3, hdr_c4, hdr_c5, hdr_c6 = st.columns([4, 1.5, 1, 1.5, 2, 0.5])
+    with hdr_c1:
+        st.markdown("<div class='section-title'>Live Detection</div><div class='sub-text' style='margin-bottom:20px;'>Real-time object detection and tracking</div>", unsafe_allow_html=True)
+    with hdr_c2:
+        st.markdown("<div style='font-size:12px; color:#64748b;'>System Status</div><div style='color: #10b981; font-weight:bold;'>● Active</div>", unsafe_allow_html=True)
+    with hdr_c3:
+        st.markdown(f"<div style='font-size:12px; color:#64748b;'>FPS</div><div style='color: #0f172a; font-weight:bold;'>{fps:.1f}</div>", unsafe_allow_html=True)
+    with hdr_c4:
+        st.markdown("<div style='font-size:12px; color:#64748b;'>Resolution</div><div style='color: #0f172a; font-weight:bold;'>1280 x 720</div>", unsafe_allow_html=True)
+    with hdr_c5:
+        input_type = st.selectbox("Input Source", ["Camera 1", "Upload Image"], label_visibility="collapsed")
+    with hdr_c6:
+        st.markdown("<div style='padding: 6px; border: 1px solid #e2e8f0; border-radius: 8px; text-align:center; color:#64748b; font-size:18px;'>⛶</div>", unsafe_allow_html=True)
+        
+    col_main, col_side = st.columns([2.5, 1])
     
-    input_type = st.radio("Choose Input", ["Webcam", "Upload Image"], horizontal=True)
-    st.markdown("#### 🔊 Image Voice Assistant")
-    voice_control, voice_test = st.columns([3, 1])
-    with voice_control:
-        dashboard_voice_enabled = st.toggle(
-            "Announce objects detected in this image",
-            value=st.session_state["voice_enabled"],
-            key="dashboard_voice_enabled",
-        )
-        st.session_state["voice_enabled"] = dashboard_voice_enabled
-    with voice_test:
-        st.write("")
-        if st.button("Test voice", key="dashboard_voice_test", width="stretch"):
-            speak_in_browser("Image voice assistant is ready.")
-            st.toast("Voice test queued", icon="🔊")
-    if st.session_state["voice_enabled"]:
-        st.caption("Objects found in the uploaded image or camera snapshot will be announced once.")
     img_cv = None
+    detected_objects_with_conf = []
+    object_counts = {}
+    total_detections = 0
+    accuracy = 0.0
     
     with col_main:
-        st.markdown("<div class='card-box'><b style='color:#22c55e;'>🎥 Live Camera Feed</b><br/>", unsafe_allow_html=True)
+        video_placeholder = st.empty()
         
+        # Capture input immediately so we can process it and get counts
         if input_type == "Upload Image":
-            file = st.file_uploader("Upload Image", type=["jpg","jpeg","png"])
+            file = st.file_uploader("Upload Image", type=["jpg","jpeg","png"], label_visibility="collapsed")
             if file:
                 data = np.frombuffer(file.read(), np.uint8)
                 img_cv = cv2.imdecode(data, cv2.IMREAD_COLOR)
         else:
-            snap = st.camera_input("Take a snapshot for detection")
+            snap = st.camera_input("Live Feed", label_visibility="collapsed")
             if snap:
                 pil = Image.open(snap)
                 img_cv = cv2.cvtColor(np.array(pil), cv2.COLOR_RGB2BGR)
-
-        video_placeholder = st.empty()
-        
-        # Controls
-        ctrl_c1, ctrl_c2, ctrl_c3, ctrl_c4, ctrl_c5 = st.columns(5)
-        with ctrl_c1:
-            st.button("▶️ Start Detection", width="stretch", type="primary")
-        with ctrl_c2:
-            st.button("⏹️ Stop Detection", width="stretch")
-        with ctrl_c3:
-            capture_btn = st.button("📸 Save Detection", width="stretch")
-        with ctrl_c4:
-            st.button("⏺️ Record", width="stretch")
-        with ctrl_c5:
-            st.button("⛶ Fullscreen", width="stretch")
+                
+        # Button Row
+        btn_c1, btn_c2, btn_c3, btn_c4, btn_c5 = st.columns([1.5, 1.5, 1, 1, 1])
+        with btn_c1:
+            st.button("▶ Start Detection", type="primary", use_container_width=True)
+        with btn_c2:
+            st.button("⏹ Stop Detection", use_container_width=True)
+        with btn_c3:
+            st.button("📷 Capture", use_container_width=True)
+        with btn_c4:
+            st.button("⏺ Record", use_container_width=True)
+        with btn_c5:
+            st.button("⛶ Fullscreen", use_container_width=True)
             
-        st.markdown("</div>", unsafe_allow_html=True)
-        
-    # Variables for stats
-    detected_objects_with_conf = []
-    dangerous_objects = {"person", "knife", "fire", "gun", "cat", "bottle", "scissors"}
-    found_dangerous = False
-    alerts_html = ""
-    object_counts = {}
-    total_detections = 0
-    accuracy = 0.0
-
-    detected_objects_with_conf = []
-    object_counts = {}
-    total_detections = 0
-    alerts_html = ""
-    found_dangerous = False
+        st.markdown("<b>Recent Detections</b><span style='float:right; color:#10b981; font-size:14px; font-weight:600;'>View All</span>", unsafe_allow_html=True)
+        recent_c1, recent_c2, recent_c3, recent_c4, recent_c5 = st.columns(5)
+        # Mocking recent detections gallery based on UI design
+        for col, obj_name, conf in zip([recent_c1, recent_c2, recent_c3, recent_c4, recent_c5], 
+                                       ["Person", "Car", "Motorbike", "Bus", "Traffic Cone"], 
+                                       [0.93, 0.91, 0.92, 0.89, 0.86]):
+            with col:
+                st.markdown(f"""
+                <div style="border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; font-size: 11px;">
+                    <div style="height: 60px; background: #94a3b8; color:white; display:flex; align-items:center; justify-content:center;">Image</div>
+                    <div style="padding: 5px;">
+                        <b style="color:#0f172a;">{obj_name}</b><br/>
+                        <span style="color:#64748b;">{conf} Confidence</span><br/>
+                        <span style="color:#94a3b8;">10:42 AM</span>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
 
     if img_cv is not None:
         start_time = time.time()
-        
-        # Image Quality Analysis & Low Light Enhancement
-        quality_metrics = ImageQualityAnalyzer.analyze(img_cv)
-        if quality_metrics["quality_warning"]:
-            if "brightness" in quality_metrics["quality_warning"].lower() and quality_metrics["brightness"] < 50:
-                # Apply low light enhancement automatically
-                img_cv = LowLightEnhancer.enhance(img_cv)
-                quality_metrics["quality_warning"] = "Low light detected. Applying automatic enhancement."
-                
-            alerts_html += f"""
-            <div style='background: rgba(251, 191, 36, 0.1); border-left: 3px solid #fbbf24; padding: 10px; margin-bottom: 10px; border-radius: 4px;'>
-                <div style='display:flex; align-items:flex-start; margin-bottom:10px;'>
-                    <span style='margin-right:10px;'>⚠️</span>
-                    <div>
-                        <div style='color: #fbbf24; font-size: 14px;'>Quality Warning</div>
-                        <div style='color: #64748b; font-size: 12px;'>{quality_metrics['quality_warning']}</div>
-                    </div>
-                </div>
-            </div>
-            """
-            
-        # Adaptive Resolution Scaling (Use actual inference time if available from monitor)
-        if st.session_state.get("adaptive_mode", True):
-            mock_proc_time = st.session_state["performance_monitor"].get_average_inference_time()
-            if mock_proc_time == 0:
-                mock_proc_time = 0.05
-            img_cv = st.session_state['adaptive_engine'].adapt(img_cv, mock_proc_time)
-        
-        # YOLOv8 Detection / Tracking
-        if st.session_state.get("enable_tracking", False):
-            results = det_model.track(img_cv, conf=st.session_state["confidence_threshold"], persist=True)
-        else:
-            results = det_model(img_cv, conf=st.session_state["confidence_threshold"])
-            
+        results = det_model(img_cv, conf=st.session_state["confidence_threshold"])
         inference_time = time.time() - start_time
         st.session_state["performance_monitor"].record_inference(inference_time)
         
         detected_img = results[0].plot()
-        
         results_list = []
         for result in results:
             if result.boxes is not None:
                 for box in result.boxes:
                     class_id = int(box.cls[0])
                     conf = float(box.conf[0])
-                    bbox = list(map(int, box.xyxy[0]))
-                    det_dict = {'class_id': class_id, 'confidence': conf, 'bbox': bbox}
-                    if box.id is not None:
-                        det_dict['id'] = int(box.id[0])
-                    results_list.append(det_dict)
-        
-        # Add labels
-        for det in results_list:
-            det['object_name'] = CLASS_NAMES[det['class_id']]
-                
-        # Detect Unknown Objects based on tracking consistency but low confidence
-        if st.session_state.get("adaptive_mode", True):
-            results_list = st.session_state['unknown_detector'].detect(results_list)
-        
-        # Update Tracker
-        if st.session_state.get("enable_tracking", False) and st.session_state.get("adaptive_mode", True):
-            results_list = st.session_state['tracker'].update(results_list)
-            object_counts = st.session_state['tracker'].get_current_counts()
-        else:
-            # Fallback for counting if tracking is off or conventional mode
-            for det in results_list:
-                object_counts[det['object_name']] = object_counts.get(det['object_name'], 0) + 1
-        
-        # Restricted Area defined (bottom right quadrant for demo)
-        h_img, w_img = img_cv.shape[:2]
-        restricted_zone = (int(w_img/2), int(h_img/2), w_img, h_img) # x1, y1, x2, y2
-        if st.session_state.get("enable_restricted", False):
-            # Draw semi-transparent red zone
-            overlay = detected_img.copy()
-            cv2.rectangle(overlay, (restricted_zone[0], restricted_zone[1]), (restricted_zone[2], restricted_zone[3]), (0, 0, 255), -1)
-            detected_img = cv2.addWeighted(overlay, 0.2, detected_img, 0.8, 0)
-            cv2.putText(detected_img, "RESTRICTED ZONE", (restricted_zone[0]+10, restricted_zone[1]+30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
-        
-        for det in results_list:
-            total_detections += 1
-            
-            # Distance Estimation
-            distance = DistanceEstimator.estimate(det['bbox'], img_cv.shape[0])
-            det['distance'] = distance
-            
-            # Check for dangerous/unknown objects
-            obj_name = det['object_name']
-            
-            # Face Recognition
-            if obj_name == "person":
-                x1, y1, x2, y2 = det['bbox']
-                face_service = st.session_state.get("face_service")
-                if face_service and face_service.is_trained:
-                    # Pass track_id if available for temporal smoothing
-                    track_id = det.get('id', None)
-                    if not st.session_state.get("adaptive_mode", True):
-                        track_id = None # Disable temporal smoothing in conventional mode
-                    person_name = face_service.recognize(img_cv, (x1, y1, x2, y2), track_id=track_id)
-                    if person_name:
-                        # Override the label on the image with a prominent solid background
-                        text_size = cv2.getTextSize(person_name, cv2.FONT_HERSHEY_SIMPLEX, 0.9, 2)[0]
-                        cv2.rectangle(detected_img, (x1, max(y1-30, 0)), (x1 + text_size[0], max(y1-30, 0) + text_size[1] + 10), (0, 200, 0), -1)
-                        cv2.putText(detected_img, person_name, (x1, max(y1-5, 25)), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 255), 2)
-                        # Update the detected objects list with the specific person's name
-                        obj_name = person_name
-                        det['object_name'] = person_name
-
-            if obj_name.lower() in dangerous_objects or obj_name == 'Unknown Object':
-                found_dangerous = True
-                alert_type = "Unknown Entity Detected" if obj_name == 'Unknown Object' else "Security Threat Detected"
-                alert_msg = f"{alert_type}: {obj_name.title()} ({distance}m)"
-                
-                # Centralized alert manager
-                if st.session_state.get("adaptive_mode", True):
-                    st.session_state['alert_manager'].trigger_alert(alert_type, obj_name, alert_msg)
-                else:
-                    # Conventional mode: spam alerts
-                    st.session_state['alert_manager'].alert_history.insert(0, {'timestamp': datetime.now().strftime("%I:%M:%S %p"), 'message': alert_msg})
-                    if len(st.session_state['alert_manager'].alert_history) > 3:
-                        st.session_state['alert_manager'].alert_history.pop()
-                        
-            # Check restricted area violation
-            if st.session_state.get("enable_restricted", False):
-                bx1, by1, bx2, by2 = det['bbox']
-                # Check overlap
-                if (bx2 > restricted_zone[0] and bx1 < restricted_zone[2] and 
-                    by2 > restricted_zone[1] and by1 < restricted_zone[3]):
+                    obj_name = CLASS_NAMES[class_id]
+                    detected_objects_with_conf.append((obj_name, conf))
+                    object_counts[obj_name] = object_counts.get(obj_name, 0) + 1
+                    total_detections += 1
                     
-                    st.session_state['alert_manager'].trigger_alert("Zone Violation", obj_name, f"Zone Violation: {obj_name} entered restricted area!")
-                
-            detected_objects_with_conf.append((obj_name, det['confidence']))
-        
-        # Render alerts from AlertManager history
-        recent_alerts = st.session_state['alert_manager'].get_recent_alerts(limit=3)
-        for alert in recent_alerts:
-            alerts_html += f"""
-            <div style='background: rgba(239, 68, 68, 0.1); border-left: 3px solid #ef4444; padding: 10px; margin-bottom: 10px; border-radius: 4px;'>
-                <div style='display:flex; align-items:flex-start; margin-bottom:10px;'>
-                    <span style='margin-right:10px;'>⚠️</span>
-                    <div>
-                        <div style='color: #0f172a; font-size: 14px;'>{alert['message']}</div>
-                        <div style='color: #64748b; font-size: 12px;'>{alert['timestamp']}</div>
-                    </div>
-                </div>
+        # Replace the placeholder with the processed image
+        video_placeholder.image(cv2.cvtColor(detected_img, cv2.COLOR_BGR2RGB), use_column_width=True)
+    else:
+        video_placeholder.info("Upload an image or start the webcam to begin detection.")
+
+    with col_side:
+        # Real-time Detections KPI
+        st.markdown(f"""
+        <div class='kpi-card'>
+            <div>
+                <div style='font-size:13px; font-weight:600; color:#0f172a;'>Real-time Detections</div>
+                <div style='font-size:36px; font-weight:700; color:#0f172a; line-height:1.2;'>{total_detections}</div>
+                <div style='font-size:12px; color:#10b981; font-weight:500;'>Objects detected</div>
             </div>
-            """
-            
-        # Compile and pass state to 3D HUD
-        perf_stats = st.session_state["performance_monitor"].get_stats()
-        state_data = {
-            "fps": perf_stats['fps'] if perf_stats else 0.0,
-            "latency": (perf_stats['avg_inference_time'] * 1000) if perf_stats else 0.0,
-            "cpu": perf_stats['cpu_percent'] if perf_stats else 0.0,
-            "ram": perf_stats['memory_percent'] if perf_stats else 0.0,
-            "objects": sum(object_counts.values()) if object_counts else 0,
-            "tracks": len(st.session_state['tracker'].active_tracks) if st.session_state.get('enable_tracking', False) else 0,
-            "alerts": len(st.session_state['alert_manager'].alert_history)
-        }
-        render_3d_hud(state_data)
+            <div style='width:60px; height:60px; border-radius:50%; border: 2px dashed #10b981; display:flex; align-items:center; justify-content:center;'>
+                <div style='width:30px; height:30px; border-radius:50%; background-color: rgba(16, 185, 129, 0.2);'></div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
         
-        # Update image AFTER drawing faces
-        video_placeholder.image(cv2.cvtColor(detected_img, cv2.COLOR_BGR2RGB), width="stretch")
+        # Detected Objects List
+        st.markdown("<div class='card-box' style='padding-top:15px; padding-bottom:15px; margin-top:20px;'>", unsafe_allow_html=True)
+        st.markdown("<b style='font-size:14px; color:#0f172a;'>Detected Objects</b>", unsafe_allow_html=True)
+        st.markdown("<br/>", unsafe_allow_html=True)
         
         if total_detections > 0:
-            accuracy = sum(conf for _, conf in detected_objects_with_conf) / total_detections * 100
-
-        # Announce each newly seen object once while voice assistance is enabled.
-        # The assistant keeps track of currently visible objects, preventing repeats
-        # when Streamlit reruns for the same image or camera frame.
-        if st.session_state["voice_enabled"]:
-            current_objects = {name for name, _ in detected_objects_with_conf}
-            voice_assistant = get_voice_assistant()
-            voice_assistant.reset_announced_objects(current_objects)
-            new_objects = []
-            for obj_name in current_objects:
-                if voice_assistant.announce_detection(obj_name):
-                    new_objects.append(obj_name)
-            current_image_id = hashlib.sha1(img_cv.tobytes()).hexdigest()
-            if st.session_state.get("last_described_image") != current_image_id:
-                st.session_state["last_described_image"] = current_image_id
-                speak_in_browser(image_description(object_counts))
+            for obj_name, count in object_counts.items():
+                pct = (count / total_detections) * 100
+                st.markdown(f"""
+                <div style='display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; font-size:13px;'>
+                    <div style='color:#334155; font-weight:500;'>{obj_name}</div>
+                    <div style='display:flex; gap:15px; color:#0f172a;'>
+                        <span style='font-weight:600; width:15px;'>{count}</span>
+                        <span style='color:#64748b;'>{pct:.1f}%</span>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+        else:
+            st.markdown("<div style='font-size:13px; color:#64748b;'>No objects currently detected.</div>", unsafe_allow_html=True)
             
-        # Store detections for chatbot context
-        context_detections = []
-        for obj, conf in detected_objects_with_conf:
-            context_detections.append({"object_name": obj, "confidence": conf})
-        st.session_state["last_detections"] = context_detections
-            
-        if capture_btn:
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filepath = os.path.join(st.session_state["detections_dir"], f"detection_{timestamp}.jpg")
-            cv2.imwrite(filepath, detected_img)
-            st.toast(f"Saved to {filepath}", icon="✅")
-            db = get_database()
-            for obj, conf in detected_objects_with_conf:
-                db.add_detection(obj, conf, filepath)
-    else:
-        video_placeholder.info("Upload an image or use the webcam to start detecting.")
+        st.markdown("</div>", unsafe_allow_html=True)
         
-    with col_side:
-        # Build summary HTML
-        summary_items_html = ""
-        for obj, count in object_counts.items():
-            summary_items_html += f"<div style='display:flex; justify-content:space-between; margin-bottom:10px;'><span>{obj}</span><span>{count}</span></div>"
-            
-        st.markdown(f"""
-        <div class='card-box' style='height: 100%;'>
-            <div style='color: #22c55e; margin-bottom: 15px; font-weight: bold;'>📊 Detection Summary</div>
-            {summary_items_html if total_detections > 0 else "<div style='color:#94a3b8; font-size:12px;'>No detections yet</div>"}
-            <hr style='border-color: rgba(255,255,255,0.1); margin: 15px 0;'/>
-            <div style='display:flex; justify-content:space-between; font-weight:bold; color: #22c55e;'><span>Total Detections</span><span>{total_detections}</span></div>
-        </div>
-        """, unsafe_allow_html=True)
+        # Detection Settings
+        st.markdown("<div class='card-box' style='padding-top:15px;'>", unsafe_allow_html=True)
+        st.markdown("<b style='font-size:14px; color:#0f172a; display:block; margin-bottom:15px;'>Detection Settings</b>", unsafe_allow_html=True)
         
-        st.markdown(f"""
-        <div class='card-box' style='height: 100%;'>
-            <div style='color: #22c55e; margin-bottom: 15px; font-weight: bold;'>🔔 Recent Alerts</div>
-            {alerts_html if found_dangerous else "<div style='font-size: 12px; color: #64748b;'>No recent alerts.</div>"}
-            <div style='text-align:center; margin-top:15px;'>
-                <button style='background: transparent; color: #0f172a; border: 1px solid rgba(0,0,0,0.2); padding: 5px 15px; border-radius: 5px; cursor: pointer; width: 100%;'>View All Alerts →</button>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
+        conf_val = st.slider("Confidence Threshold", 0.0, 1.0, 0.5, label_visibility="visible")
+        st.session_state["confidence_threshold"] = conf_val
+        iou_val = st.slider("IoU Threshold", 0.0, 1.0, 0.45)
+        max_det = st.slider("Max Detections", 1, 100, 20)
+        
+        st.markdown("</div>", unsafe_allow_html=True)
 
-    if img_cv is not None:
-        st.markdown("### 🗣️ Ask about this image")
-        st.caption("Ask what objects are visible or how many of a detected object appear in the image.")
-        with st.form("image_question_form", clear_on_submit=True):
-            image_question = st.text_input("Your question", placeholder="For example: What is in this image? or How many people are there?")
-            ask_image_question = st.form_submit_button("Ask voice assistant", type="primary")
-        if ask_image_question:
-            if image_question.strip():
-                image_answer = answer_image_question(image_question, object_counts)
-                st.success(image_answer)
-                speak_in_browser(image_answer)
-            else:
-                st.warning("Type a question about the image first.")
 
-    # KPI Row
-    perf_stats = st.session_state["performance_monitor"].get_stats()
-    fps = perf_stats['fps'] if perf_stats else 0.0
-    cpu = perf_stats['cpu_percent'] if perf_stats else 0.0
+# ⏩ VIDEO FAST REVIEW
+elif page == "⏩ Video Fast Review":
+    st.markdown("<div class='section-title'>⏩ Video Fast Review</div>", unsafe_allow_html=True)
+    st.markdown("<div class='sub-text'>Upload a video and automatically find exactly when a specific object or person appears.</div>", unsafe_allow_html=True)
+    
+    col1, col2 = st.columns([3, 1])
+    
+    with col2:
+        st.markdown("<div class='card-box'>", unsafe_allow_html=True)
+        st.markdown("<b>Search Parameters</b>", unsafe_allow_html=True)
+        search_type = st.radio("Search by:", ["Object Category", "Reference Image"])
+        
+        target_object = None
+        ref_embedding = None
+        
+        if search_type == "Object Category":
+            target_object = st.selectbox("Find object:", sorted(CLASS_NAMES.values()), index=0)
+            target_object = target_object.lower()
+        else:
+            ref_image_file = st.file_uploader("Upload Reference Image", type=["jpg", "png", "jpeg"])
+            if ref_image_file is not None:
+                data = np.frombuffer(ref_image_file.read(), np.uint8)
+                ref_img_cv = cv2.imdecode(data, cv2.IMREAD_COLOR)
+                st.image(cv2.cvtColor(ref_img_cv, cv2.COLOR_BGR2RGB), caption="Reference Image", use_column_width=True)
+                ref_embedding = get_image_embedding(ref_img_cv)
+                
+                # Option to restrict search by generic category as well
+                restrict_cat = st.checkbox("Also restrict to 'Person' category?", value=True)
+                if restrict_cat:
+                    target_object = "person"
+        
+        sample_rate = st.slider("Frames per second to analyze", 1, 5, 1, help="Lower is faster but might miss very brief appearances.")
+        confidence = st.slider("Detection Confidence", 0.1, 1.0, 0.4, 0.05)
+        if search_type == "Reference Image":
+            similarity_thresh = st.slider("Similarity Threshold", 0.5, 1.0, 0.8, 0.05)
+            
+        st.markdown("</div>", unsafe_allow_html=True)
+        
+    with col1:
+        st.markdown("<div class='card-box'>", unsafe_allow_html=True)
+        video_file = st.file_uploader("Upload Video", type=["mp4", "avi", "mov", "mkv"])
+        
+        if video_file is not None:
+            import tempfile
+            import math
+            
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as tfile:
+                tfile.write(video_file.read())
+                temp_path = tfile.name
+                
+            can_start = True
+            if search_type == "Reference Image" and ref_embedding is None:
+                st.warning("Please upload a reference image first.")
+                can_start = False
+                
+            if can_start and st.button("Start Fast Review", type="primary", width="stretch"):
+                st.markdown("### Search Results")
+                progress_bar = st.progress(0)
+                status_text = st.empty()
+                results_container = st.container()
+                
+                cap = cv2.VideoCapture(temp_path)
+                fps = cap.get(cv2.CAP_PROP_FPS)
+                if math.isnan(fps) or fps == 0:
+                    fps = 30.0
+                    
+                total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+                duration = total_frames / fps
+                
+                frame_skip = int(fps / sample_rate)
+                if frame_skip < 1:
+                    frame_skip = 1
+                
+                found_timestamps = []
+                current_frame = 0
+                
+                while cap.isOpened():
+                    ret, frame = cap.read()
+                    if not ret:
+                        break
+                        
+                    if current_frame % frame_skip == 0:
+                        timestamp_sec = current_frame / fps
+                        status_text.text(f"Analyzing... {timestamp_sec:.1f}s / {duration:.1f}s")
+                        progress_bar.progress(min(1.0, current_frame / total_frames))
+                        
+                        small_frame = cv2.resize(frame, (640, 480))
+                        results = det_model(small_frame, conf=confidence, verbose=False)
+                        
+                        object_found = False
+                        best_sim = 0.0
+                        
+                        for result in results:
+                            if result.boxes is not None:
+                                for box in result.boxes:
+                                    class_id = int(box.cls[0])
+                                    obj_name = CLASS_NAMES[class_id].lower()
+                                    
+                                    if target_object is None or obj_name == target_object:
+                                        if search_type == "Reference Image":
+                                            # Extract ROI
+                                            x1, y1, x2, y2 = map(int, box.xyxy[0])
+                                            roi = small_frame[max(0, y1):max(0, y2), max(0, x1):max(0, x2)]
+                                            if roi.size > 0:
+                                                roi_emb = get_image_embedding(roi)
+                                                sim = np.dot(ref_embedding, roi_emb)
+                                                if sim > similarity_thresh:
+                                                    object_found = True
+                                                    best_sim = max(best_sim, sim)
+                                        else:
+                                            object_found = True
+                                            break
+                            if object_found and search_type != "Reference Image":
+                                break
+                                
+                        if object_found:
+                            formatted_time = time.strftime('%M:%S', time.gmtime(timestamp_sec))
+                            if not found_timestamps or (timestamp_sec - found_timestamps[-1]['seconds']) > 2.0:
+                                match_info = formatted_time
+                                if search_type == "Reference Image":
+                                    match_info += f" (Similarity: {best_sim*100:.1f}%)"
+                                    
+                                found_timestamps.append({
+                                    "time_str": match_info,
+                                    "seconds": timestamp_sec,
+                                    "frame_img": cv2.cvtColor(small_frame, cv2.COLOR_BGR2RGB)
+                                })
+                    
+                    current_frame += 1
+                
+                cap.release()
+                progress_bar.progress(1.0)
+                
+                search_lbl = "custom image" if search_type == "Reference Image" else target_object
+                status_text.text(f"Analysis Complete! Found {search_lbl} {len(found_timestamps)} times.")
+                
+                if found_timestamps:
+                    for item in found_timestamps:
+                        with results_container:
+                            st.markdown(f"**Found at {item['time_str']}**")
+                            st.image(item['frame_img'], width=300)
+                            st.markdown("---")
+                else:
+                    results_container.warning(f"Could not find a match for {search_lbl} in the video.")
+                
+                try:
+                    os.unlink(temp_path)
+                except:
+                    pass
+        st.markdown("</div>", unsafe_allow_html=True)
 
-    st.markdown("<br/>", unsafe_allow_html=True)
-    k1, k2, k3, k4 = st.columns(4)
-    with k1:
-        st.markdown("<div class='kpi-card'><div class='kpi-label'>🚀 Real-time</div><div class='kpi-value'>Active</div></div>", unsafe_allow_html=True)
-    with k2:
-        st.markdown(f"<div class='kpi-card'><div class='kpi-label'>🎯 Average Accuracy</div><div class='kpi-value'>{accuracy:.1f}%</div></div>", unsafe_allow_html=True)
-    with k3:
-        st.markdown(f"<div class='kpi-card'><div class='kpi-label'>⚡ Processing Speed</div><div class='kpi-value'>{fps:.1f} FPS</div></div>", unsafe_allow_html=True)
-    with k4:
-        st.markdown(f"<div class='kpi-card'><div class='kpi-label'>💻 CPU Usage</div><div class='kpi-value'>{cpu:.1f}%</div></div>", unsafe_allow_html=True)
 
-    # Scene Explanation
-    if img_cv is not None and st.session_state.get("last_detections"):
-        scene_desc = SceneDescriber.generate_description(st.session_state["last_detections"])
-        st.markdown(f"""
-        <div class='card-box' style='margin-top: 20px;'>
-            <div style='color: #3b82f6; font-weight: bold; margin-bottom: 10px;'>👁️ Scene Explanation</div>
-            <div style='color: #334155; font-size: 16px;'>{scene_desc}</div>
-        </div>
-        """, unsafe_allow_html=True)
+# 😴 DROWSINESS MONITOR
+elif page == "😴 Drowsiness Monitor":
+    st.markdown("<div class='section-title'>😴 Drowsiness Monitor</div>", unsafe_allow_html=True)
+    st.markdown("<div class='sub-text'>Analyze a video for signs of drowsiness or fatigue based on eye closure.</div>", unsafe_allow_html=True)
+    
+    col1, col2 = st.columns([3, 1])
+    
+    with col2:
+        st.markdown("<div class='card-box'>", unsafe_allow_html=True)
+        st.markdown("<b>Detection Settings</b>", unsafe_allow_html=True)
+        ear_threshold = st.slider("EAR Threshold", 0.15, 0.35, 0.25, 0.01, help="If Eye Aspect Ratio falls below this, eyes are considered closed.")
+        consec_frames = st.slider("Consecutive Frames", 5, 50, 15, help="Number of consecutive frames with closed eyes to trigger an alert.")
+        st.markdown("</div>", unsafe_allow_html=True)
+        
+    with col1:
+        st.markdown("<div class='card-box'>", unsafe_allow_html=True)
+        input_method = st.radio("Input Method", ["Upload Video", "Live Webcam"], horizontal=True)
+        
+        can_start = False
+        video_source = None
+        temp_path = None
+        
+        if input_method == "Upload Video":
+            video_file = st.file_uploader("Upload Video of Driver/Person", type=["mp4", "avi", "mov", "mkv"])
+            if video_file is not None:
+                import tempfile
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as tfile:
+                    tfile.write(video_file.read())
+                    temp_path = tfile.name
+                video_source = temp_path
+                can_start = True
+        else:
+            st.info("Live Webcam selected. Click 'Start Analysis' and ensure your browser allows camera access if needed.")
+            st.warning("To stop the live webcam loop, click the 'Stop' button in the top right corner of Streamlit.")
+            video_source = 0
+            can_start = True
+        
+        if can_start and st.button("Start Analysis", type="primary", width="stretch"):
+            import math
+            import mediapipe as mp
+            
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            frame_placeholder = st.empty()
+            
+            cap = cv2.VideoCapture(video_source)
+            total_frames = 100
+            if input_method == "Upload Video":
+                total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+                if total_frames <= 0: total_frames = 100
+            
+            BaseOptions = mp.tasks.BaseOptions
+            FaceLandmarker = mp.tasks.vision.FaceLandmarker
+            FaceLandmarkerOptions = mp.tasks.vision.FaceLandmarkerOptions
+            VisionRunningMode = mp.tasks.vision.RunningMode
 
+            options = FaceLandmarkerOptions(
+                base_options=BaseOptions(model_asset_path='face_landmarker.task'),
+                running_mode=VisionRunningMode.IMAGE)
+            face_mesh = FaceLandmarker.create_from_options(options)
+            
+            def calc_ear(eye_pts, lmarks, w, h):
+                pts = [(lmarks[i].x * w, lmarks[i].y * h) for i in eye_pts]
+                v1 = math.dist(pts[1], pts[5])
+                v2 = math.dist(pts[2], pts[4])
+                h_dist = math.dist(pts[0], pts[3])
+                if h_dist == 0: return 0
+                return (v1 + v2) / (2.0 * h_dist)
+            
+            LEFT_EYE = [33, 160, 158, 133, 153, 144]
+            RIGHT_EYE = [362, 385, 387, 263, 373, 380]
+            
+            counter = 0
+            current_frame = 0
+            drowsy_incidents = 0
+            
+            while cap.isOpened():
+                ret, frame = cap.read()
+                if not ret:
+                    break
+                    
+                current_frame += 1
+                if input_method == "Upload Video" and current_frame % 2 != 0:
+                    continue
+                    
+                if input_method == "Upload Video":
+                    progress_bar.progress(min(1.0, current_frame / total_frames))
+                    status_text.text(f"Analyzing... {current_frame}/{total_frames}")
+                else:
+                    progress_bar.progress(1.0)
+                    status_text.text("Monitoring Live Webcam...")
+                
+                h, w, _ = frame.shape
+                # If using webcam, mirror the image for a more natural feel
+                if input_method == "Live Webcam":
+                    frame = cv2.flip(frame, 1)
+                    
+                rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
+                results = face_mesh.detect(mp_image)
+                
+                status = "🟢 Awake"
+                color = (0, 255, 0)
+                
+                if results.face_landmarks:
+                    for face_landmarks in results.face_landmarks:
+                        left_ear = calc_ear(LEFT_EYE, face_landmarks, w, h)
+                        right_ear = calc_ear(RIGHT_EYE, face_landmarks, w, h)
+                        ear = (left_ear + right_ear) / 2.0
+                        
+                        for pt in LEFT_EYE + RIGHT_EYE:
+                            x = int(face_landmarks[pt].x * w)
+                            y = int(face_landmarks[pt].y * h)
+                            cv2.circle(rgb_frame, (x, y), 2, (255, 255, 0), -1)
+                        
+                        if ear < ear_threshold:
+                            counter += 1
+                            if counter >= consec_frames:
+                                status = "🔴 DROWSY ALERT!"
+                                color = (255, 0, 0)
+                                if counter == consec_frames:
+                                    drowsy_incidents += 1
+                        else:
+                            counter = 0
+                            
+                        cv2.putText(rgb_frame, f"EAR: {ear:.2f}", (30, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, color, 2)
+                
+                cv2.rectangle(rgb_frame, (0, h-50), (w, h), color, -1)
+                cv2.putText(rgb_frame, status, (w//2 - 100, h - 15), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+                
+                frame_placeholder.image(rgb_frame, channels="RGB")
+                
+            cap.release()
+            face_mesh.close()
+            progress_bar.progress(1.0)
+            status_text.success(f"Analysis Complete! Detected {drowsy_incidents} drowsiness incidents.")
+            
+            if temp_path:
+                try:
+                    os.unlink(temp_path)
+                except:
+                    pass
+        st.markdown("</div>", unsafe_allow_html=True)
 
 
 # 💬 VISION CHATBOT
 elif page == "💬 Vision Chatbot":
-    st.markdown("<div class='section-title'>💬 Vision Chatbot</div>", unsafe_allow_html=True)
-    st.markdown("<div class='sub-text'>Ask questions about the current camera feed.</div>", unsafe_allow_html=True)
+    # Custom Header with Badge
+    st.markdown("""
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+            <div>
+                <div class='section-title'>Vision Chatbot</div>
+                <div class='sub-text' style='margin-bottom: 0;'>Ask questions about the current camera feed.</div>
+            </div>
+            <div style="background-color: #ECFDF5; border: 1px solid #10B981; color: #10B981; padding: 6px 12px; border-radius: 20px; font-weight: 600; font-size: 14px; display: flex; align-items: center; gap: 8px;">
+                <div style="width: 8px; height: 8px; background-color: #10B981; border-radius: 50%;"></div>
+                AI Ready
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
     
-    # Display chat messages
-    for msg in st.session_state["chatbot"].history:
-        with st.chat_message(msg["role"]):
-            st.write(msg["content"])
+    # Empty State Workspace
+    if not st.session_state["chatbot"].history:
+        st.markdown("""
+            <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 60px 20px; text-align: center;">
+                <div style="width: 80px; height: 80px; background: linear-gradient(135deg, #ECFDF5 0%, #F5F3FF 100%); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-bottom: 24px; box-shadow: 0 10px 25px -5px rgba(16, 185, 129, 0.1);">
+                    <span style="font-size: 32px;">🤖</span>
+                </div>
+                <h2 style="color: #172033; font-weight: 700; margin-bottom: 8px;">AI Vision Assistant</h2>
+                <p style="color: #64748B; font-size: 16px; margin-bottom: 40px; max-width: 400px;">Ask me about what the camera currently sees. I can identify objects, count people, and read text in the scene.</p>
+                
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; max-width: 600px; width: 100%;">
+                    <div style="background: white; border: 1px solid #E2E8F0; padding: 16px; border-radius: 12px; color: #172033; font-weight: 500; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
+                        "What do you see right now?"
+                    </div>
+                    <div style="background: white; border: 1px solid #E2E8F0; padding: 16px; border-radius: 12px; color: #172033; font-weight: 500; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
+                        "How many people are detected?"
+                    </div>
+                    <div style="background: white; border: 1px solid #E2E8F0; padding: 16px; border-radius: 12px; color: #172033; font-weight: 500; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
+                        "Read the text in the scene"
+                    </div>
+                    <div style="background: white; border: 1px solid #E2E8F0; padding: 16px; border-radius: 12px; color: #172033; font-weight: 500; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
+                        "Identify the objects"
+                    </div>
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
+    
+    # Display chat messages (Populated state)
+    else:
+        for msg in st.session_state["chatbot"].history:
+            with st.chat_message(msg["role"]):
+                st.write(msg["content"])
             
-    # Input
-    user_q = st.chat_input("Ask something (e.g. 'What do you see?', 'Where is the bottle?')")
+    # Input Composer
+    user_q = st.chat_input("Ask something about the camera...")
     if user_q:
         with st.chat_message("user"):
             st.write(user_q)
         with st.chat_message("assistant"):
-            with st.spinner("Thinking..."):
+            with st.spinner("Analyzing scene..."):
                 response = st.session_state["chatbot"].ask(user_q, st.session_state.get("last_detections", []))
                 st.write(response)
 
