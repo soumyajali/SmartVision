@@ -59,8 +59,9 @@ if 'voice_assistant' not in st.session_state:
     st.session_state['voice_assistant'] = AIAssistant()
 if 'scene_describer' not in st.session_state:
     st.session_state['scene_describer'] = SceneDescriber()
-if 'vision_chatbot' not in st.session_state:
-    st.session_state['vision_chatbot'] = VisionChatbot()
+    # Vision Chatbot initialized in sidebar section so it can grab the api_key
+    if "vision_chatbot" not in st.session_state:
+        st.session_state['vision_chatbot'] = None # initialized later
 if 'adaptive_engine' not in st.session_state:
     st.session_state['adaptive_engine'] = AdaptiveEngine()
 if 'unknown_detector' not in st.session_state:
@@ -79,8 +80,8 @@ if "search_mode" not in st.session_state:
     st.session_state["search_mode"] = False
 if "enable_tracking" not in st.session_state:
     st.session_state["enable_tracking"] = False
-if "chatbot" not in st.session_state:
-    st.session_state["chatbot"] = VisionChatbot()
+    if "chatbot" not in st.session_state:
+        st.session_state["chatbot"] = None # initialized later
 if "detections_dir" not in st.session_state:
     st.session_state["detections_dir"] = "detections"
     os.makedirs(st.session_state["detections_dir"], exist_ok=True)
@@ -156,8 +157,7 @@ transform = transforms.Compose([
 def get_theme_css():
     return """
 <style>
-/* Hide Streamlit Default UI Elements */
-header[data-testid="stHeader"] {display: none;}
+/* header[data-testid="stHeader"] {display: none;} */
 footer {display: none;}
 
 .stApp {
@@ -184,60 +184,6 @@ footer {display: none;}
     padding-top: 50px !important;
 }
 
-/* Navigation Radio Buttons in Sidebar */
-.stRadio > div[role="radiogroup"] > label {
-    padding: 12px 16px !important;
-    border-radius: 8px !important;
-    margin-bottom: 6px !important;
-    background-color: transparent !important;
-    border: none !important;
-    box-shadow: none !important;
-    transition: all 0.2s ease-in-out;
-    cursor: pointer !important;
-}
-
-/* Force label text color */
-.stRadio > div[role="radiogroup"] > label p {
-    color: #475569 !important;
-    font-weight: 600 !important;
-    font-size: 15px !important;
-}
-
-/* HIDE RADIO CIRCLES - Catch all Streamlit variants */
-.stRadio > div[role="radiogroup"] > label div[data-baseweb="radio"] > div:first-child,
-.stRadio > div[role="radiogroup"] > label input[type="radio"],
-.stRadio > div[role="radiogroup"] > label div[role="radio"] > div:first-child {
-    display: none !important; 
-    width: 0 !important;
-    height: 0 !important;
-    opacity: 0 !important;
-}
-
-/* Fix spacing after hiding radio circle */
-.stRadio > div[role="radiogroup"] > label div[data-baseweb="radio"] {
-    margin-left: 0 !important;
-    padding-left: 0 !important;
-}
-
-/* Simulate Active State in Radio */
-.stRadio > div[role="radiogroup"] > label:hover {
-    background-color: #F8FAFC !important;
-}
-.stRadio > div[role="radiogroup"] > label:hover p {
-    color: #10B981 !important;
-}
-
-.stRadio > div[role="radiogroup"] > label[aria-checked="true"],
-.stRadio > div[role="radiogroup"] > label[data-checked="true"] {
-    background-color: #ECFDF5 !important;
-    border-left: 4px solid #10B981 !important;
-    border-radius: 4px 8px 8px 4px !important;
-}
-.stRadio > div[role="radiogroup"] > label[aria-checked="true"] p,
-.stRadio > div[role="radiogroup"] > label[data-checked="true"] p {
-    color: #10B981 !important;
-    font-weight: 700 !important;
-}
 
 /* Typography Overrides */
 h1, h2, h3, h4, h5, h6, .stMarkdown p {
@@ -433,6 +379,16 @@ def get_image_embedding(image_array):
 st.sidebar.markdown("### SMART VISION")
 st.sidebar.markdown("<small style='color: #64748b;'>Real-Time Object Detection</small>", unsafe_allow_html=True)
 
+st.session_state["openai_api_key"] = st.sidebar.text_input("OpenAI API Key (Optional for ChatGPT limit-free)", type="password", placeholder="sk-...")
+if "vision_chatbot" not in st.session_state or st.session_state['vision_chatbot'] is None:
+    st.session_state['vision_chatbot'] = VisionChatbot(api_key=st.session_state["openai_api_key"])
+if "chatbot" not in st.session_state or st.session_state['chatbot'] is None:
+    st.session_state['chatbot'] = VisionChatbot(api_key=st.session_state["openai_api_key"])
+
+# Update api key if it changes
+st.session_state['vision_chatbot'].api_key = st.session_state["openai_api_key"]
+st.session_state['chatbot'].api_key = st.session_state["openai_api_key"]
+
 page = st.sidebar.radio(
     "Navigation",
     [
@@ -621,7 +577,7 @@ if page in ["🏠 Dashboard", "🏠 Home"]:
                     total_detections += 1
                     
         # Replace the placeholder with the processed image
-        video_placeholder.image(cv2.cvtColor(detected_img, cv2.COLOR_BGR2RGB), use_column_width=True)
+        video_placeholder.image(cv2.cvtColor(detected_img, cv2.COLOR_BGR2RGB), use_container_width=True)
     else:
         video_placeholder.info("Upload an image or start the webcam to begin detection.")
 
@@ -697,7 +653,7 @@ elif page == "⏩ Video Fast Review":
             if ref_image_file is not None:
                 data = np.frombuffer(ref_image_file.read(), np.uint8)
                 ref_img_cv = cv2.imdecode(data, cv2.IMREAD_COLOR)
-                st.image(cv2.cvtColor(ref_img_cv, cv2.COLOR_BGR2RGB), caption="Reference Image", use_column_width=True)
+                st.image(cv2.cvtColor(ref_img_cv, cv2.COLOR_BGR2RGB), caption="Reference Image", use_container_width=True)
                 ref_embedding = get_image_embedding(ref_img_cv)
                 
                 # Option to restrict search by generic category as well

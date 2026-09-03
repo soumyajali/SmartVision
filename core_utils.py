@@ -4,6 +4,7 @@ Provides performance monitoring, OCR, QR scanning, AI assistant, and report gene
 """
 
 import time
+import random
 import psutil
 import cv2
 import numpy as np
@@ -575,23 +576,25 @@ class SceneDescriber:
 
 class VisionChatbot:
     """
-    A rule-based conversational agent that can answer questions about the current scene's context.
+    A Machine Learning conversational agent that can answer questions about the current scene's context.
+    Trained on a synthetic dataset using TF-IDF and SGD.
     """
     
-    def __init__(self):
+    def __init__(self, api_key: str = None):
+        self.api_key = api_key
         self.history = []
-        
-    def ask(self, question: str, context_detections: List[Dict]) -> str:
-        """
-        Answer a question based on current detection context.
-        
-        Args:
-            question: User's question
-            context_detections: Current frame's detections
+        self.model = None
+        self.objects_list = ["person", "people", "cat", "dog", "car", "bottle", "chair", "laptop", "phone", "book", "cup", "potted plant"]
+        try:
+            import joblib
+            import os
+            model_path = os.path.join("ai_model", "chatbot_intent_model.pkl")
+            if os.path.exists(model_path):
+                self.model = joblib.load(model_path)
+        except Exception as e:
+            print(f"Warning: Could not load intent model: {e}")
             
-        Returns:
-            Chatbot response string
-        """
+    def ask(self, question: str, context_detections: List[Dict]) -> str:
         q_lower = question.lower()
         self.history.append({"role": "user", "content": question})
         
@@ -600,56 +603,181 @@ class VisionChatbot:
             name = det.get('object_name', 'unknown').lower()
             object_counts[name] = object_counts.get(name, 0) + 1
             
+        # Try using OpenAI if API key is provided
+        if hasattr(self, 'api_key') and self.api_key and self.api_key.startswith('sk-'):
+            try:
+                import openai
+                client = openai.OpenAI(api_key=self.api_key)
+                
+                # Build context for the AI
+                found_counts = [f"{c} {o}s" if c > 1 else f"{c} {o}" for o, c in object_counts.items()]
+                scene_context = "The scene is empty."
+                if found_counts:
+                    scene_context = f"The scene currently contains: {', '.join(found_counts)}."
+                
+                system_prompt = f"You are SmartVision AI, an intelligent vision assistant. You can see the camera feed. {scene_context} Be helpful, answer the user's questions about the scene based on this context, or chat with them generally."
+                
+                messages = [{"role": "system", "content": system_prompt}]
+                
+                # Keep last 5 messages for context
+                for msg in self.history[-6:-1]: # exclude the latest user message which we append next
+                    messages.append(msg)
+                
+                messages.append({"role": "user", "content": question})
+                
+                chat_completion = client.chat.completions.create(
+                    messages=messages,
+                    model="gpt-3.5-turbo",
+                    max_tokens=150,
+                    temperature=0.7
+                )
+                
+                response = chat_completion.choices[0].message.content
+                self.history[-1] = {"role": "user", "content": question} # Make sure last is just user
+                self.history.append({"role": "assistant", "content": response})
+                return response
+            except Exception as e:
+                print(f"OpenAI Error: {e}. Falling back to local ML model.")
+            
+        # Determine target object from question
+        target_obj = None
+        for obj in self.objects_list:
+            if obj in q_lower:
+                target_obj = obj
+                break
+                
+        # Handle plurals for target matching
+        if target_obj == "people":
+            target_obj = "person"
+            
+        intent = "unknown"
+        if self.model is not None:
+            # Use predict_proba to get confidence
+            try:
+                probs = self.model.predict_proba([q_lower])[0]
+                max_prob_idx = probs.argmax()
+                max_prob = probs[max_prob_idx]
+                
+                # Only accept the prediction if we are somewhat confident
+                if max_prob > 0.45:
+                    intent = self.model.classes_[max_prob_idx]
+                else:
+                    intent = "general"
+            except AttributeError:
+                # Fallback if model doesn't support predict_proba
+                intent = self.model.predict([q_lower])[0]
+        else:
+            # Fallback rule-based matching if model is not loaded
+            if "how many" in q_lower or "count" in q_lower: intent = "count"
+            elif "what do you see" in q_lower or "describe" in q_lower: intent = "describe"
+            elif "where is" in q_lower or "locate" in q_lower: intent = "locate"
+            elif "danger" in q_lower or "safe" in q_lower: intent = "safety"
+            else: intent = "general"
+            
         response = ""
         
-        # Rule-based processing
-        if "how many" in q_lower:
-            found = False
-            for obj, count in object_counts.items():
-                if obj in q_lower:
-                    response = f"I see {count} {obj}{'s' if count > 1 else ''}."
-                    found = True
-                    break
-            if not found:
-                response = "I don't see any of those right now."
-                
-        elif "what do you see" in q_lower or "describe" in q_lower:
-            response = SceneDescriber.generate_description(context_detections)
+        if intent == "count":
+            if target_obj:
+                count = object_counts.get(target_obj, 0)
+                if count > 0:
+                    plural = target_obj + "s" if count > 1 else target_obj
+                    templates = [
+                        f"I have detected {count} {plural} in the current view.",
+                        f"Currently, there are {count} {plural} visible.",
+                        f"My analysis shows {count} {plural} present.",
+                        f"I am observing {count} {plural} at this moment."
+                    ]
+                    response = random.choice(templates)
+                else:
+                    templates = [
+                        f"I do not detect any {target_obj}s in the current view.",
+                        f"There are no {target_obj}s visible at this time.",
+                        f"My sensors do not show any {target_obj}s."
+                    ]
+                    response = random.choice(templates)
+            else:
+                found_counts = [f"{c} {o}" for o, c in object_counts.items()]
+                if found_counts:
+                    templates = [
+                        f"The following objects are detected: {', '.join(found_counts)}.",
+                        f"Currently observing: {', '.join(found_counts)}.",
+                        f"My scan identifies: {', '.join(found_counts)}."
+                    ]
+                    response = random.choice(templates)
+                else:
+                    templates = [
+                        "I am not detecting any recognizable objects at this moment.",
+                        "The current frame appears to be empty.",
+                        "No objects are currently identified in the scene."
+                    ]
+                    response = random.choice(templates)
+                    
+        elif intent == "describe":
+            base_desc = SceneDescriber.generate_description(context_detections)
+            intros = [
+                "Based on my analysis, ",
+                "According to the current scan, ",
+                "Observing the scene, ",
+                ""
+            ]
+            response = random.choice(intros) + base_desc
             
-        elif "where is" in q_lower:
-            # Simple spatial inference if bounding boxes exist
-            target = q_lower.replace("where is the ", "").replace("where is a ", "").replace("where is ", "").strip()
-            target = target.rstrip("?")
+        elif intent == "locate":
+            target = target_obj if target_obj else q_lower.replace("where is the ", "").replace("where is a ", "").replace("where is ", "").strip().rstrip("?")
             
             locations = []
             for det in context_detections:
                 if det.get('object_name', '').lower() == target and 'bbox' in det:
-                    # Bbox is typically [x1, y1, x2, y2]
                     box = det['bbox']
-                    # Simplified positioning (requires image dimensions for true relative pos, assuming center roughly)
                     if len(box) >= 4:
                         x_center = (box[0] + box[2]) / 2
-                        if x_center < 320: # Assuming 640 width
+                        if x_center < 320: 
                             locations.append("on the left side")
                         else:
                             locations.append("on the right side")
             
             if locations:
-                response = f"The {target} is {locations[0]}."
+                templates = [
+                    f"The {target} is located {locations[0]}.",
+                    f"I have identified the {target} {locations[0]}.",
+                    f"You can find the {target} {locations[0]}."
+                ]
+                response = random.choice(templates)
             else:
-                response = f"I cannot locate the {target} in the current view."
+                templates = [
+                    f"I am unable to locate the {target} in the current view.",
+                    f"The {target} is not currently visible.",
+                    f"My scan cannot detect a {target} at this time."
+                ]
+                response = random.choice(templates)
                 
-        elif "danger" in q_lower or "safe" in q_lower:
+        elif intent == "safety":
             dangerous_objects = ["knife", "scissors", "gun", "fire", "gas cylinder"]
             detected_danger = [obj for obj in object_counts.keys() if obj in dangerous_objects]
             
             if detected_danger:
-                response = f"Warning! I detect potentially dangerous objects: {', '.join(detected_danger)}."
+                templates = [
+                    f"Warning: Potentially dangerous items detected: {', '.join(detected_danger)}.",
+                    f"Alert: There are {', '.join(detected_danger)} present in the area.",
+                    f"Caution is advised. I have detected {', '.join(detected_danger)}."
+                ]
+                response = random.choice(templates)
             else:
-                response = "The scene appears safe. No dangerous objects detected."
+                templates = [
+                    "The scene appears to be secure. No dangerous objects detected.",
+                    "No hazards or dangerous objects are currently visible.",
+                    "The area is clear of identified threats."
+                ]
+                response = random.choice(templates)
                 
-        else:
-            response = "I'm a simple vision assistant. You can ask me 'what do you see?', 'how many [objects] are there?', or 'where is the [object]?'"
+        else: # general / unknown
+            templates = [
+                "I am the SmartVision AI assistant. How may I assist you with the camera feed?",
+                "Hello. I am ready to analyze the scene. Would you like me to count or describe the objects?",
+                "I am fully operational. Please ask me to identify or locate objects.",
+                "Greetings. I can assist by analyzing the current video feed. What would you like to know?"
+            ]
+            response = random.choice(templates)
             
         self.history.append({"role": "assistant", "content": response})
         return response
