@@ -8,3 +8,4 @@ numpy
 easyocr
 mediapipe
 faiss-cpu
+shapely

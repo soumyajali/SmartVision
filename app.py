@@ -30,6 +30,7 @@ from services.face_service import FaceService
 from core.tracker import ObjectTracker
 from core.interactive_3d_viewer import render_interactive_viewer
 from events.alert_manager import AlertManager
+from core.border_analytics import ZoneManager, LoiteringTimer
 from core.ui_3d_component import render_3d_hud
 from core.analytics_3d_component import render_analytics_viewer
 import plotly.graph_objects as go
@@ -93,6 +94,11 @@ if "telegram_alerts_enabled" not in st.session_state:
     st.session_state["telegram_alerts_enabled"] = False
 if "telegram_configured" not in st.session_state:
     st.session_state["telegram_configured"] = False
+if "border_zone_manager" not in st.session_state:
+    st.session_state["border_zone_manager"] = ZoneManager()
+    st.session_state["border_zone_manager"].add_zone("Restricted Perimeter Alpha", [(100, 100), (500, 100), (500, 400), (100, 400)])
+if "border_loitering_timer" not in st.session_state:
+    st.session_state["border_loitering_timer"] = LoiteringTimer(threshold_seconds=5.0)
 if "recording_dir" not in st.session_state:
     st.session_state["recording_dir"] = "recordings"
     os.makedirs(st.session_state["recording_dir"], exist_ok=True)
@@ -100,7 +106,7 @@ if "recording_dir" not in st.session_state:
 # ---------------- LOAD MODELS ----------------
 @st.cache_resource
 def load_detection_model():
-    return YOLO("yolov8m.pt")
+    return YOLO("SmartVision_v3.pt")
 
 @st.cache_resource
 def load_classification_model():
@@ -406,7 +412,8 @@ page = st.sidebar.radio(
         "🚗 3D Explorer",
         "📈 3D Analytics",
         "⏩ Video Fast Review",
-        "😴 Drowsiness Monitor"
+        "😴 Drowsiness Monitor",
+        "🛡️ Border Security (IBVAP)"
     ],
     index=0,
     label_visibility="collapsed"
@@ -904,6 +911,9 @@ elif page == "😴 Drowsiness Monitor":
                                 color = (255, 0, 0)
                                 if counter == consec_frames:
                                     drowsy_incidents += 1
+                                    import os
+                                    if os.path.exists('siren.wav'):
+                                        os.system(f"afplay '{os.path.abspath('siren.wav')}' &")
                         else:
                             counter = 0
                             
@@ -1169,7 +1179,7 @@ elif page == "🎯 Object Detection":
                                 found_dangerous = True
         
         # Voice Assistant integration
-        if st.session_state["voice_enabled"] and detected_objects:
+        if st.session_state["voice_enabled"]:
             voice_assistant = get_voice_assistant()
             voice_assistant.reset_announced_objects(detected_objects)
             for obj in detected_objects:
@@ -1421,11 +1431,22 @@ elif page == "🔍 OCR":
     
     ocr_reader = OCRReader()
     
-    file = st.file_uploader("Upload Image for OCR", type=["jpg", "jpeg", "png"])
+    input_type = st.radio("Source", ["Upload Image", "Live Webcam"], horizontal=True)
+    img_array = None
+    img = None
     
-    if file:
-        img = Image.open(file)
-        img_array = np.array(img)
+    if input_type == "Upload Image":
+        file = st.file_uploader("Upload Image for OCR", type=["jpg", "jpeg", "png"])
+        if file:
+            img = Image.open(file)
+            img_array = np.array(img)
+    else:
+        snap = st.camera_input("Take a picture for OCR")
+        if snap:
+            img = Image.open(snap)
+            img_array = np.array(img)
+            
+    if img_array is not None:
         
         col1, col2 = st.columns(2)
         
@@ -1590,3 +1611,131 @@ elif page == "⚙️ Settings":
     st.markdown("---")
     st.markdown("### 🛠️ General Preferences")
     st.info("Use the sidebar on this page to adjust other settings like Voice Assistant, Confidence Threshold, and Search Mode.")
+
+# 🛡️ BORDER SECURITY (IBVAP) PAGE
+elif page == "🛡️ Border Security (IBVAP)":
+    st.markdown("<div class='section-title'>🛡️ Intelligent Border Video Analytics</div>", unsafe_allow_html=True)
+    st.markdown("<div class='sub-text'>Real-time perimeter surveillance, loitering detection, and intrusion tracking.</div>", unsafe_allow_html=True)
+    
+    col_main, col_side = st.columns([2.5, 1])
+    
+    img_cv = None
+    
+    with col_main:
+        input_type = st.radio("Source", ["Upload Image", "Camera/RTSP", "Live Webcam"], horizontal=True, key="ibvap_src")
+        video_placeholder = st.empty()
+        
+        if input_type == "Upload Image":
+            file = st.file_uploader("Upload Surveillance Frame", type=["jpg","jpeg","png"])
+            if file:
+                data = np.frombuffer(file.read(), np.uint8)
+                img_cv = cv2.imdecode(data, cv2.IMREAD_COLOR)
+        elif input_type == "Camera/RTSP":
+            snap = st.camera_input("Surveillance Feed")
+            if snap:
+                pil = Image.open(snap)
+                img_cv = cv2.cvtColor(np.array(pil), cv2.COLOR_RGB2BGR)
+        elif input_type == "Live Webcam":
+            col_btn1, col_btn2 = st.columns(2)
+            with col_btn1:
+                start_live = st.button("Start Live Feed")
+            with col_btn2:
+                stop_live = st.button("Stop Live Feed")
+                
+            if start_live:
+                st.session_state["ibvap_live"] = True
+            if stop_live:
+                st.session_state["ibvap_live"] = False
+                
+    with col_side:
+        st.markdown("<div class='card-box'>", unsafe_allow_html=True)
+        st.markdown("<b>IBVAP Settings</b>", unsafe_allow_html=True)
+        loitering_thresh = st.slider("Loitering Timeout (s)", 1, 30, 5, help="Time before loitering alert is triggered")
+        st.session_state["border_loitering_timer"].threshold_seconds = loitering_thresh
+        st.markdown("</div>", unsafe_allow_html=True)
+        
+        st.markdown("<div class='card-box'>", unsafe_allow_html=True)
+        st.markdown("<b>Live Alert Feed</b>", unsafe_allow_html=True)
+        alert_placeholder = st.empty()
+        st.markdown("</div>", unsafe_allow_html=True)
+        
+    def process_ibvap_frame(frame):
+        zm = st.session_state["border_zone_manager"]
+        lt = st.session_state["border_loitering_timer"]
+        
+        results = det_model(frame, conf=st.session_state["confidence_threshold"])
+        active_intrusions = []
+        new_alerts = []
+        track_boxes = []
+        detected_objects = set()
+        
+        if len(results) > 0 and results[0].boxes is not None:
+            boxes = results[0].boxes.xyxy.cpu().numpy()
+            classes = results[0].boxes.cls.cpu().numpy()
+            
+            for i, box in enumerate(boxes):
+                x1, y1, x2, y2 = map(int, box)
+                cls_name = CLASS_NAMES[int(classes[i])]
+                detected_objects.add(cls_name)
+                
+                track_id = i 
+                intruded_zones = zm.check_intrusion((x1, y1, x2, y2))
+                
+                if intruded_zones:
+                    active_intrusions.extend(intruded_zones)
+                    cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
+                    cv2.putText(frame, f"INTRUDER: {cls_name}", (x1, y1-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
+                else:
+                    cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 0, 0), 2)
+                    cv2.putText(frame, cls_name, (x1, y1-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
+                    
+                track_boxes.append((track_id, intruded_zones))
+                
+        for tid, zones in track_boxes:
+            alerts = lt.update(tid, zones)
+            if alerts:
+                new_alerts.extend(alerts)
+                
+        active_intrusions = list(set(active_intrusions))
+        frame = zm.draw_zones(frame, active_intrusions)
+        
+        if st.session_state.get("voice_enabled", False):
+            voice_assistant = get_voice_assistant()
+            voice_assistant.reset_announced_objects(detected_objects)
+            for obj in detected_objects:
+                voice_assistant.announce_detection(obj)
+                
+        return frame, active_intrusions, new_alerts
+
+    if input_type in ["Upload Image", "Camera/RTSP"] and img_cv is not None:
+        processed_img, active_intrusions, new_alerts = process_ibvap_frame(img_cv)
+        video_placeholder.image(cv2.cvtColor(processed_img, cv2.COLOR_BGR2RGB), use_container_width=True)
+        
+        with alert_placeholder.container():
+            if active_intrusions:
+                st.error(f"🚨 INTRUSION DETECTED in: {', '.join(active_intrusions)}")
+            if new_alerts:
+                st.warning(f"⚠️ LOITERING WARNING in: {', '.join(new_alerts)}")
+            if not active_intrusions and not new_alerts:
+                st.success("✅ Perimeter Secure")
+
+    elif input_type == "Live Webcam" and st.session_state.get("ibvap_live", False):
+        cap = cv2.VideoCapture(0)
+        while cap.isOpened() and st.session_state.get("ibvap_live", False):
+            ret, frame = cap.read()
+            if not ret:
+                break
+                
+            frame = cv2.flip(frame, 1)
+            processed_img, active_intrusions, new_alerts = process_ibvap_frame(frame)
+            video_placeholder.image(cv2.cvtColor(processed_img, cv2.COLOR_BGR2RGB), use_container_width=True)
+            
+            with alert_placeholder.container():
+                if active_intrusions:
+                    st.error(f"🚨 INTRUSION DETECTED in: {', '.join(active_intrusions)}")
+                if new_alerts:
+                    st.warning(f"⚠️ LOITERING WARNING in: {', '.join(new_alerts)}")
+                if not active_intrusions and not new_alerts:
+                    st.success("✅ Perimeter Secure")
+                    
+        cap.release()
