@@ -3,7 +3,7 @@ import cv2
 import numpy as np
 import pprint
 
-model = YOLO("yolov8m.pt")
+model = YOLO("yolov8n.pt")
 results = model.predict("test_image.png", conf=0.25, verbose=False)
 for r in results:
     if r.boxes is not None:

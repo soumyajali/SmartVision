@@ -20,8 +20,8 @@ def main():
             print("Failed to grab frame")
             break
             
-        # Run inference
-        results = model(frame, verbose=False)
+        # Run inference and track objects
+        results = model.track(frame, persist=True, verbose=False)
         
         # Visualize the results on the frame
         annotated_frame = results[0].plot()

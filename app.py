@@ -106,7 +106,7 @@ if "recording_dir" not in st.session_state:
 # ---------------- LOAD MODELS ----------------
 @st.cache_resource
 def load_detection_model():
-  return YOLO("yolov8m.pt")
+  return YOLO("yolov8n.pt")
 
 @st.cache_resource
 def load_classification_model():
@@ -382,10 +382,15 @@ def get_image_embedding(image_array):
 
 
 # ---------------- SIDEBAR ----------------
+import os
+if os.path.exists("logo.png"):
+  st.sidebar.image("logo.png", use_container_width=True)
+else:
+  st.sidebar.markdown("*(Please save the logo as `logo.png` in the project folder to display it here)*")
 st.sidebar.markdown("### SMART VISION")
 st.sidebar.markdown("<small style='color: #64748b;'>Real-Time Object Detection</small>", unsafe_allow_html=True)
 
-st.session_state["openai_api_key"] = st.sidebar.text_input("OpenAI API Key (Optional for ChatGPT limit-free)", type="password", placeholder="sk-...")
+st.session_state["openai_api_key"] = ""
 if "vision_chatbot" not in st.session_state or st.session_state['vision_chatbot'] is None:
   st.session_state['vision_chatbot'] = VisionChatbot(api_key=st.session_state["openai_api_key"])
 if "chatbot" not in st.session_state or st.session_state['chatbot'] is None:
@@ -664,14 +669,14 @@ elif page == "Video Fast Review":
         ref_embedding = get_image_embedding(ref_img_cv)
         
         # Option to restrict search by generic category as well
-        restrict_cat = st.checkbox("Also restrict to 'Person' category?", value=True)
+        restrict_cat = st.checkbox("Restrict search to a specific category?", value=False)
         if restrict_cat:
-          target_object = "person"
+          target_object = st.selectbox("Category:", sorted(CLASS_NAMES.values()), index=0).lower()
     
     sample_rate = st.slider("Frames per second to analyze", 1, 5, 1, help="Lower is faster but might miss very brief appearances.")
     confidence = st.slider("Detection Confidence", 0.1, 1.0, 0.4, 0.05)
     if search_type == "Reference Image":
-      similarity_thresh = st.slider("Similarity Threshold", 0.5, 1.0, 0.8, 0.05)
+      similarity_thresh = st.slider("Similarity Threshold", 0.3, 1.0, 0.6, 0.05)
       
     st.markdown("</div>", unsafe_allow_html=True)
     
@@ -682,8 +687,11 @@ elif page == "Video Fast Review":
     if video_file is not None:
       import tempfile
       import math
-      
-      with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as tfile:
+      import os
+      ext = os.path.splitext(video_file.name)[1]
+      with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tfile:
+        # Reset file pointer just in case it was read previously
+        video_file.seek(0)
         tfile.write(video_file.read())
         temp_path = tfile.name
         
@@ -724,10 +732,11 @@ elif page == "Video Fast Review":
             progress_bar.progress(min(1.0, current_frame / total_frames))
             
             small_frame = cv2.resize(frame, (640, 480))
-            results = det_model(small_frame, conf=confidence, verbose=False)
+            results = det_model.track(small_frame, persist=True, conf=confidence, verbose=False)
             
             object_found = False
             best_sim = 0.0
+            best_match = None
             
             for result in results:
               if result.boxes is not None:
@@ -736,22 +745,29 @@ elif page == "Video Fast Review":
                   obj_name = CLASS_NAMES[class_id].lower()
                   
                   if target_object is None or obj_name == target_object:
+                    x1, y1, x2, y2 = map(int, box.xyxy[0])
                     if search_type == "Reference Image":
                       # Extract ROI
-                      x1, y1, x2, y2 = map(int, box.xyxy[0])
                       roi = small_frame[max(0, y1):max(0, y2), max(0, x1):max(0, x2)]
                       if roi.size > 0:
                         roi_emb = get_image_embedding(roi)
                         sim = np.dot(ref_embedding, roi_emb)
                         if sim > similarity_thresh:
-                          object_found = True
-                          best_sim = max(best_sim, sim)
+                          if sim > best_sim:
+                            best_sim = sim
+                            best_match = (x1, y1, x2, y2, f"{sim*100:.1f}%")
                     else:
-                      object_found = True
+                      best_match = (x1, y1, x2, y2, obj_name)
                       break
-              if object_found and search_type != "Reference Image":
+              if best_match and search_type != "Reference Image":
                 break
                 
+            if best_match is not None:
+              object_found = True
+              x1, y1, x2, y2, label = best_match
+              cv2.rectangle(small_frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+              cv2.putText(small_frame, label, (x1, max(y1-10, 0)), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+              
             if object_found:
               formatted_time = time.strftime('%M:%S', time.gmtime(timestamp_sec))
               if not found_timestamps or (timestamp_sec - found_timestamps[-1]['seconds']) > 2.0:
@@ -1138,7 +1154,7 @@ elif page == "Object Detection":
     detected_objects = set()
     detected_objects_with_conf = []
     detections_for_recording = []
-    dangerous_objects = {"person", "knife", "fire", "gun", "cat", "bottle", "scissors"}
+    dangerous_objects = {"knife", "fire", "gun", "scissors"}
     found_dangerous = False
     
     if results and len(results) > 0:
@@ -1431,35 +1447,79 @@ elif page == "OCR":
   
   ocr_reader = OCRReader()
   
-  input_type = st.radio("Source", ["Upload Image", "Live Webcam"], horizontal=True)
+  input_type = st.radio("Source", ["Upload Image", "Upload Video", "Live Webcam"], horizontal=True)
   img_array = None
   img = None
+  video_file = None
   
   if input_type == "Upload Image":
     file = st.file_uploader("Upload Image for OCR", type=["jpg", "jpeg", "png"])
     if file:
       img = Image.open(file)
       img_array = np.array(img)
+  elif input_type == "Upload Video":
+    video_file = st.file_uploader("Upload Video for OCR", type=["mp4", "mov", "avi"])
   else:
     snap = st.camera_input("Take a picture for OCR")
     if snap:
       img = Image.open(snap)
       img_array = np.array(img)
       
-  if img_array is not None:
+  if img_array is not None or video_file is not None:
     
+    flip_h = st.checkbox("Flip Image Horizontally (Keep checked if text looks backwards)", value=True if input_type == "Live Webcam" else False)
+    if flip_h and img_array is not None:
+      import cv2
+      img_array = cv2.flip(img_array, 1)
+      img = Image.fromarray(img_array)
+
     col1, col2 = st.columns(2)
     
     with col1:
-      st.markdown("<div class='card-box'><b> Input Image</b></div>", unsafe_allow_html=True)
-      st.image(img, use_container_width=True)
+      st.markdown("<div class='card-box'><b> Input Media</b></div>", unsafe_allow_html=True)
+      if video_file:
+          st.video(video_file)
+      else:
+          st.image(img, use_container_width=True)
     
     with col2:
       st.markdown("<div class='card-box'><b> Extracted Text</b></div>", unsafe_allow_html=True)
       
       if st.button("Extract Text", width="stretch"):
         with st.spinner("Extracting text locally..."):
-          text = ocr_reader.extract_text_simple(cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR))
+          if video_file:
+            import tempfile
+            import cv2
+            tfile = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
+            tfile.write(video_file.read())
+            tfile.close()
+            
+            cap = cv2.VideoCapture(tfile.name)
+            fps = cap.get(cv2.CAP_PROP_FPS)
+            frame_interval = int(fps) if fps > 0 else 30 # 1 frame per second
+            
+            frame_count = 0
+            extracted_phrases = set()
+            while cap.isOpened():
+                ret, frame = cap.read()
+                if not ret:
+                    break
+                if frame_count % frame_interval == 0:
+                    text_results = ocr_reader.extract_text(frame)
+                    for res in text_results:
+                        if len(res['text']) > 1: # Ignore single characters to reduce noise
+                            extracted_phrases.add(res['text'])
+                frame_count += 1
+            cap.release()
+            try:
+                os.unlink(tfile.name)
+            except:
+                pass
+            
+            text = " ".join(extracted_phrases)
+          else:
+            text = ocr_reader.extract_text_simple(cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR))
+          
           st.session_state["ocr_text"] = text
       
       if "ocr_text" in st.session_state:
@@ -1663,7 +1723,7 @@ elif page == "Border Security (IBVAP)":
     zm = st.session_state["border_zone_manager"]
     lt = st.session_state["border_loitering_timer"]
     
-    results = det_model(frame, conf=st.session_state["confidence_threshold"])
+    results = det_model.track(frame, persist=True, conf=st.session_state["confidence_threshold"])
     active_intrusions = []
     new_alerts = []
     track_boxes = []
