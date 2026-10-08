@@ -31,4 +31,29 @@ class VoiceService {
       debugPrint("TTS Error: $e");
     }
   }
+
+  Future<void> speak(String text) async {
+    try {
+      await _flutterTts.speak(text);
+    } catch (e) {
+      debugPrint("TTS Error: $e");
+    }
+  }
+
+  Future<void> announceDanger(String item) async {
+    try {
+      await _flutterTts.speak("Danger warning! $item detected in area!");
+    } catch (e) {
+      debugPrint("TTS Danger Error: $e");
+    }
+  }
+
+  Future<void> announceFound(String item) async {
+    try {
+      await _flutterTts.speak("$item found!");
+    } catch (e) {
+      debugPrint("TTS Found Error: $e");
+    }
+  }
 }
+

@@ -1,8 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'dashboard_screen.dart';
-import 'package:provider/provider.dart';
-import '../services/feature_manager.dart';
+import 'home_screen.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -15,11 +13,10 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   void initState() {
     super.initState();
-    Timer(const Duration(milliseconds: 1800), () {
+    Timer(const Duration(milliseconds: 1500), () {
       if (!mounted) return;
-      final fm = Provider.of<FeatureManager>(context, listen: false);
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => DashboardScreen(featureManager: fm)),
+        MaterialPageRoute(builder: (_) => const HomeScreen()),
       );
     });
   }

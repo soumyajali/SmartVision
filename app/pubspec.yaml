@@ -21,6 +21,7 @@ dependencies:
   image: ^3.3.0
   image_picker: ^1.2.3
   shared_preferences: ^2.5.0
+  google_fonts: ^9.0.0
 
 flutter:
   uses-material-design: true
