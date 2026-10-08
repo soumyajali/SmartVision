@@ -1,0 +1,24 @@
+{
+  "device": {
+    "os": "macOS-14.5-arm64-arm-64bit-Mach-O",
+    "processor": "arm",
+    "machine": "arm64",
+    "cpu_count": 8,
+    "physical_cores": 8,
+    "total_ram_gb": 8.0
+  },
+  "num_frames": 100,
+  "total_time_s": 21.64,
+  "avg_fps": 4.62,
+  "avg_latency_ms": 216.44,
+  "median_latency_ms": 202.92,
+  "p95_latency_ms": 308.5,
+  "min_latency_ms": 169.3,
+  "max_latency_ms": 410.66,
+  "cpu_usage_pct": 37.8,
+  "ram_start_mb": 736.8,
+  "ram_end_mb": 471.6,
+  "ram_diff_mb": -265.2,
+  "target_met_10fps": false,
+  "target_met_200ms": false
+}

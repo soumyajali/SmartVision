@@ -1017,38 +1017,85 @@ elif page == "Face Registration":
   st.markdown("<div class='section-title'> Face Registration</div>", unsafe_allow_html=True)
   st.markdown("<div class='sub-text'>Register faces so the AI can recognize them by name</div>", unsafe_allow_html=True)
   
-  col1, col2 = st.columns(2)
-  with col1:
-    st.markdown("<div class='card-box'>", unsafe_allow_html=True)
-    reg_name = st.text_input("Name of the Person", placeholder="e.g. John Doe")
-    reg_image = st.camera_input("Take a clear picture of their face")
-    
-    if st.button("Register Face", type="primary", width="stretch"):
-      if reg_name and reg_image:
+  tab_reg, tab_test = st.tabs(["➕ Register Face", "🔍 Test / Verify Face"])
+  
+  with tab_reg:
+    col1, col2 = st.columns(2)
+    with col1:
+      st.markdown("<div class='card-box'>", unsafe_allow_html=True)
+      reg_name = st.text_input("Name of the Person", placeholder="e.g. John Doe")
+      reg_source = st.radio("Photo Source", ["Camera", "Upload Image"], horizontal=True, key="reg_src")
+      reg_image = None
+      if reg_source == "Camera":
+        reg_image = st.camera_input("Take a clear picture of their face")
+      else:
+        reg_image = st.file_uploader("Upload Face Image", type=["jpg", "jpeg", "png"], key="reg_upload")
+      
+      if st.button("Register Face", type="primary", width="stretch"):
+        if reg_name and reg_image:
+          import numpy as np
+          import cv2
+          from PIL import Image
+          
+          pil_img = Image.open(reg_image)
+          cv_img = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
+          
+          saved_path = st.session_state["face_service"].register_face(reg_name, cv_img)
+          st.success(f"Successfully registered {reg_name}!")
+        else:
+          st.error("Please provide both a name and a photo.")
+      st.markdown("</div>", unsafe_allow_html=True)
+      
+    with col2:
+      st.markdown("<div class='card-box'><b>Registered People</b><br/>", unsafe_allow_html=True)
+      if st.session_state["face_service"].is_trained:
+        for name in sorted(set(st.session_state["face_service"].label_map.values())):
+          st.markdown(f"<li><b>{name}</b></li>", unsafe_allow_html=True)
+      else:
+        st.markdown("No faces registered yet.")
+      st.markdown("</div>", unsafe_allow_html=True)
+
+  with tab_test:
+    st.markdown("<div class='card-box'><b>Test Real-Time Face Recognition</b></div>", unsafe_allow_html=True)
+    test_source = st.radio("Test Image Source", ["Upload Image", "Camera"], horizontal=True, key="test_face_src")
+    test_img_cv = None
+    if test_source == "Upload Image":
+      t_file = st.file_uploader("Upload test image with face", type=["jpg", "jpeg", "png"], key="test_face_up")
+      if t_file:
         import numpy as np
         import cv2
         from PIL import Image
-        
-        # Convert uploaded image to opencv format
-        pil_img = Image.open(reg_image)
-        cv_img = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
-        
-        # Register
-        saved_path = st.session_state["face_service"].register_face(reg_name, cv_img)
-        st.success(f"Successfully registered {reg_name}!")
-      else:
-        st.error("Please provide both a name and a photo.")
-    st.markdown("</div>", unsafe_allow_html=True)
-    
-  with col2:
-    st.markdown("<div class='card-box'><b>Registered People</b><br/>", unsafe_allow_html=True)
-    # Display unique registered names
-    if st.session_state["face_service"].is_trained:
-      for name in set(st.session_state["face_service"].label_map.values()):
-        st.markdown(f"<li>{name}</li>", unsafe_allow_html=True)
+        pil = Image.open(t_file)
+        test_img_cv = cv2.cvtColor(np.array(pil), cv2.COLOR_RGB2BGR)
     else:
-      st.markdown("No faces registered yet.")
-    st.markdown("</div>", unsafe_allow_html=True)
+      t_cam = st.camera_input("Capture face to recognize", key="test_face_cam")
+      if t_cam:
+        import numpy as np
+        import cv2
+        from PIL import Image
+        pil = Image.open(t_cam)
+        test_img_cv = cv2.cvtColor(np.array(pil), cv2.COLOR_RGB2BGR)
+        
+    if test_img_cv is not None:
+      name, conf, bbox = st.session_state["face_service"].recognize_face_details(test_img_cv)
+      display_img = test_img_cv.copy()
+      if bbox is not None:
+        fx, fy, fw, fh = bbox
+        color = (0, 200, 0) if (name and not name.startswith("Unknown")) else (0, 0, 255)
+        cv2.rectangle(display_img, (fx, fy), (fx+fw, fy+fh), color, 2)
+        label_text = name if name else "Unknown"
+        cv2.putText(display_img, label_text, (fx, max(fy-10, 20)), cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2)
+      
+      t_c1, t_c2 = st.columns(2)
+      with t_c1:
+        st.image(cv2.cvtColor(display_img, cv2.COLOR_BGR2RGB), caption="Detection Output", width=400)
+      with t_c2:
+        if name and not name.startswith("Unknown"):
+          st.success(f" Identified: **{name}** (Match Distance: {conf:.1f})")
+        elif name:
+          st.warning(f" Detected Face: **{name}** (Not closely matching registered faces)")
+        else:
+          st.info("No face detected in the image. Ensure the face is clearly visible and well-lit.")
 
 
 # CLASSIFICATION 
@@ -1189,10 +1236,27 @@ elif page == "Object Detection":
                   cv2.rectangle(detected_img, (x1, max(y1-30, 0)), (x1 + text_size[0], max(y1-30, 0) + text_size[1] + 10), (0, 200, 0), -1)
                   cv2.putText(detected_img, person_name, (x1, max(y1-5, 25)), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 255), 2)
                   # Update the detected objects list with the specific person's name
+                  if "person" in detected_objects:
+                    detected_objects.discard("person")
+                  detected_objects.add(person_name)
+                  detected_objects_with_conf = [(person_name, confidence) if o == "person" else (o, c) for o, c in detected_objects_with_conf]
                   obj_name = person_name
 
             if obj_name in dangerous_objects:
                 found_dangerous = True
+
+      # If person wasn't detected by YOLO, also check for registered faces directly
+      face_service = st.session_state.get("face_service")
+      if face_service and face_service.is_trained and not any(p in detected_objects for p in face_service.label_map.values()):
+        name, conf, bbox = face_service.recognize_face_details(img_cv, threshold=85)
+        if name and not name.startswith("Unknown") and bbox is not None:
+          fx, fy, fw, fh = bbox
+          text_size = cv2.getTextSize(name, cv2.FONT_HERSHEY_SIMPLEX, 0.9, 2)[0]
+          cv2.rectangle(detected_img, (fx, fy), (fx+fw, fy+fh), (0, 200, 0), 2)
+          cv2.rectangle(detected_img, (fx, max(fy-30, 0)), (fx + text_size[0], max(fy-30, 0) + text_size[1] + 10), (0, 200, 0), -1)
+          cv2.putText(detected_img, name, (fx, max(fy-5, 25)), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 255), 2)
+          detected_objects.add(name)
+          detected_objects_with_conf.append((name, max(0.5, 1.0 - (conf / 100.0))))
     
     # Voice Assistant integration
     if st.session_state["voice_enabled"]:
