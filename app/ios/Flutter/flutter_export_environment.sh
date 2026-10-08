@@ -1,6 +1,6 @@
 #!/bin/sh
 # This is a generated file; do not edit or check into version control.
-export "FLUTTER_ROOT=/Users/sowmya/Desktop/SmartVision/flutter_sdk"
+export "FLUTTER_ROOT=/opt/homebrew/share/flutter"
 export "FLUTTER_APPLICATION_PATH=/Users/sowmya/Desktop/SmartVision/app"
 export "FLUTTER_FRAMEWORK_SWIFT_PACKAGE_PATH=/Users/sowmya/Desktop/SmartVision/app/ios/Flutter/ephemeral/Packages/.packages/FlutterFramework"
 export "COCOAPODS_PARALLEL_CODE_SIGN=true"
