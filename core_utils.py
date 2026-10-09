@@ -125,17 +125,18 @@ class OCRReader:
             print(f"Warning: Could not initialize OCR reader: {e}")
             self.reader = None
     
-    def extract_text(self, image: np.ndarray) -> List[Dict[str, any]]:
+    def extract_text(self, image: np.ndarray, min_confidence: float = 0.25) -> List[Dict[str, any]]:
         """
-        Extract text from an image.
+        Extract text from an image, sorted in natural reading order (top-to-bottom, left-to-right).
         
         Args:
             image: Input image as numpy array (BGR format from OpenCV)
+            min_confidence: Minimum confidence threshold to exclude noise
             
         Returns:
             List of dictionaries containing text, bounding box, and confidence
         """
-        if self.reader is None:
+        if self.reader is None or image is None or image.size == 0:
             return []
         
         try:
@@ -149,29 +150,74 @@ class OCRReader:
             
             extracted = []
             for (bbox, text, confidence) in results:
-                extracted.append({
-                    "text": text,
-                    "bbox": bbox,
-                    "confidence": float(confidence)
-                })
+                t = str(text).strip()
+                if float(confidence) >= min_confidence and len(t) > 0:
+                    extracted.append({
+                        "text": t,
+                        "bbox": bbox,
+                        "confidence": float(confidence)
+                    })
             
+            if extracted:
+                # Helper to find vertical and horizontal center
+                def box_center(item):
+                    pts = item["bbox"]
+                    cx = sum(p[0] for p in pts) / len(pts)
+                    cy = sum(p[1] for p in pts) / len(pts)
+                    return (cy, cx)
+
+                # Group into reading lines by vertical proximity
+                extracted.sort(key=lambda item: box_center(item)[0])
+                lines = []
+                current_line = []
+                last_y = None
+                line_tol = 18
+                for item in extracted:
+                    cy, cx = box_center(item)
+                    if last_y is None or abs(cy - last_y) < line_tol:
+                        current_line.append(item)
+                        last_y = cy
+                    else:
+                        current_line.sort(key=lambda it: box_center(it)[1])
+                        lines.extend(current_line)
+                        current_line = [item]
+                        last_y = cy
+                if current_line:
+                    current_line.sort(key=lambda it: box_center(it)[1])
+                    lines.extend(current_line)
+                extracted = lines
+
             return extracted
         except Exception as e:
             print(f"Error during OCR: {e}")
             return []
     
-    def extract_text_simple(self, image: np.ndarray) -> str:
+    def extract_text_simple(self, image: np.ndarray, min_confidence: float = 0.25) -> str:
         """
-        Extract text from an image and return as a single string.
+        Extract text from an image formatted cleanly with line breaks.
+        """
+        results = self.extract_text(image, min_confidence=min_confidence)
+        if not results:
+            return ""
         
-        Args:
-            image: Input image as numpy array
+        lines = []
+        curr_line = []
+        last_y = None
+        for r in results:
+            pts = r["bbox"]
+            cy = sum(p[1] for p in pts) / len(pts)
+            if last_y is None or abs(cy - last_y) < 20:
+                curr_line.append(r["text"])
+                last_y = cy
+            else:
+                if curr_line:
+                    lines.append(" ".join(curr_line))
+                curr_line = [r["text"]]
+                last_y = cy
+        if curr_line:
+            lines.append(" ".join(curr_line))
             
-        Returns:
-            Extracted text as a single string
-        """
-        results = self.extract_text(image)
-        return " ".join([r["text"] for r in results])
+        return "\n".join(lines)
 
 
 class QRBarcodeScanner:

@@ -9,3 +9,4 @@ easyocr
 mediapipe
 faiss-cpu
 shapely
+lapx

@@ -381,6 +381,15 @@ def get_image_embedding(image_array):
   return embedding
 
 
+def get_color_histogram(image_bgr):
+  if image_bgr is None or image_bgr.size == 0:
+    return None
+  hsv = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2HSV)
+  hist = cv2.calcHist([hsv], [0, 1], None, [16, 16], [0, 180, 0, 256])
+  cv2.normalize(hist, hist, 0, 1, cv2.NORM_MINMAX)
+  return hist
+
+
 # ---------------- SIDEBAR ----------------
 import os
 if os.path.exists("logo.png"):
@@ -654,133 +663,325 @@ elif page == "Video Fast Review":
     st.markdown("<b>Search Parameters</b>", unsafe_allow_html=True)
     search_type = st.radio("Search by:", ["Object Category", "Reference Image"])
     
+    if "vfr_ref" not in st.session_state:
+      st.session_state["vfr_ref"] = None
+
     target_object = None
+    ref_face_encoding = None
     ref_embedding = None
-    
+    ref_hist = None
+    ref_is_person = False
+
     if search_type == "Object Category":
-      target_object = st.selectbox("Find object:", sorted(CLASS_NAMES.values()), index=0)
-      target_object = target_object.lower()
+      target_object = st.selectbox("Find object:", sorted(CLASS_NAMES.values()), index=0).lower()
     else:
       ref_image_file = st.file_uploader("Upload Reference Image", type=["jpg", "png", "jpeg"])
       if ref_image_file is not None:
-        data = np.frombuffer(ref_image_file.read(), np.uint8)
-        ref_img_cv = cv2.imdecode(data, cv2.IMREAD_COLOR)
-        st.image(cv2.cvtColor(ref_img_cv, cv2.COLOR_BGR2RGB), caption="Reference Image", use_container_width=True)
-        ref_embedding = get_image_embedding(ref_img_cv)
-        
-        # Option to restrict search by generic category as well
-        restrict_cat = st.checkbox("Restrict search to a specific category?", value=False)
-        if restrict_cat:
-          target_object = st.selectbox("Category:", sorted(CLASS_NAMES.values()), index=0).lower()
-    
+        ref_image_file.seek(0)
+        file_bytes = ref_image_file.read()
+        ref_image_file.seek(0)
+
+        # Check if we need to process or re-process this reference image
+        cur_ref = st.session_state.get("vfr_ref")
+        need_reprocess = (cur_ref is None or cur_ref.get("name") != ref_image_file.name or cur_ref.get("size") != len(file_bytes))
+
+        if need_reprocess and len(file_bytes) > 0:
+          data = np.frombuffer(file_bytes, np.uint8)
+          ref_img_cv = cv2.imdecode(data, cv2.IMREAD_COLOR)
+          if ref_img_cv is not None:
+            ref_crop = ref_img_cv.copy()
+            auto_cat = None
+            preview_img = ref_img_cv.copy()
+            found_face_enc = None
+            is_person = False
+
+            # 1. First check if reference image contains a human face
+            try:
+              import face_recognition
+              ref_rgb = cv2.cvtColor(ref_img_cv, cv2.COLOR_BGR2RGB)
+              ref_face_locs = face_recognition.face_locations(ref_rgb)
+              if not ref_face_locs:
+                ref_face_locs = face_recognition.face_locations(ref_rgb, number_of_times_to_upsample=1)
+
+              if len(ref_face_locs) > 0:
+                best_face_loc = max(ref_face_locs, key=lambda l: (l[2] - l[0]) * (l[1] - l[3]))
+                ref_face_encs = face_recognition.face_encodings(ref_rgb, [best_face_loc])
+                if len(ref_face_encs) > 0:
+                  found_face_enc = ref_face_encs[0]
+                  is_person = True
+                  top, right, bottom, left = best_face_loc
+                  cv2.rectangle(preview_img, (left, top), (right, bottom), (0, 255, 0), 3)
+                  cv2.putText(preview_img, "Target Individual", (left, max(top - 10, 20)), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 255, 0), 2)
+            except Exception:
+              pass
+
+            # 2. If not a face, run YOLO object detection to crop the reference object
+            if not is_person:
+              try:
+                ref_det_results = det_model(ref_img_cv, conf=0.25, verbose=False)
+                if len(ref_det_results) > 0 and ref_det_results[0].boxes is not None and len(ref_det_results[0].boxes) > 0:
+                  boxes = ref_det_results[0].boxes
+                  best_box = max(boxes, key=lambda b: float(b.conf[0]))
+                  bx1, by1, bx2, by2 = map(int, best_box.xyxy[0])
+                  auto_cat = CLASS_NAMES[int(best_box.cls[0])].lower()
+                  cropped = ref_img_cv[max(0, by1):max(0, by2), max(0, bx1):max(0, bx2)]
+                  if cropped.size > 0 and cropped.shape[0] > 10 and cropped.shape[1] > 10:
+                    ref_crop = cropped
+                  cv2.rectangle(preview_img, (bx1, by1), (bx2, by2), (0, 255, 0), 3)
+                  cv2.putText(preview_img, f"Target: {auto_cat.title()}", (bx1, max(by1 - 10, 20)), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+              except Exception:
+                pass
+
+            ref_emb = get_image_embedding(ref_crop)
+            ref_h = get_color_histogram(ref_crop)
+
+            st.session_state["vfr_ref"] = {
+              "name": ref_image_file.name,
+              "size": len(file_bytes),
+              "face_enc": found_face_enc,
+              "is_person": is_person,
+              "auto_cat": auto_cat,
+              "embedding": ref_emb,
+              "hist": ref_h,
+              "preview_rgb": cv2.cvtColor(preview_img, cv2.COLOR_BGR2RGB),
+              "ref_crop": ref_crop
+            }
+
+        cached = st.session_state.get("vfr_ref")
+        if cached is not None:
+          st.image(cached["preview_rgb"], caption="Reference Target", use_container_width=True)
+          ref_face_encoding = cached["face_enc"]
+          ref_is_person = cached["is_person"]
+          ref_embedding = cached["embedding"]
+          ref_hist = cached["hist"]
+          auto_cat = cached["auto_cat"]
+
+          if ref_is_person:
+            st.success("Target Identified: **Specific Person (Face Biometrics)**")
+            st.caption("Precision matching active: only this exact individual's facial biometric signature will be detected. All other persons will be strictly excluded.")
+            target_object = "person"
+          elif auto_cat:
+            st.success(f"Detected Reference Object: **{auto_cat.title()}**")
+            restrict_cat = st.checkbox(f"Filter search to '{auto_cat}' category only", value=True, help="Prevents matching other unrelated objects in the video.")
+            if restrict_cat:
+              target_object = auto_cat
+            else:
+              allow_custom_cat = st.checkbox("Specify different category to filter?", value=False)
+              if allow_custom_cat:
+                target_object = st.selectbox("Category:", sorted(CLASS_NAMES.values()), index=0).lower()
+          else:
+            st.info("No face or standard category detected. Review will search by visual appearance.")
+            restrict_cat = st.checkbox("Restrict search to a specific category?", value=False)
+            if restrict_cat:
+              target_object = st.selectbox("Category:", sorted(CLASS_NAMES.values()), index=0).lower()
+
+    precision_mode = st.radio(
+      "Matching Precision",
+      ["Strict 100% Match (Zero False Positives)", "Balanced (Standard)", "Tolerant (High Recall)"],
+      index=0,
+      help="Strict mode guarantees only the exact target individual/object is matched."
+    )
+
+    if precision_mode == "Strict 100% Match (Zero False Positives)":
+      max_face_dist = 0.48
+      min_obj_sim = 0.72
+    elif precision_mode == "Balanced (Standard)":
+      max_face_dist = 0.52
+      min_obj_sim = 0.65
+    else:
+      max_face_dist = 0.58
+      min_obj_sim = 0.55
+
     sample_rate = st.slider("Frames per second to analyze", 1, 5, 1, help="Lower is faster but might miss very brief appearances.")
     confidence = st.slider("Detection Confidence", 0.1, 1.0, 0.4, 0.05)
-    if search_type == "Reference Image":
-      similarity_thresh = st.slider("Similarity Threshold", 0.3, 1.0, 0.6, 0.05)
-      
+
     st.markdown("</div>", unsafe_allow_html=True)
-    
+
   with col1:
     st.markdown("<div class='card-box'>", unsafe_allow_html=True)
     video_file = st.file_uploader("Upload Video", type=["mp4", "avi", "mov", "mkv"])
-    
+
     if video_file is not None:
       import tempfile
       import math
       import os
       ext = os.path.splitext(video_file.name)[1]
       with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tfile:
-        # Reset file pointer just in case it was read previously
         video_file.seek(0)
         tfile.write(video_file.read())
+        video_file.seek(0)
         temp_path = tfile.name
-        
+
       can_start = True
-      if search_type == "Reference Image" and ref_embedding is None:
+      cached = st.session_state.get("vfr_ref")
+      if search_type == "Reference Image" and (cached is None or (cached["face_enc"] is None and cached["embedding"] is None)):
         st.warning("Please upload a reference image first.")
         can_start = False
-        
+
       if can_start and st.button("Start Fast Review", type="primary", width="stretch"):
         st.markdown("### Search Results")
         progress_bar = st.progress(0)
         status_text = st.empty()
         results_container = st.container()
-        
+
         cap = cv2.VideoCapture(temp_path)
         fps = cap.get(cv2.CAP_PROP_FPS)
-        if math.isnan(fps) or fps == 0:
+        if math.isnan(fps) or fps <= 0:
           fps = 30.0
-          
+
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        if total_frames <= 0:
+          total_frames = 1
         duration = total_frames / fps
-        
+
         frame_skip = int(fps / sample_rate)
         if frame_skip < 1:
           frame_skip = 1
-        
+
         found_timestamps = []
         current_frame = 0
-        
+
+        # Retrieve cached reference data
+        ref_face_enc = cached.get("face_enc") if cached else None
+        ref_deep_emb = cached.get("embedding") if cached else None
+        ref_color_h = cached.get("hist") if cached else None
+
         while cap.isOpened():
           ret, frame = cap.read()
           if not ret:
             break
-            
+
           if current_frame % frame_skip == 0:
             timestamp_sec = current_frame / fps
             status_text.text(f"Analyzing... {timestamp_sec:.1f}s / {duration:.1f}s")
             progress_bar.progress(min(1.0, current_frame / total_frames))
-            
+
             small_frame = cv2.resize(frame, (640, 480))
             results = det_model.track(small_frame, persist=True, conf=confidence, verbose=False)
-            
-            object_found = False
-            best_sim = 0.0
-            best_match = None
-            
+
+            matched_boxes_in_frame = []
+
             for result in results:
               if result.boxes is not None:
                 for box in result.boxes:
                   class_id = int(box.cls[0])
                   obj_name = CLASS_NAMES[class_id].lower()
-                  
+
                   if target_object is None or obj_name == target_object:
                     x1, y1, x2, y2 = map(int, box.xyxy[0])
                     if search_type == "Reference Image":
-                      # Extract ROI
-                      roi = small_frame[max(0, y1):max(0, y2), max(0, x1):max(0, x2)]
-                      if roi.size > 0:
-                        roi_emb = get_image_embedding(roi)
-                        sim = np.dot(ref_embedding, roi_emb)
-                        if sim > similarity_thresh:
-                          if sim > best_sim:
-                            best_sim = sim
-                            best_match = (x1, y1, x2, y2, f"{sim*100:.1f}%")
+                      is_match = False
+                      match_sim = 0.0
+
+                      if ref_face_enc is not None and obj_name == "person":
+                        # Target is a specific individual: strict face recognition
+                        try:
+                          import face_recognition
+                          orig_h, orig_w = frame.shape[:2]
+                          sx = orig_w / 640.0
+                          sy = orig_h / 480.0
+                          ox1 = max(0, int(x1 * sx))
+                          oy1 = max(0, int(y1 * sy))
+                          ox2 = min(orig_w, int(x2 * sx))
+                          oy2 = min(orig_h, int(y2 * sy))
+                          person_orig = frame[oy1:oy2, ox1:ox2]
+
+                          if person_orig.size > 0 and person_orig.shape[0] > 15 and person_orig.shape[1] > 15:
+                            p_rgb = cv2.cvtColor(person_orig, cv2.COLOR_BGR2RGB)
+                            upper_body = p_rgb[0 : max(25, int(p_rgb.shape[0] * 0.65)), :]
+                            face_locs = face_recognition.face_locations(upper_body)
+                            if not face_locs:
+                              face_locs = face_recognition.face_locations(p_rgb)
+                            if not face_locs and person_orig.shape[0] < 180:
+                              face_locs = face_recognition.face_locations(p_rgb, number_of_times_to_upsample=1)
+
+                            if face_locs:
+                              face_encs = face_recognition.face_encodings(p_rgb, face_locs)
+                              for f_loc, enc in zip(face_locs, face_encs):
+                                dist = float(face_recognition.face_distance([ref_face_enc], enc)[0])
+                                # Distance <= 0.50 indicates exact same individual
+                                if dist <= max_face_dist:
+                                  is_match = True
+                                  match_sim = max(0.0, 1.0 - dist)
+                                  top, right, bottom, left = f_loc
+                                  face_cx = ox1 + (left + right) / 2
+                                  box_cx = (ox1 + ox2) / 2
+                                  box_w = max(1, ox2 - ox1)
+                                  area = (ox2 - ox1) * (oy2 - oy1)
+                                  offset_norm = abs(face_cx - box_cx) / box_w
+                                  matched_boxes_in_frame.append({
+                                    "box": (x1, y1, x2, y2),
+                                    "label": f"Target Match ({match_sim * 100:.0f}%)",
+                                    "sim": match_sim,
+                                    "offset_norm": offset_norm,
+                                    "area": area
+                                  })
+                                  break
+                        except Exception:
+                          pass
+                      else:
+                        # Target is a specific object: deep semantic + color distribution matching
+                        roi = small_frame[max(0, y1):max(0, y2), max(0, x1):max(0, x2)]
+                        if roi.size > 0 and roi.shape[0] >= 10 and roi.shape[1] >= 10 and ref_deep_emb is not None:
+                          roi_emb = get_image_embedding(roi)
+                          deep_sim = float(np.dot(ref_deep_emb, roi_emb))
+                          deep_sim = max(0.0, min(1.0, deep_sim))
+
+                          color_sim = 0.0
+                          if ref_color_h is not None:
+                            roi_hist = get_color_histogram(roi)
+                            if roi_hist is not None:
+                              color_sim = max(0.0, float(cv2.compareHist(ref_color_h, roi_hist, cv2.HISTCMP_CORREL)))
+
+                          sim = 0.55 * deep_sim + 0.45 * color_sim
+                          # Strict threshold for objects: require strong color and deep feature correlation
+                          if sim >= min_obj_sim and color_sim >= 0.50:
+                            is_match = True
+                            match_sim = sim
+                            matched_boxes_in_frame.append({
+                              "box": (x1, y1, x2, y2),
+                              "label": f"{obj_name.title()} ({match_sim * 100:.1f}%)",
+                              "sim": match_sim
+                            })
                     else:
-                      best_match = (x1, y1, x2, y2, obj_name)
+                      matched_boxes_in_frame.append({
+                        "box": (x1, y1, x2, y2),
+                        "label": obj_name.title(),
+                        "sim": float(box.conf[0])
+                      })
                       break
-              if best_match and search_type != "Reference Image":
+              if matched_boxes_in_frame and search_type != "Reference Image":
                 break
-                
-            if best_match is not None:
-              object_found = True
-              x1, y1, x2, y2, label = best_match
-              cv2.rectangle(small_frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-              cv2.putText(small_frame, label, (x1, max(y1-10, 0)), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
-              
-            if object_found:
+
+            if len(matched_boxes_in_frame) > 0:
+              # For target person: resolve crowd overlap and keep only the true target individual
+              if ref_face_enc is not None:
+                matched_boxes_in_frame.sort(key=lambda m: (m.get("offset_norm", 0), m.get("area", 0)))
+                matched_boxes_in_frame = [matched_boxes_in_frame[0]]
+              else:
+                matched_boxes_in_frame.sort(key=lambda m: m["sim"], reverse=True)
+                matched_boxes_in_frame = [matched_boxes_in_frame[0]]
+
+              best_match = matched_boxes_in_frame[0]
+
+              # Draw bounding box ONLY for the matching object
+              for match in matched_boxes_in_frame:
+                bx1, by1, bx2, by2 = match["box"]
+                lbl = match["label"]
+                cv2.rectangle(small_frame, (bx1, by1), (bx2, by2), (0, 255, 0), 2)
+                cv2.putText(small_frame, lbl, (bx1, max(by1 - 10, 0)), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 255, 0), 2)
+
               formatted_time = time.strftime('%M:%S', time.gmtime(timestamp_sec))
               if not found_timestamps or (timestamp_sec - found_timestamps[-1]['seconds']) > 2.0:
                 match_info = formatted_time
                 if search_type == "Reference Image":
-                  match_info += f" (Similarity: {best_sim*100:.1f}%)"
-                  
+                  match_info += f" (Match: {best_match['sim'] * 100:.0f}%)"
+
                 found_timestamps.append({
                   "time_str": match_info,
                   "seconds": timestamp_sec,
                   "frame_img": cv2.cvtColor(small_frame, cv2.COLOR_BGR2RGB)
                 })
-          
           current_frame += 1
         
         cap.release()
@@ -1554,36 +1755,66 @@ elif page == "OCR":
           if video_file:
             import tempfile
             import cv2
+            import math
+            import time
             tfile = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
+            video_file.seek(0)
             tfile.write(video_file.read())
             tfile.close()
-            
+
             cap = cv2.VideoCapture(tfile.name)
             fps = cap.get(cv2.CAP_PROP_FPS)
-            frame_interval = int(fps) if fps > 0 else 30 # 1 frame per second
-            
+            if math.isnan(fps) or fps <= 0:
+              fps = 30.0
+            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            frame_interval = max(1, int(fps * 1.0)) # sample 1 frame per second
+
             frame_count = 0
-            extracted_phrases = set()
+            timeline_results = []
+            seen_texts = set()
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+
             while cap.isOpened():
                 ret, frame = cap.read()
                 if not ret:
                     break
                 if frame_count % frame_interval == 0:
-                    text_results = ocr_reader.extract_text(frame)
-                    for res in text_results:
-                        if len(res['text']) > 1: # Ignore single characters to reduce noise
-                            extracted_phrases.add(res['text'])
+                    sec = frame_count / fps
+                    time_str = time.strftime('%M:%S', time.gmtime(sec))
+                    status_text.text(f"Scanning video for text at {time_str}...")
+                    if total_frames > 0:
+                        progress_bar.progress(min(1.0, frame_count / total_frames))
+
+                    frame_text = ocr_reader.extract_text_simple(frame, min_confidence=0.3)
+                    clean_text = frame_text.strip()
+                    if clean_text:
+                        norm_text = " ".join(clean_text.lower().split())
+                        if norm_text not in seen_texts:
+                            seen_texts.add(norm_text)
+                            timeline_results.append({
+                                "time": time_str,
+                                "text": clean_text
+                            })
                 frame_count += 1
             cap.release()
+            progress_bar.progress(1.0)
+            status_text.empty()
             try:
                 os.unlink(tfile.name)
             except:
                 pass
-            
-            text = " ".join(extracted_phrases)
+
+            if timeline_results:
+                formatted_lines = []
+                for entry in timeline_results:
+                    formatted_lines.append(f"[{entry['time']}]\n{entry['text']}")
+                text = "\n\n".join(formatted_lines)
+            else:
+                text = ""
           else:
             text = ocr_reader.extract_text_simple(cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR))
-          
+
           st.session_state["ocr_text"] = text
       
       if "ocr_text" in st.session_state:
