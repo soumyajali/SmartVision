@@ -459,7 +459,6 @@ NAVIGATION_PAGES = [
     "Vision Chatbot", 
     "Voice Assistant",
     "Object Detection", 
-    "Classification", 
     "OCR", 
     "Face Registration",
     "Analytics",
@@ -1452,49 +1451,6 @@ elif page == "Face Registration":
           st.warning(f" Detected Face: **{name}** (Not closely matching registered faces)")
         else:
           st.info("No face detected in the image. Ensure the face is clearly visible and well-lit.")
-
-
-# CLASSIFICATION 
-
-elif page == "Classification":
-
-  st.markdown("<div class='section-title'> Image Classification</div>", unsafe_allow_html=True)
-  st.markdown("<div class='sub-text'>Upload or capture an image to predict the object class</div>", unsafe_allow_html=True)
-
-  input_type = st.radio("Choose Input", ["Upload Image", "Webcam"], horizontal=True)
-  img = None
-
-  if input_type == "Upload Image":
-    file = st.file_uploader("Upload Image", type=["jpg","jpeg","png"])
-    if file:
-      img = Image.open(file).convert("RGB")
-  else:
-    cam = st.camera_input("Capture Image")
-    if cam:
-      img = Image.open(cam).convert("RGB")
-
-  if img:
-    col1, col2 = st.columns(2)
-
-    with col1:
-      st.markdown("<div class='card-box'><b> Input Image</b></div>", unsafe_allow_html=True)
-      st.image(img, width=420) 
-
-   
-    tensor = transform(img).unsqueeze(0) 
-
-    with torch.no_grad(): logits = cls_model(tensor)
-    probs = torch.softmax(logits, dim=1)[0]
-    idx = torch.argmax(probs).item()
-
-    with col2:
-      st.markdown("<div class='card-box'><b> Result</b></div>", unsafe_allow_html=True)
-      st.markdown(f"<div class='result-label'>{CLS_CLASS_NAMES[idx]}</div>", unsafe_allow_html=True)
-      st.markdown(f"<div class='confidence-label'>Confidence: {probs[idx]:.2f}</div>", unsafe_allow_html=True)
-      
-      # Save classification to database
-      db = get_database()
-      db.add_detection(CLS_CLASS_NAMES[idx], float(probs[idx]))
 
 
 # OBJECT DETECTION 
