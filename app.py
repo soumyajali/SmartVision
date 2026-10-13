@@ -461,7 +461,6 @@ NAVIGATION_PAGES = [
     "Object Detection", 
     "OCR", 
     "Face Registration",
-    "Analytics",
     "History", 
     "Research Evaluation",
     "Settings",
@@ -602,7 +601,7 @@ if page == "Voice Assistant":
     "Your recording is sent to Google for transcription; answers are spoken by the computer running this app."
   )
   st.caption(
-    "Try: “What do you see?”, “How many people?”, “Open Analytics”, "
+    "Try: “What do you see?”, “How many people?”, “Open History”, "
     "“Turn off voice announcements”, or “Start object tracking”."
   )
   st.audio_input("Record a question or command", key="voice_message_audio")
@@ -1687,90 +1686,6 @@ elif page == "Object Detection":
         st.markdown(f"**Uses:** {info['uses']}")
         st.markdown(f"**Safety:** {info['safety']}")
         st.markdown(f"**Interesting Fact:** {info['facts']}")
-
-
-# ANALYTICS PAGE
-
-elif page == "Analytics":
-  st.markdown("<div class='section-title'> Detection Analytics</div>", unsafe_allow_html=True)
-  
-  db = get_database()
-  stats = db.get_detection_stats()
-  object_counts = db.get_object_counts()
-  timeline = db.get_detection_timeline(days=7)
-  
-  # Key Metrics
-  col1, col2, col3, col4 = st.columns(4)
-  with col1:
-    st.metric("Total Detections", stats['total_detections'])
-  with col2:
-    st.metric("Today's Detections", stats['today_detections'])
-  with col3:
-    st.metric("Most Detected", stats['most_detected_object'] or 'N/A')
-  with col4:
-    st.metric("Avg Confidence", f"{stats['average_confidence']:.3f}")
-  
-  st.markdown("---")
-  
-  # Pie Chart
-  if object_counts:
-    st.markdown("### Detection Distribution")
-    fig_pie = go.Figure(data=[go.Pie(
-      labels=list(object_counts.keys()),
-      values=list(object_counts.values()),
-      hole=0.3
-    )])
-    fig_pie.update_layout(title="Object Detection Distribution")
-    st.plotly_chart(fig_pie, width="stretch")
-  
-  # Bar Chart
-  if object_counts:
-    st.markdown("### Detection Counts")
-    fig_bar = go.Figure(data=[go.Bar(
-      x=list(object_counts.keys()),
-      y=list(object_counts.values()),
-      marker_color='skyblue'
-    )])
-    fig_bar.update_layout(
-      title="Detection Counts by Object",
-      xaxis_title="Object",
-      yaxis_title="Count"
-    )
-    st.plotly_chart(fig_bar, width="stretch")
-  
-  # Timeline
-  if timeline:
-    st.markdown("### Detection Timeline (Last 7 Days)")
-    fig_line = go.Figure(data=[go.Scatter(
-      x=[t['date'] for t in timeline],
-      y=[t['count'] for t in timeline],
-      mode='lines+markers',
-      line=dict(color='orange', width=3)
-    )])
-    fig_line.update_layout(
-      title="Detection Timeline",
-      xaxis_title="Date",
-      yaxis_title="Count"
-    )
-    st.plotly_chart(fig_line, width="stretch")
-  
-  # Export Reports
-  st.markdown("---")
-  st.markdown("### Export Reports")
-  detections = db.get_all_detections()
-  
-  col1, col2 = st.columns(2)
-  with col1:
-    if st.button("Generate CSV Report"):
-      report_gen = ReportGenerator()
-      csv_path = report_gen.generate_csv(detections)
-      st.success(f"CSV report generated: {csv_path}")
-  
-  with col2:
-    if st.button("Generate PDF Report"):
-      report_gen = ReportGenerator()
-      pdf_path = report_gen.generate_pdf(detections, stats)
-      st.success(f"PDF report generated: {pdf_path}")
 
 
 # HISTORY PAGE
