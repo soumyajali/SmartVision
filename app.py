@@ -464,7 +464,6 @@ NAVIGATION_PAGES = [
     "History", 
     "Research Evaluation",
     "Settings",
-    "3D Explorer",
     "3D Analytics",
     "Video Fast Review",
     "Drowsiness Monitor",
@@ -622,26 +621,6 @@ if page == "Voice Assistant":
       st.success(st.session_state["voice_response"])
       if get_voice_assistant().engine is None:
         st.warning("Speech output is unavailable; the response is shown as text instead.")
-
-# 3D EXPLORER PAGE
-elif page == "3D Explorer":
-  st.title("Interactive 3D Neural Network Pipeline Explorer")
-  st.markdown("Explore the 3D Vision model architecture. Click on the highlighted components to view technical details.")
-  
-  col1, col2 = st.columns([3, 1])
-  
-  with col1:
-    # Render the custom WebGL component
-    result = render_interactive_viewer()
-  
-  with col2:
-    st.markdown("### Component Info")
-    if result and getattr(result, "clicked_part", None):
-      part_data = result.clicked_part
-      st.markdown(f"**{part_data.get('name', 'Unknown')}**")
-      st.info(part_data.get('desc', 'No description available.'))
-    else:
-      st.write("Click on a 3D component to view its technical specifications.")
 
 # 3D ANALYTICS PAGE
 if page == "3D Analytics":
