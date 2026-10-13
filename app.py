@@ -1876,22 +1876,43 @@ elif page == "OCR":
             "Spanish", "French", "German", "Chinese (simplified)", "Japanese", "Russian", "Arabic"
           ])
           
-          lang_code_map = {
-            "Hindi": "hi", "Telugu": "te", "Tamil": "ta", "Kannada": "kn", "Malayalam": "ml", 
-            "Marathi": "mr", "Bengali": "bn", "Gujarati": "gu", "Punjabi": "pa", "Odia": "or", "Urdu": "ur",
-            "Spanish": "es", "French": "fr", "German": "de", "Chinese (simplified)": "zh-CN",
-            "Japanese": "ja", "Russian": "ru", "Arabic": "ar"
-          }
-          
           if st.button("Translate", type="primary", width="stretch"):
             with st.spinner(f"Translating to {target_lang}..."):
+              google_map = {
+                "Hindi": "hi", "Telugu": "te", "Tamil": "ta", "Kannada": "kn", "Malayalam": "ml", 
+                "Marathi": "mr", "Bengali": "bn", "Gujarati": "gu", "Punjabi": "pa", "Odia": "or", "Urdu": "ur",
+                "Spanish": "es", "French": "fr", "German": "de", "Chinese (simplified)": "zh-CN",
+                "Japanese": "ja", "Russian": "ru", "Arabic": "ar"
+              }
+              mymemory_map = {
+                "Hindi": "hi-IN", "Telugu": "te-IN", "Tamil": "ta-IN", "Kannada": "kn-IN", "Malayalam": "ml-IN", 
+                "Marathi": "mr-IN", "Bengali": "bn-IN", "Gujarati": "gu-IN", "Punjabi": "pa-IN", "Odia": "or-IN", "Urdu": "ur-PK",
+                "Spanish": "es-ES", "French": "fr-FR", "German": "de-DE", "Chinese (simplified)": "zh-CN",
+                "Japanese": "ja-JP", "Russian": "ru-RU", "Arabic": "ar-SA"
+              }
+              translated = None
+              error_msg = None
+              text_to_translate = st.session_state["ocr_text"].strip()
+              
+              # Primary: Google Translator (with size bounds)
               try:
                 from deep_translator import GoogleTranslator
-                translated = GoogleTranslator(source='auto', target=lang_code_map[target_lang]).translate(st.session_state["ocr_text"])
+                target_code = google_map.get(target_lang, "hi")
+                translated = GoogleTranslator(source='auto', target=target_code).translate(text_to_translate[:1500])
+              except Exception as e_google:
+                # Fallback: MyMemory Translator (handles Google 429 rate limits gracefully)
+                try:
+                  from deep_translator import MyMemoryTranslator
+                  target_code = mymemory_map.get(target_lang, "hi-IN")
+                  translated = MyMemoryTranslator(source='en-US', target=target_code).translate(text_to_translate[:500])
+                except Exception as e_mymemory:
+                  error_msg = f"Primary service: {e_google}; Fallback service: {e_mymemory}"
+              
+              if translated:
                 st.info(f"**{target_lang} Translation:**")
                 st.write(translated)
-              except Exception as e:
-                st.error(f"Translation failed: {e}. Please ensure deep-translator is installed.")
+              else:
+                st.error(f"Translation failed: {error_msg}")
         else:
           st.warning("No text could be extracted from this image.")
 
