@@ -33,6 +33,11 @@ from events.alert_manager import AlertManager
 from core.border_analytics import ZoneManager, LoiteringTimer
 from core.ui_3d_component import render_3d_hud
 from core.analytics_3d_component import render_analytics_viewer
+from voice_interaction import (
+  SpeechTranscriptionError,
+  parse_voice_command,
+  transcribe_audio,
+)
 import plotly.graph_objects as go
 import plotly.express as px
 # Removed insecure SSL certificate workaround as per requirements
@@ -47,6 +52,8 @@ if "face_service" not in st.session_state:
   st.session_state["face_service"] = FaceService()
 if "page" not in st.session_state:
   st.session_state["page"] = " Home"
+if "navigation_page" not in st.session_state:
+  st.session_state["navigation_page"] = "Dashboard"
 if "voice_enabled" not in st.session_state:
   st.session_state["voice_enabled"] = True
 if "dark_mode" not in st.session_state:
@@ -409,11 +416,10 @@ if "chatbot" not in st.session_state or st.session_state['chatbot'] is None:
 st.session_state['vision_chatbot'].api_key = st.session_state["openai_api_key"]
 st.session_state['chatbot'].api_key = st.session_state["openai_api_key"]
 
-page = st.sidebar.radio(
-  "Navigation",
-  [
+NAVIGATION_PAGES = [
     "Dashboard", 
     "Vision Chatbot", 
+    "Voice Assistant",
     "Object Detection", 
     "Classification", 
     "OCR", 
@@ -428,8 +434,59 @@ page = st.sidebar.radio(
     "Video Fast Review",
     "Drowsiness Monitor",
     "Border Security (IBVAP)"
-  ],
-  index=0,
+]
+
+
+def process_voice_message():
+  audio = st.session_state.get("voice_message_audio")
+  if audio is None:
+    st.session_state["voice_transcript"] = ""
+    st.session_state["voice_response"] = "Record a question or command first."
+    st.session_state["voice_status"] = "error"
+    return
+
+  try:
+    transcript = transcribe_audio(audio.getvalue())
+  except SpeechTranscriptionError as error:
+    st.session_state["voice_transcript"] = ""
+    st.session_state["voice_response"] = str(error)
+    st.session_state["voice_status"] = "error"
+    return
+
+  st.session_state["voice_transcript"] = transcript
+  command = parse_voice_command(transcript, NAVIGATION_PAGES)
+
+  if command.action == "navigate":
+    st.session_state["navigation_page"] = command.value
+    response = f"Opening {command.value}."
+  elif command.action == "announcements":
+    st.session_state["voice_enabled"] = command.value == "on"
+    response = f"Voice announcements turned {command.value}."
+  elif command.action == "tracking":
+    st.session_state["enable_tracking"] = command.value == "on"
+    response = f"Object tracking turned {command.value}."
+  elif command.action == "reset_announcements":
+    get_voice_assistant().clear_all_announcements()
+    response = "Voice announcements reset."
+  elif command.action == "question":
+    response = st.session_state["chatbot"].ask(
+      command.value,
+      st.session_state.get("last_detections", []),
+    )
+  else:
+    response = "I couldn't match that page. Try saying open dashboard, open settings, or open voice assistant."
+
+  st.session_state["voice_response"] = response
+  st.session_state["voice_status"] = "success"
+  voice_assistant = get_voice_assistant()
+  if voice_assistant.engine is not None:
+    voice_assistant.speak(response)
+
+
+page = st.sidebar.radio(
+  "Navigation",
+  NAVIGATION_PAGES,
+  key="navigation_page",
   label_visibility="collapsed"
 )
 st.session_state["page"] = page
@@ -474,8 +531,42 @@ st.sidebar.markdown("""
 """, unsafe_allow_html=True)
 
 
+# VOICE ASSISTANT PAGE
+if page == "Voice Assistant":
+  st.markdown("<div class='section-title'>Voice Assistant</div>", unsafe_allow_html=True)
+  st.markdown(
+    "<div class='sub-text'>Ask about detected objects or control dashboard features with your voice.</div>",
+    unsafe_allow_html=True,
+  )
+  st.info(
+    "Speech is transcribed online by Google and requires an internet connection. "
+    "Your recording is sent to Google for transcription; answers are spoken by the computer running this app."
+  )
+  st.caption(
+    "Try: “What do you see?”, “How many people?”, “Open Analytics”, "
+    "“Turn off voice announcements”, or “Start object tracking”."
+  )
+  st.audio_input("Record a question or command", key="voice_message_audio")
+  st.button(
+    "Send voice message",
+    type="primary",
+    width="stretch",
+    on_click=process_voice_message,
+  )
+
+  if st.session_state.get("voice_transcript"):
+    st.markdown("**You said:**")
+    st.write(st.session_state["voice_transcript"])
+  if st.session_state.get("voice_response"):
+    if st.session_state.get("voice_status") == "error":
+      st.error(st.session_state["voice_response"])
+    else:
+      st.success(st.session_state["voice_response"])
+      if get_voice_assistant().engine is None:
+        st.warning("Speech output is unavailable; the response is shown as text instead.")
+
 # 3D EXPLORER PAGE
-if page == "3D Explorer":
+elif page == "3D Explorer":
   st.title("Interactive 3D Neural Network Pipeline Explorer")
   st.markdown("Explore the 3D Vision model architecture. Click on the highlighted components to view technical details.")
   
@@ -1460,6 +1551,10 @@ elif page == "Object Detection":
           detected_objects_with_conf.append((name, max(0.5, 1.0 - (conf / 100.0))))
     
     # Voice Assistant integration
+    st.session_state["last_detections"] = [
+      {"object_name": obj, "confidence": confidence}
+      for obj, confidence in detected_objects_with_conf
+    ]
     if st.session_state["voice_enabled"]:
       voice_assistant = get_voice_assistant()
       voice_assistant.reset_announced_objects(detected_objects)

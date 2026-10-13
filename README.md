@@ -19,7 +19,7 @@ Traditional surveillance and vision recognition systems depend on heavy, costly 
 - **Hazard & Dangerous Object Alerting:** Real-time detection of knives, scissors, firearms, and hazardous materials with visual warning banners and automated siren alarms.
 - **Biometric Face Recognition:** MediaPipe Face Landmarker, OpenCV Haar Cascades, and FAISS vector embeddings for registered face identification.
 - **Optical Character Recognition (OCR):** Embedded EasyOCR engine for document screening and text reading.
-- **Voice Assistant & Audio Guidance:** Hands-free offline speech alerts announcing newly detected items, lost objects, and safety hazards.
+- **Voice Assistant & Audio Guidance:** Hands-free speech alerts, spoken questions about the current detections, and voice commands for dashboard navigation and settings.
 - **Interactive Web Dashboard:** Rich Streamlit interface featuring 3D visualizations, live analytics, and detection histories.
 - **Cross-Platform Mobile App:** Flutter-based Android mobile application with live camera screening and on-device processing.
 
@@ -35,6 +35,7 @@ Traditional surveillance and vision recognition systems depend on heavy, costly 
 | 👤 **Face Verification & Recognition** | Recognizes registered identities and flags unknown individuals. |
 | 📄 **Document Screening & OCR** | Extracts text and scanned information from live camera feed. |
 | 🗣️ **Voice Assistant (TTS)** | Context-aware audio feedback (avoids repeated spamming, speaks on fresh detections). |
+| 🎙️ **Voice Questions & Commands** | Ask about detected objects, navigate dashboard pages, and toggle voice announcements or object tracking using spoken commands. Speech-to-text uses Google's online recognition service; an internet connection is required and recordings are sent to Google for transcription. |
 | 📊 **Analytics & Detection History** | SQLite-backed database (`detections.db`) tracking detections, metrics, and trends. |
 | 📱 **Mobile Android App** | Flutter client connecting to the FastAPI backend or running on-device inference. |
 
@@ -102,6 +103,8 @@ pip install -r requirements.txt
 streamlit run app.py
 ```
 Open `http://localhost:8501` in your browser to access the live detection dashboard.
+
+Open **Voice Assistant** in the dashboard navigation to record a question or command. Assistant responses are spoken through the computer running the Streamlit app.
 
 ### 4. Launch FastAPI Server (for Mobile App)
 

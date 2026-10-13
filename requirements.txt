@@ -3,6 +3,7 @@ uvicorn
 pydantic
 python-multipart
 pyttsx3
+SpeechRecognition
 psutil
 reportlab
 pyzbar
