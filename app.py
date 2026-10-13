@@ -1890,21 +1890,55 @@ elif page == "OCR":
                 "Spanish": "es-ES", "French": "fr-FR", "German": "de-DE", "Chinese (simplified)": "zh-CN",
                 "Japanese": "ja-JP", "Russian": "ru-RU", "Arabic": "ar-SA"
               }
+              import re
+              def chunk_text_for_translation(text, max_chars=350):
+                sentences = re.split(r'(\. |\n+|\? |\! )', text)
+                chunks = []
+                current = ''
+                for part in sentences:
+                  if not part:
+                    continue
+                  if len(current) + len(part) <= max_chars:
+                    current += part
+                  else:
+                    if current.strip():
+                      chunks.append(current.strip())
+                    if len(part) > max_chars:
+                      words = part.split()
+                      sub = ''
+                      for w in words:
+                        if len(sub) + len(w) + 1 <= max_chars:
+                          sub += (' ' + w if sub else w)
+                        else:
+                          if sub:
+                            chunks.append(sub)
+                          sub = w
+                      current = sub
+                    else:
+                      current = part
+                if current.strip():
+                  chunks.append(current.strip())
+                return chunks if chunks else [text]
+
+              chunks = chunk_text_for_translation(text_to_translate, max_chars=350)
               translated = None
               error_msg = None
-              text_to_translate = st.session_state["ocr_text"].strip()
-              
-              # Primary: Google Translator (with size bounds)
+
+              # Attempt 1: Google Translator with chunking
               try:
                 from deep_translator import GoogleTranslator
                 target_code = google_map.get(target_lang, "hi")
-                translated = GoogleTranslator(source='auto', target=target_code).translate(text_to_translate[:1500])
+                translator = GoogleTranslator(source='auto', target=target_code)
+                translated_parts = [translator.translate(c) for c in chunks if c.strip()]
+                translated = " ".join(filter(None, translated_parts))
               except Exception as e_google:
-                # Fallback: MyMemory Translator (handles Google 429 rate limits gracefully)
+                # Attempt 2: MyMemory Translator with chunking (handles Google rate limit 429)
                 try:
                   from deep_translator import MyMemoryTranslator
                   target_code = mymemory_map.get(target_lang, "hi-IN")
-                  translated = MyMemoryTranslator(source='en-US', target=target_code).translate(text_to_translate[:500])
+                  translator = MyMemoryTranslator(source='en-US', target=target_code)
+                  translated_parts = [translator.translate(c) for c in chunks if c.strip()]
+                  translated = " ".join(filter(None, translated_parts))
                 except Exception as e_mymemory:
                   error_msg = f"Primary service: {e_google}; Fallback service: {e_mymemory}"
               
