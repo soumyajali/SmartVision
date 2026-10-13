@@ -29,11 +29,9 @@ from services.email_service import get_email_service
 from services.telegram_service import get_telegram_service
 from services.face_service import FaceService
 from core.tracker import ObjectTracker
-from core.interactive_3d_viewer import render_interactive_viewer
 from events.alert_manager import AlertManager
 from core.border_analytics import ZoneManager, LoiteringTimer
 from core.ui_3d_component import render_3d_hud
-from core.analytics_3d_component import render_analytics_viewer
 from voice_interaction import (
   SpeechTranscriptionError,
   parse_voice_command,
@@ -464,7 +462,6 @@ NAVIGATION_PAGES = [
     "History", 
     "Research Evaluation",
     "Settings",
-    "3D Analytics",
     "Video Fast Review",
     "Drowsiness Monitor",
     "Border Security (IBVAP)"
@@ -621,15 +618,6 @@ if page == "Voice Assistant":
       st.success(st.session_state["voice_response"])
       if get_voice_assistant().engine is None:
         st.warning("Speech output is unavailable; the response is shown as text instead.")
-
-# 3D ANALYTICS PAGE
-if page == "3D Analytics":
-  st.title(" 3D Detection Analytics")
-  st.markdown("Interactive 3D visualization of object detection history. Scroll to zoom, drag to rotate.")
-  
-  # We pass empty data to trigger the component's internal mock data generation for demonstration,
-  # or this could be wired up to actual detection history from the database.
-  render_analytics_viewer(history_data=[])
 
 
 # HOME PAGE (Dashboard)
