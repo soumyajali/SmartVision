@@ -3,7 +3,11 @@ Voice Assistant Module for Smart Vision AI
 Provides offline text-to-speech functionality using pyttsx3
 """
 
-import pyttsx3
+try:
+    import pyttsx3
+except ModuleNotFoundError:
+    pyttsx3 = None
+
 import threading
 import queue
 from typing import Set, Optional
@@ -21,11 +25,15 @@ class VoiceAssistant:
         self.speech_thread = None
         self.thread_running = False
         self.announced_objects: Set[str] = set()
-        self.engine: Optional[pyttsx3.Engine] = None
+        self.engine = None
         self._initialize_engine()
         
     def _initialize_engine(self):
         """Initialize the pyttsx3 engine for speech synthesis."""
+        if pyttsx3 is None:
+            print("Warning: pyttsx3 is not installed. Voice assistant will be disabled.")
+            self.engine = None
+            return
         try:
             self.engine = pyttsx3.init()
             # Set speech properties for better voice output

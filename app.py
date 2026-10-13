@@ -1855,8 +1855,10 @@ elif page == "QR Scanner":
   st.markdown("<div class='sub-text'>Upload an image to scan for QR codes and barcodes</div>", unsafe_allow_html=True)
   
   qr_scanner = QRBarcodeScanner()
+  if qr_scanner.pyzbar is None:
+    st.warning("QR/barcode scanning is unavailable because the native ZBar library could not be loaded.")
   
-  file = st.file_uploader("Upload Image for Scanning", type=["jpg", "jpeg", "png"])
+  file = st.file_uploader("Upload Image for Scanning", type=["jpg", "jpeg", "png"], disabled=qr_scanner.pyzbar is None)
   
   if file:
     img = Image.open(file)

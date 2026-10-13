@@ -230,8 +230,8 @@ class QRBarcodeScanner:
         try:
             from pyzbar import pyzbar
             self.pyzbar = pyzbar
-        except ImportError:
-            print("Warning: pyzbar not installed. QR/barcode scanning disabled.")
+        except Exception as exc:
+            print(f"Warning: QR/barcode scanning unavailable: {exc}")
             self.pyzbar = None
     
     def scan(self, image: np.ndarray) -> List[Dict[str, any]]:
