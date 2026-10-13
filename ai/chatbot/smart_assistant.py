@@ -33,25 +33,36 @@ class SmartVisionAssistant:
     def clear_history(self):
         self.history = []
 
-    def _build_scene_context(self, detections: List[Dict[str, Any]], ocr_text: str = "") -> str:
+    def _build_scene_context(self, detections: List[Any], ocr_text: str = "", counts: Optional[Dict[str, int]] = None) -> str:
         """Constructs rich contextual description of the current visual scene."""
-        if not detections and not ocr_text:
+        if not detections and not ocr_text and not counts:
             return "The current camera/image feed has no active detections visible."
 
         item_counts = {}
         items_with_loc = []
         for det in detections:
-            name = det.get('object_name', det.get('label', 'unknown')).lower()
-            conf = det.get('confidence', 0.0)
-            item_counts[name] = item_counts.get(name, 0) + 1
-            
-            bbox = det.get('bbox', [])
-            if bbox and len(bbox) >= 4:
-                xc = (bbox[0] + bbox[2]) / 2.0
-                loc = "left" if xc < 250 else ("right" if xc > 450 else "center")
-                items_with_loc.append(f"{name} ({conf*100:.0f}% confidence, {loc} area)")
-            else:
+            if isinstance(det, str):
+                name = det.lower().strip()
+                conf = 0.95
+                item_counts[name] = item_counts.get(name, 0) + 1
                 items_with_loc.append(f"{name} ({conf*100:.0f}% confidence)")
+            elif isinstance(det, dict):
+                name = str(det.get('object_name', det.get('label', 'unknown'))).lower().strip()
+                conf = float(det.get('confidence', 0.9))
+                item_counts[name] = item_counts.get(name, 0) + 1
+                
+                bbox = det.get('bbox', [])
+                if bbox and len(bbox) >= 4:
+                    xc = (bbox[0] + bbox[2]) / 2.0
+                    loc = "left" if xc < 250 else ("right" if xc > 450 else "center")
+                    items_with_loc.append(f"{name} ({conf*100:.0f}% confidence, {loc} area)")
+                else:
+                    items_with_loc.append(f"{name} ({conf*100:.0f}% confidence)")
+
+        if counts and isinstance(counts, dict):
+            for k, v in counts.items():
+                k_clean = str(k).lower().strip()
+                item_counts[k_clean] = max(item_counts.get(k_clean, 0), int(v))
 
         summary = ", ".join([f"{c} {n}{'s' if c > 1 else ''}" for n, c in item_counts.items()])
         context = f"CURRENT CAMERA VISION STATE:\n- Detected Objects Summary: {summary}\n- Detection Details: {', '.join(items_with_loc[:8])}"
@@ -154,7 +165,7 @@ class SmartVisionAssistant:
         except Exception:
             return None
 
-    def _generative_builtin_engine(self, question: str, detections: List[Dict[str, Any]], ocr_text: str = "") -> str:
+    def _generative_builtin_engine(self, question: str, detections: List[Any], ocr_text: str = "", counts: Optional[Dict[str, int]] = None) -> str:
         """
         Adaptive Zero-Key Conversational Engine.
         Provides fluid, natural, human-like dialogue (ChatGPT & Gemini quality)
@@ -168,9 +179,17 @@ class SmartVisionAssistant:
         # Build object inventory
         item_counts = {}
         for det in detections:
-            n = det.get('object_name', det.get('label', 'unknown')).lower()
-            conf = det.get('confidence', 0.0)
-            item_counts[n] = item_counts.get(n, 0) + 1
+            if isinstance(det, str):
+                n = det.lower().strip()
+                item_counts[n] = item_counts.get(n, 0) + 1
+            elif isinstance(det, dict):
+                n = str(det.get('object_name', det.get('label', 'unknown'))).lower().strip()
+                item_counts[n] = item_counts.get(n, 0) + 1
+
+        if counts and isinstance(counts, dict):
+            for k, v in counts.items():
+                k_clean = str(k).lower().strip()
+                item_counts[k_clean] = max(item_counts.get(k_clean, 0), int(v))
 
         all_items = list(item_counts.keys())
         summary_str = ", ".join([f"**{c} {n}{'s' if c > 1 else ''}**" for n, c in item_counts.items()]) if item_counts else "no detected objects"
@@ -489,12 +508,12 @@ class SmartVisionAssistant:
                 f"I can help break down concepts, brainstorm ideas, write code, or analyze visual inputs."
             )
 
-    def ask(self, question: str, context_detections: Optional[List[Dict[str, Any]]] = None, ocr_text: str = "") -> str:
+    def ask(self, question: str, context_detections: Optional[List[Any]] = None, ocr_text: str = "", counts: Optional[Dict[str, int]] = None) -> str:
         """Main conversational entry point."""
         if context_detections is None:
             context_detections = []
             
-        scene_context = self._build_scene_context(context_detections, ocr_text)
+        scene_context = self._build_scene_context(context_detections, ocr_text, counts)
         response = None
 
         # 1. Check selected provider or auto-detect
@@ -506,7 +525,7 @@ class SmartVisionAssistant:
 
         # 2. Adaptive Zero-Key Conversational Engine Fallback
         if not response:
-            response = self._generative_builtin_engine(question, context_detections, ocr_text)
+            response = self._generative_builtin_engine(question, context_detections, ocr_text, counts)
 
         # Maintain conversational history
         self.history.append({"role": "user", "content": question})

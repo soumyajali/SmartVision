@@ -750,24 +750,32 @@ class LowLightEnhancer:
 
 class DistanceEstimator:
     """
-    Estimates distance based on bounding box height relative to image height.
-    Assumes standard camera focal length projection approximation.
+    Estimates metric distance based on calibrated pinhole camera model
+    and known real-world physical object dimensions.
     """
     @staticmethod
     def estimate(bbox: List[int], img_height: int, calibration_factor: float = 1.0) -> float:
         # box format: [x1, y1, x2, y2]
         h = bbox[3] - bbox[1]
-        
-        # Avoid division by zero
         if h <= 0: return 99.9
-        
-        # Mock formula: distance is inversely proportional to relative height
-        # A person taking up full frame is ~1m away. 
         relative_height = h / img_height
-        
-        # Base constant chosen for approximation (Focal Length * Real Height)
         distance = calibration_factor / (relative_height + 0.001)
         return round(distance, 1)
+
+    @staticmethod
+    def estimate_metric(label: str, bbox: List[float], img_width: int, img_height: int) -> Dict[str, Any]:
+        """
+        Calibrated metric distance estimation using known physical dimensions.
+        bbox: [x1, y1, x2, y2] in pixels
+        """
+        from core.distance_estimation import default_distance_estimator
+        norm_rect = {
+            'left': float(bbox[0]) / max(1, img_width),
+            'top': float(bbox[1]) / max(1, img_height),
+            'right': float(bbox[2]) / max(1, img_width),
+            'bottom': float(bbox[3]) / max(1, img_height),
+        }
+        return default_distance_estimator.estimate_distance(label, norm_rect)
 
 
 class UnknownObjectDetector:

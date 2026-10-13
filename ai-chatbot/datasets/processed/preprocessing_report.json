@@ -1,0 +1,11 @@
+{
+  "sources": {
+    "dolly_15k": 1495,
+    "gsm8k": 1500,
+    "oasst1": 187
+  },
+  "duplicates_removed": 300,
+  "total_valid_conversations": 3182,
+  "train_count": 2863,
+  "val_count": 319
+}

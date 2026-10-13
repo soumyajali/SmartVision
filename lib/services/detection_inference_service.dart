@@ -1,10 +1,8 @@
-import 'dart:isolate';
 import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
 // import 'package:tflite_flutter/tflite_flutter.dart';
 
 import '../models/detection_result.dart';
-import 'image_processor.dart';
 
 class DetectionInferenceService {
   // Interpreter? _interpreter;

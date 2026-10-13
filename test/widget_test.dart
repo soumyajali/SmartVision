@@ -1,25 +1,50 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
+import 'package:provider/provider.dart';
 
 import 'package:smart_vision/app.dart';
+import 'package:smart_vision/controllers/detection_controller.dart';
+import 'package:smart_vision/controllers/statistics_controller.dart';
+import 'package:smart_vision/services/camera_service.dart';
+import 'package:smart_vision/services/database_service.dart';
+import 'package:smart_vision/services/speech_service.dart';
+import 'package:smart_vision/services/statistics_service.dart';
+import 'package:smart_vision/services/tflite_service.dart';
 
 void main() {
-  testWidgets('App loads smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const SmartVisionApp());
+  testWidgets('SmartVision AI smoke test', (WidgetTester tester) async {
+    final camera = CameraService();
+    final tflite = TFLiteService();
+    final speech = SpeechService();
+    final db = DatabaseService();
+    final stats = StatisticsService(db);
+    final statsCtrl = StatisticsController(stats);
+    final detectionCtrl = DetectionController(camera, tflite, speech, db);
 
-    // Wait for splash screen or any initial animations
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider.value(value: camera),
+          ChangeNotifierProvider.value(value: tflite),
+          ChangeNotifierProvider.value(value: speech),
+          Provider.value(value: db),
+          Provider.value(value: stats),
+          ChangeNotifierProvider.value(value: statsCtrl),
+          ChangeNotifierProvider.value(value: detectionCtrl),
+        ],
+        child: const SmartVisionApp(),
+      ),
+    );
+
+    // Initial frame loads SplashScreen
+    expect(find.byType(MaterialApp), findsOneWidget);
+    expect(find.text('SmartVision AI'), findsOneWidget);
+
+    // Advance time past splash timer to navigate to Home
+    await tester.pump(const Duration(milliseconds: 2000));
     await tester.pumpAndSettle();
 
-    // Verify that the app loaded without crashing.
-    expect(find.byType(MaterialApp), findsOneWidget);
+    // Verify Home loaded
+    expect(find.text('SmartVision AI Sentinel'), findsOneWidget);
   });
 }

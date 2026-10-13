@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Smart AI Chatbot | Open-Source LLM</title>
+  <meta name="description" content="Custom ChatGPT-style conversational assistant fine-tuned on real instruction datasets with RAG document grounding." />
+  
+  <!-- Modern Typography -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  
+  <!-- Highlight.js for Code Highlighting -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <!-- Marked.js for Markdown Rendering -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <div class="app-layout">
+    <!-- Collapsible Sidebar -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <div class="brand">
+          <div class="brand-icon">✨</div>
+          <span class="brand-title">Smart Vision AI</span>
+        </div>
+        <button class="icon-btn close-sidebar-btn" id="closeSidebarBtn" title="Close Sidebar">✕</button>
+      </div>
+
+      <div class="sidebar-actions">
+        <button class="new-chat-btn" id="newChatBtn">
+          <span class="btn-icon">＋</span>
+          <span>New Chat</span>
+          <kbd class="shortcut-kbd">⌘K</kbd>
+        </button>
+      </div>
+
+      <div class="sessions-container">
+        <div class="section-label">Recent Conversations</div>
+        <div class="sessions-list" id="sessionsList">
+          <!-- Session items dynamically injected -->
+        </div>
+      </div>
+
+      <div class="sidebar-footer">
+        <div class="model-badge" id="modelStatusBadge">
+          <span class="pulse-indicator"></span>
+          <span class="badge-text" id="modelBadgeText">Qwen2.5-0.5B + LoRA</span>
+        </div>
+        
+        <div class="footer-actions">
+          <button class="footer-action-btn" id="openRagBtn" title="Knowledge Base (RAG)">
+            <span>📚 Knowledge Base</span>
+            <span class="rag-count-pill" id="ragCountPill">0</span>
+          </button>
+          <button class="footer-action-btn" id="openSettingsBtn" title="Chatbot Settings">
+            <span>⚙️ Settings</span>
+          </button>
+          <button class="footer-action-btn danger" id="clearAllHistoryBtn" title="Clear All History">
+            <span>🗑️ Clear History</span>
+          </button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Chat Workspace -->
+    <main class="chat-workspace">
+      <!-- Top Navigation Bar -->
+      <header class="top-nav">
+        <div class="nav-left">
+          <button class="icon-btn mobile-menu-btn" id="openSidebarBtn" title="Open Sidebar">☰</button>
+          <h1 class="chat-title" id="activeChatTitle">New Conversation</h1>
+        </div>
+
+        <div class="nav-right">
+          <!-- RAG Quick Toggle -->
+          <div class="rag-toggle-wrapper">
+            <label class="switch-label" title="Enable document grounding via RAG">
+              <input type="checkbox" id="ragToggleCheckbox">
+              <span class="slider"></span>
+              <span class="label-text">RAG Search</span>
+            </label>
+          </div>
+
+          <!-- Settings Button -->
+          <button class="icon-btn" id="navSettingsBtn" title="Model & Prompt Settings">⚙️</button>
+        </div>
+      </header>
+
+      <!-- Chat Messages Scroll Container -->
+      <div class="chat-scroll-container" id="chatScrollContainer">
+        <!-- Empty State Hero -->
+        <div class="empty-hero" id="emptyHero">
+          <div class="hero-icon">🤖</div>
+          <h2 class="hero-title">How can I assist you today?</h2>
+          <p class="hero-subtitle">Powered by an open-source Qwen language model fine-tuned on real instruction datasets with local RAG grounding.</p>
+          
+          <div class="suggestion-grid">
+            <button class="suggestion-card" data-prompt="Explain the difference between supervised fine-tuning (SFT) and RAG.">
+              <span class="card-title">💡 SFT vs RAG</span>
+              <span class="card-desc">Compare fine-tuning vs document retrieval grounding</span>
+            </button>
+            <button class="suggestion-card" data-prompt="Solve this math problem step-by-step: A store has 120 books. It sells 40% on Monday and 25 books on Tuesday. How many books remain?">
+              <span class="card-title">📐 Math Reasoning</span>
+              <span class="card-desc">Multi-step mathematical problem solving</span>
+            </button>
+            <button class="suggestion-card" data-prompt="Write a Python script using PyTorch that trains a simple neural network on synthetic data.">
+              <span class="card-title">🐍 Code Generation</span>
+              <span class="card-desc">Write clean, production-ready Python code</span>
+            </button>
+            <button class="suggestion-card" data-prompt="Summarize the key trade-offs between local Apple Silicon training and Google Colab cloud GPUs.">
+              <span class="card-title">⚡ Local vs Cloud</span>
+              <span class="card-desc">Hardware trade-offs for LLM development</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Dynamic Message Stream -->
+        <div class="messages-stream" id="messagesStream"></div>
+      </div>
+
+      <!-- Bottom Chat Input Bar -->
+      <div class="input-container">
+        <form class="chat-form" id="chatForm">
+          <div class="input-box-wrapper">
+            <button type="button" class="rag-attach-btn" id="attachDocBtn" title="Upload document to Knowledge Base">
+              📎
+            </button>
+            
+            <textarea
+              id="chatInput"
+              rows="1"
+              placeholder="Ask anything... (Shift+Enter for newline)"
+              autocomplete="off"
+            ></textarea>
+            
+            <button type="submit" class="send-btn" id="sendBtn" title="Send message">
+              <span class="send-icon">➤</span>
+            </button>
+          </div>
+        </form>
+        <div class="input-footer-caption">
+          Runs locally on Apple Silicon · Fine-tuned with LoRA · Grounded with local documents
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- RAG Knowledge Base Modal -->
+  <div class="modal-overlay" id="ragModalOverlay">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <h3>📚 Document Knowledge Base (RAG)</h3>
+          <p class="modal-subtitle">Upload local files (.txt, .md, .py, .pdf, .json) to ground your chatbot's answers with verified citations.</p>
+        </div>
+        <button class="icon-btn close-modal-btn" id="closeRagModalBtn">✕</button>
+      </div>
+
+      <div class="modal-body">
+        <!-- File Dropzone -->
+        <div class="file-dropzone" id="fileDropzone">
+          <input type="file" id="fileInput" accept=".txt,.md,.py,.json,.csv,.pdf" style="display: none;" />
+          <div class="dropzone-icon">📁</div>
+          <div class="dropzone-text">Click or drag & drop files here</div>
+          <div class="dropzone-subtext">Supported: Text, Markdown, Python, JSON, CSV, PDF</div>
+        </div>
+        
+        <div class="upload-progress-bar" id="uploadProgressBar" style="display: none;">
+          <div class="progress-fill"></div>
+        </div>
+
+        <!-- Indexed Documents Table -->
+        <div class="doc-list-section">
+          <div class="section-header-row">
+            <h4>Indexed Documents</h4>
+            <button class="text-btn danger" id="clearAllDocsBtn">Clear All</button>
+          </div>
+          <div class="doc-table-container">
+            <table class="doc-table">
+              <thead>
+                <tr>
+                  <th>Filename</th>
+                  <th>Words</th>
+                  <th>Chunks</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="ragDocTableBody">
+                <tr><td colspan="4" class="empty-table-msg">No documents indexed yet.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Retrieval Tester -->
+        <div class="retrieval-tester">
+          <h4>Test Document Search</h4>
+          <div class="tester-input-row">
+            <input type="text" id="ragTestInput" placeholder="Enter query to test TF-IDF retrieval..." />
+            <button type="button" class="primary-btn" id="runTestSearchBtn">Search</button>
+          </div>
+          <div class="retrieval-results" id="ragTestResults"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings Modal -->
+  <div class="modal-overlay" id="settingsModalOverlay">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <h3>⚙️ Chatbot Settings</h3>
+          <p class="modal-subtitle">Configure model temperature, response length, and system persona.</p>
+        </div>
+        <button class="icon-btn close-modal-btn" id="closeSettingsModalBtn">✕</button>
+      </div>
+
+      <div class="modal-body">
+        <!-- System Persona Presets -->
+        <div class="setting-group">
+          <label class="setting-label">System Persona Prompt</label>
+          <div class="preset-pills">
+            <button type="button" class="pill-btn active" data-preset="general">General AI</button>
+            <button type="button" class="pill-btn" data-preset="coder">Senior Developer</button>
+            <button type="button" class="pill-btn" data-preset="math">Math & Logic Tutor</button>
+            <button type="button" class="pill-btn" data-preset="analyst">Precise RAG Analyst</button>
+          </div>
+          <textarea id="systemPromptInput" rows="3" class="text-input"></textarea>
+        </div>
+
+        <!-- Temperature Slider -->
+        <div class="setting-group">
+          <div class="slider-header">
+            <label class="setting-label">Temperature: <span id="tempValueDisplay">0.7</span></label>
+            <span class="setting-hint">Higher = creative, Lower = deterministic</span>
+          </div>
+          <input type="range" id="temperatureSlider" min="0.0" max="1.5" step="0.05" value="0.7" class="slider-input" />
+        </div>
+
+        <!-- Max Tokens Slider -->
+        <div class="setting-group">
+          <div class="slider-header">
+            <label class="setting-label">Max New Tokens: <span id="maxTokensDisplay">512</span></label>
+            <span class="setting-hint">Maximum length of assistant response</span>
+          </div>
+          <input type="range" id="maxTokensSlider" min="64" max="1024" step="32" value="512" class="slider-input" />
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="primary-btn" id="saveSettingsBtn">Save Changes</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

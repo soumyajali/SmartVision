@@ -136,8 +136,8 @@ class DocumentScreeningService {
     );
   }
 
-  // Example Dart calculation for cosine similarity
-  double _cosineSimilarity(List<double> a, List<double> b) {
+  /// Utility calculation for cosine similarity
+  static double cosineSimilarity(List<double> a, List<double> b) {
     if (a.length != b.length) return 0.0;
     double dotProduct = 0.0;
     double normA = 0.0;

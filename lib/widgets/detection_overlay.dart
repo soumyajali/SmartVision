@@ -1,15 +1,18 @@
 import 'package:flutter/material.dart';
+import '../core/constants/app_colors.dart';
 import '../models/detection_result.dart';
 import '../services/image_processor.dart';
 
 class DetectionOverlay extends StatelessWidget {
   final List<DetectionResult> detections;
   final Size screenSize;
+  final Color? boxColor;
 
   const DetectionOverlay({
     super.key,
     required this.detections,
     required this.screenSize,
+    this.boxColor,
   });
 
   @override
@@ -22,7 +25,8 @@ class DetectionOverlay extends StatelessWidget {
       size: screenSize,
       painter: DetectionBoxPainter(
         detections: detections,
-        primaryColor: Theme.of(context).colorScheme.primary,
+        primaryColor: boxColor ?? AppColors.neonAccent,
+        deepViolet: AppColors.deepViolet,
       ),
     );
   }
@@ -31,39 +35,55 @@ class DetectionOverlay extends StatelessWidget {
 class DetectionBoxPainter extends CustomPainter {
   final List<DetectionResult> detections;
   final Color primaryColor;
+  final Color deepViolet;
 
   DetectionBoxPainter({
     required this.detections,
     required this.primaryColor,
+    required this.deepViolet,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
-    final boxPaint = Paint()
-      ..color = primaryColor
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 3.0;
-
-    final bgPaint = Paint()
-      ..color = primaryColor
-      ..style = PaintingStyle.fill;
-
-    // YOLO model input size is typically 640x640
     final double modelInputSize = ImageProcessor.modelInputSize.toDouble();
-    
-    // Calculate scale factors to map model coordinates to screen coordinates
-    // Assuming the camera preview uses BoxFit.cover and fills the screen,
-    // the aspect ratio of the model (1:1) differs from the screen aspect ratio.
-    // The image was resized to 640x640 (which stretches it if aspect ratios don't match,
-    // or crops it depending on how the camera frame is fed).
-    // Standard approach: scale X and Y independently if the camera frame was squash-resized.
+    if (modelInputSize <= 0) return;
+
     final double scaleX = size.width / modelInputSize;
     final double scaleY = size.height / modelInputSize;
 
+    // Glowing border paint
+    final glowPaint = Paint()
+      ..color = primaryColor.withValues(alpha: 0.35)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 6.0
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4.0);
+
+    // Primary sharp border paint
+    final boxPaint = Paint()
+      ..color = primaryColor
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.0;
+
+    // Text tag background
+    final tagBgPaint = Paint()
+      ..color = AppColors.cardBackground.withValues(alpha: 0.92)
+      ..style = PaintingStyle.fill;
+
+    final tagBorderPaint = Paint()
+      ..color = primaryColor.withValues(alpha: 0.8)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.0;
+
+    // Corner reticle paint
+    final cornerPaint = Paint()
+      ..color = primaryColor
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3.5
+      ..strokeCap = StrokeCap.round;
+
     for (final detection in detections) {
-      // Scale bounding box from model coordinates to screen coordinates
       final rect = detection.boundingBox;
-      
+
       final scaledRect = Rect.fromLTRB(
         rect.left * scaleX,
         rect.top * scaleY,
@@ -71,16 +91,39 @@ class DetectionBoxPainter extends CustomPainter {
         rect.bottom * scaleY,
       );
 
-      // Draw bounding box
-      canvas.drawRect(scaledRect, boxPaint);
+      final rrect = RRect.fromRectAndRadius(scaledRect, const Radius.circular(8));
 
-      // Draw label text
+      // Draw subtle glow
+      canvas.drawRRect(rrect, glowPaint);
+      // Draw primary box
+      canvas.drawRRect(rrect, boxPaint);
+
+      // Draw futuristic corner brackets / reticles
+      final double cornerLen = (scaledRect.width * 0.15).clamp(10.0, 24.0);
+      // Top-Left
+      canvas.drawLine(Offset(scaledRect.left, scaledRect.top + cornerLen), Offset(scaledRect.left, scaledRect.top), cornerPaint);
+      canvas.drawLine(Offset(scaledRect.left, scaledRect.top), Offset(scaledRect.left + cornerLen, scaledRect.top), cornerPaint);
+      // Top-Right
+      canvas.drawLine(Offset(scaledRect.right - cornerLen, scaledRect.top), Offset(scaledRect.right, scaledRect.top), cornerPaint);
+      canvas.drawLine(Offset(scaledRect.right, scaledRect.top), Offset(scaledRect.right, scaledRect.top + cornerLen), cornerPaint);
+      // Bottom-Left
+      canvas.drawLine(Offset(scaledRect.left, scaledRect.bottom - cornerLen), Offset(scaledRect.left, scaledRect.bottom), cornerPaint);
+      canvas.drawLine(Offset(scaledRect.left, scaledRect.bottom), Offset(scaledRect.left + cornerLen, scaledRect.bottom), cornerPaint);
+      // Bottom-Right
+      canvas.drawLine(Offset(scaledRect.right - cornerLen, scaledRect.bottom), Offset(scaledRect.right, scaledRect.bottom), cornerPaint);
+      canvas.drawLine(Offset(scaledRect.right, scaledRect.bottom), Offset(scaledRect.right, scaledRect.bottom - cornerLen), cornerPaint);
+
+      // Format label text
+      final percentage = (detection.confidence * 100).toStringAsFixed(0);
+      final labelText = '${detection.label.toUpperCase()} $percentage%';
+
       final textSpan = TextSpan(
-        text: detection.toString(),
+        text: labelText,
         style: const TextStyle(
-          color: Colors.white,
-          fontSize: 14,
-          fontWeight: FontWeight.bold,
+          color: AppColors.primaryText,
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.5,
         ),
       );
 
@@ -90,25 +133,40 @@ class DetectionBoxPainter extends CustomPainter {
       );
       textPainter.layout();
 
-      // Draw background for text
-      final bgRect = Rect.fromLTWH(
-        scaledRect.left,
-        scaledRect.top - textPainter.height - 4,
-        textPainter.width + 8,
-        textPainter.height + 4,
-      );
-      canvas.drawRect(bgRect, bgPaint);
+      // Position the tag above the bounding box if space permits, else inside
+      final double tagHeight = textPainter.height + 8;
+      final double tagWidth = textPainter.width + 16;
+      final double tagTop = (scaledRect.top - tagHeight >= 4)
+          ? scaledRect.top - tagHeight
+          : scaledRect.top + 4;
+      final double tagLeft = scaledRect.left;
 
-      // Draw text
+      final tagRRect = RRect.fromRectAndRadius(
+        Rect.fromLTWH(tagLeft, tagTop, tagWidth, tagHeight),
+        const Radius.circular(6),
+      );
+
+      canvas.drawRRect(tagRRect, tagBgPaint);
+      canvas.drawRRect(tagRRect, tagBorderPaint);
+
+      // Draw dot indicator inside tag
+      final dotPaint = Paint()
+        ..color = primaryColor
+        ..style = PaintingStyle.fill;
+      canvas.drawCircle(Offset(tagLeft + 8, tagTop + tagHeight / 2), 3, dotPaint);
+
+      // Paint text
       textPainter.paint(
         canvas,
-        Offset(scaledRect.left + 4, scaledRect.top - textPainter.height - 2),
+        Offset(tagLeft + 14, tagTop + 4),
       );
     }
   }
 
   @override
   bool shouldRepaint(covariant DetectionBoxPainter oldDelegate) {
-    return oldDelegate.detections != detections || oldDelegate.primaryColor != primaryColor;
+    return oldDelegate.detections != detections ||
+        oldDelegate.primaryColor != primaryColor ||
+        oldDelegate.deepViolet != deepViolet;
   }
 }

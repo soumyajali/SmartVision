@@ -1,0 +1,62 @@
+{
+  "download_timestamp": null,
+  "datasets": {
+    "dolly_15k": {
+      "status": "DOWNLOADED",
+      "hf_id": "databricks/databricks-dolly-15k",
+      "license": "Apache-2.0",
+      "records_saved": 1500,
+      "local_path": "/Users/sowmya/Desktop/SmartVision-main/ai-chatbot/datasets/raw/dolly_15k_raw.jsonl",
+      "columns": [
+        "instruction",
+        "context",
+        "response",
+        "category"
+      ]
+    },
+    "gsm8k": {
+      "status": "DOWNLOADED",
+      "hf_id": "openai/gsm8k",
+      "license": "MIT",
+      "records_saved": 1500,
+      "local_path": "/Users/sowmya/Desktop/SmartVision-main/ai-chatbot/datasets/raw/gsm8k_raw.jsonl",
+      "columns": [
+        "question",
+        "answer"
+      ]
+    },
+    "oasst1": {
+      "status": "DOWNLOADED",
+      "hf_id": "OpenAssistant/oasst1",
+      "license": "Apache-2.0",
+      "records_saved": 1500,
+      "local_path": "/Users/sowmya/Desktop/SmartVision-main/ai-chatbot/datasets/raw/oasst1_raw.jsonl",
+      "columns": [
+        "message_id",
+        "parent_id",
+        "user_id",
+        "created_date",
+        "text",
+        "role",
+        "lang",
+        "review_count",
+        "review_result",
+        "deleted",
+        "rank",
+        "synthetic",
+        "model_name",
+        "detoxify",
+        "message_tree_id",
+        "tree_state",
+        "emojis",
+        "labels"
+      ]
+    },
+    "lmsys_chat_1m": {
+      "status": "GATED_OR_REQUIRES_AUTH",
+      "hf_id": "lmsys/lmsys-chat-1m",
+      "license": "CC-BY-NC-4.0 (Non-Commercial, Gated)",
+      "error": "Dataset 'lmsys/lmsys-chat-1m' is a gated dataset on the Hub. You must be authenticated to access it."
+    }
+  }
+}

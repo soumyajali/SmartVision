@@ -1,0 +1,13 @@
+# Datasets & Checkpoints (Avoid committing large binary weights)
+datasets/raw/*.jsonl
+checkpoints/**/*.safetensors
+backend/data/*.json
+backend/data/rag_documents/*
+
+# Python & Environment
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.env
+.DS_Store
