@@ -4,6 +4,7 @@ import time
 import cv2
 import numpy as np
 import base64
+from typing import Optional, Dict, Any, List
 from fastapi import FastAPI, HTTPException, Body
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
@@ -59,7 +60,11 @@ class ImageRequest(BaseModel):
 
 class ChatbotRequest(BaseModel):
     query: str
-    context: dict
+    context: Optional[Dict[str, Any]] = None
+    provider: Optional[str] = "auto"
+    gemini_key: Optional[str] = ""
+    openai_key: Optional[str] = ""
+    ocr_text: Optional[str] = ""
 
 def decode_image(base64_str: str) -> np.ndarray:
     try:
@@ -163,14 +168,30 @@ async def recognize_face(req: ImageRequest):
 
 @app.post('/chatbot/query')
 async def chatbot_query(req: ChatbotRequest):
-    # Rule-based processing based on context for now
-    query_lower = req.query.lower()
-    
-    if "how many" in query_lower and "person" in query_lower:
-        # Check context
-        return {"response": "I see some people."}
-    
-    return {"response": "I heard your query."}
+    try:
+        from ai.chatbot.smart_assistant import get_smart_assistant
+        assistant = get_smart_assistant()
+        assistant.set_provider_and_keys(
+            provider=req.provider or "auto",
+            gemini_key=req.gemini_key or os.environ.get("GEMINI_API_KEY", ""),
+            openai_key=req.openai_key or os.environ.get("OPENAI_API_KEY", "")
+        )
+        ctx = req.context or {}
+        detections = ctx.get("detections", [])
+        ocr_text = req.ocr_text or ctx.get("ocr_text", "")
+        
+        reply = assistant.ask(
+            question=req.query,
+            context_detections=detections,
+            ocr_text=ocr_text
+        )
+        return {
+            "response": reply,
+            "provider": assistant.provider,
+            "status": "success"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == '__main__':
     uvicorn.run(app, host="0.0.0.0", port=5000)

@@ -461,15 +461,28 @@ else:
 st.sidebar.markdown("### SMART VISION")
 st.sidebar.markdown("<small style='color: #64748b;'>Real-Time Object Detection</small>", unsafe_allow_html=True)
 
-st.session_state["openai_api_key"] = ""
-if "vision_chatbot" not in st.session_state or st.session_state['vision_chatbot'] is None:
-  st.session_state['vision_chatbot'] = VisionChatbot(api_key=st.session_state["openai_api_key"])
-if "chatbot" not in st.session_state or st.session_state['chatbot'] is None:
-  st.session_state['chatbot'] = VisionChatbot(api_key=st.session_state["openai_api_key"])
+if "ai_provider" not in st.session_state:
+  st.session_state["ai_provider"] = "auto"
+if "gemini_api_key" not in st.session_state:
+  st.session_state["gemini_api_key"] = os.environ.get("GEMINI_API_KEY", "")
+if "openai_api_key" not in st.session_state:
+  st.session_state["openai_api_key"] = os.environ.get("OPENAI_API_KEY", "")
 
-# Update api key if it changes
-st.session_state['vision_chatbot'].api_key = st.session_state["openai_api_key"]
-st.session_state['chatbot'].api_key = st.session_state["openai_api_key"]
+if "vision_chatbot" not in st.session_state or st.session_state['vision_chatbot'] is None:
+  st.session_state['vision_chatbot'] = VisionChatbot(
+    api_key=st.session_state["openai_api_key"],
+    provider=st.session_state["ai_provider"],
+    gemini_key=st.session_state["gemini_api_key"]
+  )
+if "chatbot" not in st.session_state or st.session_state['chatbot'] is None:
+  st.session_state['chatbot'] = st.session_state['vision_chatbot']
+
+# Keep chatbot instance synced with keys and provider
+st.session_state['chatbot'].set_provider_and_keys(
+  provider=st.session_state.get("ai_provider", "auto"),
+  gemini_key=st.session_state.get("gemini_api_key", ""),
+  openai_key=st.session_state.get("openai_api_key", "")
+)
 
 NAVIGATION_PAGES = [
     "Dashboard", 
@@ -522,9 +535,15 @@ def process_voice_message():
     response = st.session_state["chatbot"].ask(
       command.value,
       st.session_state.get("last_detections", []),
+      ocr_text=st.session_state.get("ocr_text", "")
     )
   else:
-    response = "I couldn't match that page. Try saying open dashboard, open settings, or open voice assistant."
+    # Conversational speech fallback to Gemini/ChatGPT multimodal assistant
+    response = st.session_state["chatbot"].ask(
+      transcript,
+      st.session_state.get("last_detections", []),
+      ocr_text=st.session_state.get("ocr_text", "")
+    )
 
   st.session_state["voice_response"] = response
   st.session_state["voice_status"] = "success"
@@ -1295,62 +1314,168 @@ elif page == "Drowsiness Monitor":
 
 # VISION CHATBOT
 elif page == "Vision Chatbot":
-  # Custom Header with Badge
-  st.markdown("""
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+  # Active Provider Identification
+  current_provider = st.session_state.get("ai_provider", "auto")
+  has_gemini = bool(st.session_state.get("gemini_api_key", "") or os.environ.get("GEMINI_API_KEY", ""))
+  has_openai = bool(st.session_state.get("openai_api_key", "") or os.environ.get("OPENAI_API_KEY", ""))
+
+  if current_provider == "gemini" or (current_provider == "auto" and has_gemini):
+    badge_label = "✨ Google Gemini 1.5 Flash Connected"
+    badge_color = "#3B82F6"
+    badge_bg = "#EFF6FF"
+  elif current_provider == "openai" or (current_provider == "auto" and has_openai):
+    badge_label = "🤖 OpenAI GPT-4o-mini Connected"
+    badge_color = "#10B981"
+    badge_bg = "#ECFDF5"
+  else:
+    badge_label = "⚡ SmartVision Neural AI Active (Zero-Key Built-in)"
+    badge_color = "#8B5CF6"
+    badge_bg = "#F5F3FF"
+
+  # Header with Badge
+  st.markdown(f"""
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
       <div>
-        <div class='section-title'>Vision Chatbot</div>
-        <div class='sub-text' style='margin-bottom: 0;'>Ask questions about the current camera feed.</div>
+        <div class='section-title' style='margin-bottom: 4px;'>Multimodal Vision Assistant & Chatbot</div>
+        <div class='sub-text' style='margin-bottom: 0;'>Conversational intelligence like ChatGPT & Gemini with direct camera and visual perception.</div>
       </div>
-      <div style="background-color: #ECFDF5; border: 1px solid #10B981; color: #10B981; padding: 6px 12px; border-radius: 20px; font-weight: 600; font-size: 14px; display: flex; align-items: center; gap: 8px;">
-        <div style="width: 8px; height: 8px; background-color: #10B981; border-radius: 50%;"></div>
-        AI Ready
+      <div style="background-color: {badge_bg}; border: 1px solid {badge_color}; color: {badge_color}; padding: 6px 14px; border-radius: 20px; font-weight: 600; font-size: 13px; display: flex; align-items: center; gap: 8px;">
+        <div style="width: 8px; height: 8px; background-color: {badge_color}; border-radius: 50%;"></div>
+        {badge_label}
       </div>
     </div>
   """, unsafe_allow_html=True)
-  
-  # Empty State Workspace
-  if not st.session_state["chatbot"].history:
+
+  # Model & API Key Configuration Expander
+  with st.expander("⚙️ AI Engine Settings & API Keys (Gemini / ChatGPT / Zero-Key)", expanded=False):
+    cfg_col1, cfg_col2, cfg_col3 = st.columns([1.6, 2, 2])
+    with cfg_col1:
+      prov_options = [
+        "Auto (Smart Selection)",
+        "Google Gemini 1.5/2.0 Flash",
+        "OpenAI ChatGPT (GPT-4o/mini)",
+        "SmartVision Neural AI (Built-in Zero-Key)"
+      ]
+      prov_val_map = {
+        "Auto (Smart Selection)": "auto",
+        "Google Gemini 1.5/2.0 Flash": "gemini",
+        "OpenAI ChatGPT (GPT-4o/mini)": "openai",
+        "SmartVision Neural AI (Built-in Zero-Key)": "builtin"
+      }
+      curr_idx = 0
+      if current_provider == "gemini": curr_idx = 1
+      elif current_provider == "openai": curr_idx = 2
+      elif current_provider == "builtin": curr_idx = 3
+
+      sel_prov = st.selectbox("Intelligence Provider", prov_options, index=curr_idx)
+      st.session_state["ai_provider"] = prov_val_map[sel_prov]
+
+    with cfg_col2:
+      new_gemini = st.text_input(
+        "Google Gemini API Key",
+        value=st.session_state.get("gemini_api_key", ""),
+        type="password",
+        placeholder="Paste AIzaSy... key (optional)"
+      )
+      if new_gemini != st.session_state.get("gemini_api_key", ""):
+        st.session_state["gemini_api_key"] = new_gemini
+
+    with cfg_col3:
+      new_openai = st.text_input(
+        "OpenAI API Key",
+        value=st.session_state.get("openai_api_key", ""),
+        type="password",
+        placeholder="Paste sk-... key (optional)"
+      )
+      if new_openai != st.session_state.get("openai_api_key", ""):
+        st.session_state["openai_api_key"] = new_openai
+
+    st.session_state["chatbot"].set_provider_and_keys(
+      provider=st.session_state["ai_provider"],
+      gemini_key=st.session_state["gemini_api_key"],
+      openai_key=st.session_state["openai_api_key"]
+    )
+
+  # Visual Context Bar & Controls
+  last_dets = st.session_state.get("last_detections", [])
+  ocr_curr = st.session_state.get("ocr_text", "")
+
+  ctx_col, btn_col = st.columns([4, 1])
+  with ctx_col:
+    if last_dets:
+      det_summary = ", ".join([f"{d.get('object_name', 'item')} ({d.get('confidence', 0)*100:.0f}%)" for d in last_dets[:6]])
+      st.markdown(f"""
+        <div style="background-color: #F0FDF4; border: 1px solid #86EFAC; border-radius: 10px; padding: 10px 14px; font-size: 13px; color: #166534; display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 16px;">🟢</span>
+          <div><b>Active Camera Perception:</b> {det_summary}</div>
+        </div>
+      """, unsafe_allow_html=True)
+    else:
+      st.markdown("""
+        <div style="background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 10px; padding: 10px 14px; font-size: 13px; color: #475569; display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 16px;">⚪</span>
+          <div><b>Camera Perception Idle:</b> General Multimodal Intelligence Mode Active. Ask about any topic, objects, recipes, or science.</div>
+        </div>
+      """, unsafe_allow_html=True)
+
+  with btn_col:
+    if st.button("🗑️ Clear Chat", use_container_width=True):
+      st.session_state["chatbot"].clear_history()
+      st.rerun()
+
+  # Quick Suggestion Chips
+  st.markdown("<small style='color: #64748B; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;'>Suggested Prompts</small>", unsafe_allow_html=True)
+  chip_c1, chip_c2, chip_c3, chip_c4 = st.columns(4)
+  query_to_send = None
+
+  if chip_c1.button("👁️ What do you see?", use_container_width=True):
+    query_to_send = "What do you see in the camera right now?"
+  if chip_c2.button("🍳 Suggest recipes", use_container_width=True):
+    query_to_send = "What recipes can I cook with the items in the scene?"
+  if chip_c3.button("⚠️ Scan safety hazards", use_container_width=True):
+    query_to_send = "Are there any safety hazards or sharp objects in the frame?"
+  if chip_c4.button("🧠 Explain YOLOv8 AI", use_container_width=True):
+    query_to_send = "How does YOLOv8 object detection work under the hood?"
+
+  st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
+
+  # Chat Messages History
+  if not st.session_state["chatbot"].history and not query_to_send:
     st.markdown("""
-      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 60px 20px; text-align: center;">
-        <div style="width: 80px; height: 80px; background: linear-gradient(135deg, #ECFDF5 0%, #F5F3FF 100%); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-bottom: 24px; box-shadow: 0 10px 25px -5px rgba(16, 185, 129, 0.1);">
-          <span style="font-size: 32px;"></span>
+      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px 20px; text-align: center; background: #FAFAFA; border-radius: 16px; border: 1px dashed #CBD5E1; margin: 15px 0;">
+        <div style="width: 64px; height: 64px; background: linear-gradient(135deg, #ECFDF5 0%, #EFF6FF 100%); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-bottom: 16px; box-shadow: 0 8px 20px -4px rgba(59, 130, 246, 0.15); font-size: 28px;">
+          🤖
         </div>
-        <h2 style="color: #172033; font-weight: 700; margin-bottom: 8px;">AI Vision Assistant</h2>
-        <p style="color: #64748B; font-size: 16px; margin-bottom: 40px; max-width: 400px;">Ask me about what the camera currently sees. I can identify objects, count people, and read text in the scene.</p>
-        
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; max-width: 600px; width: 100%;">
-          <div style="background: white; border: 1px solid #E2E8F0; padding: 16px; border-radius: 12px; color: #172033; font-weight: 500; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
-            "What do you see right now?"
-          </div>
-          <div style="background: white; border: 1px solid #E2E8F0; padding: 16px; border-radius: 12px; color: #172033; font-weight: 500; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
-            "How many people are detected?"
-          </div>
-          <div style="background: white; border: 1px solid #E2E8F0; padding: 16px; border-radius: 12px; color: #172033; font-weight: 500; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
-            "Read the text in the scene"
-          </div>
-          <div style="background: white; border: 1px solid #E2E8F0; padding: 16px; border-radius: 12px; color: #172033; font-weight: 500; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
-            "Identify the objects"
-          </div>
-        </div>
+        <h3 style="color: #0F172A; font-weight: 700; margin-bottom: 6px;">SmartVision Conversational Assistant</h3>
+        <p style="color: #64748B; font-size: 14px; max-width: 520px; line-height: 1.5; margin-bottom: 0;">
+          Directly integrated with your live camera and image detections. Ask questions about detected items, hazards, cooking recipes, OCR text, or general coding and AI concepts.
+        </p>
       </div>
     """, unsafe_allow_html=True)
-  
-  # Display chat messages (Populated state)
   else:
     for msg in st.session_state["chatbot"].history:
-      with st.chat_message(msg["role"]):
-        st.write(msg["content"])
-      
-  # Input Composer
-  user_q = st.chat_input("Ask something about the camera...")
-  if user_q:
-    with st.chat_message("user"):
-      st.write(user_q)
-    with st.chat_message("assistant"):
-      with st.spinner("Analyzing scene..."):
-        response = st.session_state["chatbot"].ask(user_q, st.session_state.get("last_detections", []))
-        st.write(response)
+      avatar = "🧑‍💻" if msg["role"] == "user" else ("✨" if "Gemini" in badge_label else "🤖")
+      with st.chat_message(msg["role"], avatar=avatar):
+        st.markdown(msg["content"])
+
+  # Chat Input Bar
+  user_input = st.chat_input("Ask SmartVision Assistant anything (camera, objects, recipes, science, coding)...")
+  if user_input:
+    query_to_send = user_input
+
+  # Process query if submitted via input box or chip click
+  if query_to_send:
+    with st.chat_message("user", avatar="🧑‍💻"):
+      st.markdown(query_to_send)
+    with st.chat_message("assistant", avatar="✨" if "Gemini" in badge_label else "🤖"):
+      with st.spinner("SmartVision Assistant reasoning..."):
+        response = st.session_state["chatbot"].ask(
+          query_to_send,
+          context_detections=st.session_state.get("last_detections", []),
+          ocr_text=st.session_state.get("ocr_text", "")
+        )
+        st.markdown(response)
+    st.rerun()
 
 # FACE REGISTRATION
 elif page == "Face Registration":
