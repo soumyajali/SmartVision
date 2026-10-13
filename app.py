@@ -11,6 +11,7 @@ import subprocess
 import time
 import json
 import hashlib
+from uuid import uuid4
 from datetime import datetime
 import streamlit.components.v1 as components
 import random
@@ -35,6 +36,7 @@ from core.ui_3d_component import render_3d_hud
 from core.analytics_3d_component import render_analytics_viewer
 from voice_interaction import (
   SpeechTranscriptionError,
+  answer_application_question,
   parse_voice_command,
   transcribe_audio,
 )
@@ -311,21 +313,34 @@ st.markdown(get_theme_css(), unsafe_allow_html=True)
 
 
 def speak_in_browser(message: str):
-  """Speak through the visitor's browser instead of the Streamlit server."""
+  """Speak and provide a user-activated replay control in the visitor's browser."""
   components.html(
     f"""
+    <button id="speak-answer" type="button" style="
+      border: 1px solid #10B981; border-radius: 8px; padding: 8px 14px;
+      background: #FFFFFF; color: #047857; font: 600 14px sans-serif;
+      cursor: pointer;">
+      Speak answer again
+    </button>
     <script>
     const message = {json.dumps(message)};
-    if ("speechSynthesis" in window) {{
+    const button = document.getElementById("speak-answer");
+    function speakAnswer() {{
+      if (!("speechSynthesis" in window)) {{
+        button.textContent = "Speech is not supported by this browser";
+        return;
+      }}
       window.speechSynthesis.cancel();
       const utterance = new SpeechSynthesisUtterance(message);
       utterance.rate = 0.95;
       utterance.volume = 1;
       window.speechSynthesis.speak(utterance);
     }}
+    button.addEventListener("click", speakAnswer);
+    speakAnswer();
     </script>
     """,
-    height=0,
+    height=48,
   )
 
 
@@ -416,6 +431,43 @@ if "chatbot" not in st.session_state or st.session_state['chatbot'] is None:
 st.session_state['vision_chatbot'].api_key = st.session_state["openai_api_key"]
 st.session_state['chatbot'].api_key = st.session_state["openai_api_key"]
 
+
+def create_chat_conversation():
+  conversation = {
+    "id": str(uuid4()),
+    "title": "New chat",
+    "messages": [],
+  }
+  st.session_state["chat_conversations"].insert(0, conversation)
+  st.session_state["active_chat_id"] = conversation["id"]
+  st.session_state["chatbot"].history = conversation["messages"]
+  return conversation
+
+
+if "chat_conversations" not in st.session_state:
+  existing_messages = list(st.session_state["chatbot"].history)
+  initial_conversation = {
+    "id": str(uuid4()),
+    "title": "New chat",
+    "messages": existing_messages,
+  }
+  for message in existing_messages:
+    if message.get("role") == "user":
+      initial_conversation["title"] = message["content"][:40].strip() or "New chat"
+      break
+  st.session_state["chat_conversations"] = [initial_conversation]
+  st.session_state["active_chat_id"] = initial_conversation["id"]
+  st.session_state["chatbot"].history = initial_conversation["messages"]
+
+
+def get_active_chat_conversation():
+  active_chat_id = st.session_state.get("active_chat_id")
+  for conversation in st.session_state["chat_conversations"]:
+    if conversation["id"] == active_chat_id:
+      return conversation
+  return create_chat_conversation()
+
+
 NAVIGATION_PAGES = [
     "Dashboard", 
     "Vision Chatbot", 
@@ -435,6 +487,26 @@ NAVIGATION_PAGES = [
     "Drowsiness Monitor",
     "Border Security (IBVAP)"
 ]
+
+
+def answer_assistant_question(question):
+  chatbot = st.session_state["chatbot"]
+  conversation = get_active_chat_conversation()
+  chatbot.history = conversation["messages"]
+  if not conversation["messages"]:
+    conversation["title"] = question[:40].strip() or "New chat"
+
+  response = answer_application_question(question)
+  if response is None:
+    return chatbot.ask(question, st.session_state.get("last_detections", []))
+
+  chatbot.history.extend(
+    [
+      {"role": "user", "content": question},
+      {"role": "assistant", "content": response},
+    ]
+  )
+  return response
 
 
 def process_voice_message():
@@ -469,18 +541,13 @@ def process_voice_message():
     get_voice_assistant().clear_all_announcements()
     response = "Voice announcements reset."
   elif command.action == "question":
-    response = st.session_state["chatbot"].ask(
-      command.value,
-      st.session_state.get("last_detections", []),
-    )
+    response = answer_assistant_question(command.value)
   else:
     response = "I couldn't match that page. Try saying open dashboard, open settings, or open voice assistant."
 
   st.session_state["voice_response"] = response
   st.session_state["voice_status"] = "success"
-  voice_assistant = get_voice_assistant()
-  if voice_assistant.engine is not None:
-    voice_assistant.speak(response)
+  st.session_state["voice_speech_pending"] = True
 
 
 page = st.sidebar.radio(
@@ -540,13 +607,17 @@ if page == "Voice Assistant":
   )
   st.info(
     "Speech is transcribed online by Google and requires an internet connection. "
-    "Your recording is sent to Google for transcription; answers are spoken by the computer running this app."
+    "Your recording is sent to Google for transcription. Replies are spoken by your browser."
   )
   st.caption(
-    "Try: “What do you see?”, “How many people?”, “Open Analytics”, "
+    "Try: “What do you see?”, “How many people?”, “What features does this application have?”, “Tell me about OCR”, “Open Analytics”, "
     "“Turn off voice announcements”, or “Start object tracking”."
   )
-  st.audio_input("Record a question or command", key="voice_message_audio")
+  if "voice_recording_number" not in st.session_state:
+    st.session_state["voice_recording_number"] = 0
+  audio_key = f"voice_message_audio_{st.session_state['voice_recording_number']}"
+  st.audio_input("Record a question or command", key=audio_key)
+  st.session_state["voice_message_audio"] = st.session_state.get(audio_key)
   st.button(
     "Send voice message",
     type="primary",
@@ -562,8 +633,15 @@ if page == "Voice Assistant":
       st.error(st.session_state["voice_response"])
     else:
       st.success(st.session_state["voice_response"])
-      if get_voice_assistant().engine is None:
-        st.warning("Speech output is unavailable; the response is shown as text instead.")
+      if st.session_state.pop("voice_speech_pending", False):
+        speak_in_browser(st.session_state["voice_response"])
+      if st.button("Record next question", type="primary", width="stretch"):
+        st.session_state["voice_recording_number"] += 1
+        st.session_state["voice_message_audio"] = None
+        st.session_state["voice_transcript"] = ""
+        st.session_state["voice_response"] = ""
+        st.session_state["voice_status"] = ""
+        st.rerun()
 
 # 3D EXPLORER PAGE
 elif page == "3D Explorer":
@@ -1247,62 +1325,56 @@ elif page == "Drowsiness Monitor":
 
 # VISION CHATBOT
 elif page == "Vision Chatbot":
-  # Custom Header with Badge
-  st.markdown("""
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
-      <div>
-        <div class='section-title'>Vision Chatbot</div>
-        <div class='sub-text' style='margin-bottom: 0;'>Ask questions about the current camera feed.</div>
-      </div>
-      <div style="background-color: #ECFDF5; border: 1px solid #10B981; color: #10B981; padding: 6px 12px; border-radius: 20px; font-weight: 600; font-size: 14px; display: flex; align-items: center; gap: 8px;">
-        <div style="width: 8px; height: 8px; background-color: #10B981; border-radius: 50%;"></div>
-        AI Ready
-      </div>
-    </div>
-  """, unsafe_allow_html=True)
-  
-  # Empty State Workspace
-  if not st.session_state["chatbot"].history:
-    st.markdown("""
-      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 60px 20px; text-align: center;">
-        <div style="width: 80px; height: 80px; background: linear-gradient(135deg, #ECFDF5 0%, #F5F3FF 100%); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-bottom: 24px; box-shadow: 0 10px 25px -5px rgba(16, 185, 129, 0.1);">
-          <span style="font-size: 32px;"></span>
-        </div>
-        <h2 style="color: #172033; font-weight: 700; margin-bottom: 8px;">AI Vision Assistant</h2>
-        <p style="color: #64748B; font-size: 16px; margin-bottom: 40px; max-width: 400px;">Ask me about what the camera currently sees. I can identify objects, count people, and read text in the scene.</p>
-        
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; max-width: 600px; width: 100%;">
-          <div style="background: white; border: 1px solid #E2E8F0; padding: 16px; border-radius: 12px; color: #172033; font-weight: 500; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
-            "What do you see right now?"
-          </div>
-          <div style="background: white; border: 1px solid #E2E8F0; padding: 16px; border-radius: 12px; color: #172033; font-weight: 500; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
-            "How many people are detected?"
-          </div>
-          <div style="background: white; border: 1px solid #E2E8F0; padding: 16px; border-radius: 12px; color: #172033; font-weight: 500; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
-            "Read the text in the scene"
-          </div>
-          <div style="background: white; border: 1px solid #E2E8F0; padding: 16px; border-radius: 12px; color: #172033; font-weight: 500; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
-            "Identify the objects"
-          </div>
-        </div>
-      </div>
-    """, unsafe_allow_html=True)
-  
-  # Display chat messages (Populated state)
-  else:
-    for msg in st.session_state["chatbot"].history:
-      with st.chat_message(msg["role"]):
-        st.write(msg["content"])
-      
-  # Input Composer
-  user_q = st.chat_input("Ask something about the camera...")
-  if user_q:
-    with st.chat_message("user"):
-      st.write(user_q)
-    with st.chat_message("assistant"):
-      with st.spinner("Analyzing scene..."):
-        response = st.session_state["chatbot"].ask(user_q, st.session_state.get("last_detections", []))
-        st.write(response)
+  history_col, chat_col = st.columns([1, 3], gap="large")
+  active_conversation = get_active_chat_conversation()
+  st.session_state["chatbot"].history = active_conversation["messages"]
+
+  with history_col:
+    st.markdown("### Chats")
+    if st.button("＋ New chat", key="new_vision_chat", width="stretch"):
+      create_chat_conversation()
+      st.rerun()
+
+    for conversation in st.session_state["chat_conversations"]:
+      if st.button(
+        conversation["title"],
+        key=f"select_chat_{conversation['id']}",
+        type="primary" if conversation["id"] == active_conversation["id"] else "secondary",
+        width="stretch",
+        help=conversation["title"],
+      ):
+        st.session_state["active_chat_id"] = conversation["id"]
+        st.session_state["chatbot"].history = conversation["messages"]
+        st.rerun()
+
+  with chat_col:
+    st.markdown("<div class='section-title'>Vision Chatbot</div>", unsafe_allow_html=True)
+    st.markdown(
+      "<div class='sub-text'>Ask questions about the current camera feed or SmartVision features.</div>",
+      unsafe_allow_html=True,
+    )
+
+    if not active_conversation["messages"]:
+      st.markdown(
+        "<div class='card-box'><h3>AI Vision Assistant</h3>"
+        "<p>Ask what the camera sees, count detected objects, or learn what an application feature does.</p>"
+        "<p>Examples: “What do you see?”, “How many people?”, “What does OCR do?”</p></div>",
+        unsafe_allow_html=True,
+      )
+    else:
+      for msg in active_conversation["messages"]:
+        with st.chat_message(msg["role"]):
+          st.write(msg["content"])
+
+    user_q = st.chat_input("Ask about the camera or application features...")
+    if user_q:
+      with st.chat_message("user"):
+        st.write(user_q)
+      with st.chat_message("assistant"):
+        with st.spinner("Analyzing..."):
+          response = answer_assistant_question(user_q)
+          st.write(response)
+          speak_in_browser(response)
 
 # FACE REGISTRATION
 elif page == "Face Registration":

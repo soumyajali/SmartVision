@@ -35,7 +35,7 @@ Traditional surveillance and vision recognition systems depend on heavy, costly 
 | 👤 **Face Verification & Recognition** | Recognizes registered identities and flags unknown individuals. |
 | 📄 **Document Screening & OCR** | Extracts text and scanned information from live camera feed. |
 | 🗣️ **Voice Assistant (TTS)** | Context-aware audio feedback (avoids repeated spamming, speaks on fresh detections). |
-| 🎙️ **Voice Questions & Commands** | Ask about detected objects, navigate dashboard pages, and toggle voice announcements or object tracking using spoken commands. Speech-to-text uses Google's online recognition service; an internet connection is required and recordings are sent to Google for transcription. |
+| 🎙️ **Voice Questions & Commands** | Ask about detected objects in the Vision Chatbot or use spoken commands to navigate dashboard pages and toggle voice announcements or object tracking. Chatbot and voice-input answers are spoken in the browser using its built-in speech synthesis. Voice input transcription uses Google's online recognition service; an internet connection is required and recordings are sent to Google for transcription. |
 | 📊 **Analytics & Detection History** | SQLite-backed database (`detections.db`) tracking detections, metrics, and trends. |
 | 📱 **Mobile Android App** | Flutter client connecting to the FastAPI backend or running on-device inference. |
 
@@ -104,7 +104,9 @@ streamlit run app.py
 ```
 Open `http://localhost:8501` in your browser to access the live detection dashboard.
 
-Open **Voice Assistant** in the dashboard navigation to record a question or command. Assistant responses are spoken through the computer running the Streamlit app.
+Open **Voice Assistant** in the dashboard navigation to record a question or command. Ask about app features (for example, “What features does this application have?” or “Tell me about OCR”). Assistant responses are spoken through the browser on your device; select **Record next question** after an answer to start another recording.
+
+The **Vision Chatbot** page includes a conversation history panel and a **New chat** button. Conversations are kept in the current Streamlit session and can be selected again from the panel.
 
 ### 4. Launch FastAPI Server (for Mobile App)
 
