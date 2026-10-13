@@ -1390,6 +1390,8 @@ elif page == "Vision Chatbot":
       if new_openai != st.session_state.get("openai_api_key", ""):
         st.session_state["openai_api_key"] = new_openai
 
+    st.caption("💡 **Tip:** You can obtain a free Google Gemini API key at [Google AI Studio](https://aistudio.google.com/app/apikey). Once pasted, live Gemini models are unlocked instantly!")
+
     st.session_state["chatbot"].set_provider_and_keys(
       provider=st.session_state["ai_provider"],
       gemini_key=st.session_state["gemini_api_key"],

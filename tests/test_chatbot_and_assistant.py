@@ -70,7 +70,31 @@ def run_tests():
     ans_ocr = assistant.ask("Read the text in the scene", ocr_text="Smart Vision AI Project v2.0")
     check("OCR Scene Reading", "Smart Vision AI Project v2.0" in ans_ocr, f"OCR response: {ans_ocr[:70]}...")
 
-    # 1.8 Conversation History Memory
+    # 1.8 Natural Human Dialogue Flow (User's specific sequence: hi -> how r u -> hmm -> ok)
+    print("\n--- 1.8 Natural Human Dialogue Flow (hi -> how r u -> hmm -> ok) ---")
+    c_assistant = SmartVisionAssistant()
+    
+    r_hi = c_assistant.ask("hi")
+    check("Dialogue 'hi'", "hello" in r_hi.lower() or "connect" in r_hi.lower() or "help" in r_hi.lower() or "hey" in r_hi.lower(), f"Reply: {r_hi[:60]}")
+    check("No canned template on 'hi'", "i understand your query" not in r_hi.lower())
+
+    r_hru = c_assistant.ask("how r u")
+    check("Dialogue 'how r u'", "doing" in r_hru.lower() or "great" in r_hru.lower() or "well" in r_hru.lower(), f"Reply: {r_hru[:60]}")
+    check("No canned template on 'how r u'", "i understand your query" not in r_hru.lower())
+
+    r_hmm = c_assistant.ask("hmm")
+    check("Dialogue 'hmm'", "thinking" in r_hmm.lower() or "mind" in r_hmm.lower() or "time" in r_hmm.lower(), f"Reply: {r_hmm[:60]}")
+    check("No canned template on 'hmm'", "i understand your query" not in r_hmm.lower())
+
+    r_ok = c_assistant.ask("ok")
+    check("Dialogue 'ok'", "sounds good" in r_ok.lower() or "explore" in r_ok.lower() or "great" in r_ok.lower() or "awesome" in r_ok.lower(), f"Reply: {r_ok[:60]}")
+    check("No canned template on 'ok'", "i understand your query" not in r_ok.lower())
+
+    # Verify that all 4 replies are distinct and unique
+    replies = [r_hi, r_hru, r_hmm, r_ok]
+    check("All 4 replies are distinct and dynamic", len(set(replies)) == 4, f"Unique replies: {len(set(replies))}/4")
+
+    # 1.9 Conversation History Memory
     check("Multi-turn History Tracking", len(assistant.history) >= 14, f"Messages in history: {len(assistant.history)}")
 
     # 2. VisionChatbot Wrapper in core_utils
