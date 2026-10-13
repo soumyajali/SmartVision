@@ -1920,6 +1920,7 @@ elif page == "OCR":
                   chunks.append(current.strip())
                 return chunks if chunks else [text]
 
+              text_to_translate = st.session_state.get("ocr_text", "").strip()
               chunks = chunk_text_for_translation(text_to_translate, max_chars=350)
               translated = None
               error_msg = None
