@@ -19,7 +19,7 @@ import pandas as pd
 from voice_assistant import get_voice_assistant
 from database import get_database
 from utils import (
-  PerformanceMonitor, OCRReader, QRBarcodeScanner,
+  PerformanceMonitor, OCRReader,
   AIAssistant, ReportGenerator, ImageQualityAnalyzer,
   SceneDescriber, VisionChatbot, AdaptiveEngine, 
   LowLightEnhancer, DistanceEstimator, UnknownObjectDetector
@@ -461,7 +461,6 @@ NAVIGATION_PAGES = [
     "Object Detection", 
     "Classification", 
     "OCR", 
-    "QR Scanner",
     "Face Registration",
     "Analytics",
     "History", 
@@ -2008,43 +2007,6 @@ elif page == "OCR":
         else:
           st.warning("No text could be extracted from this image.")
 
-
-# QR SCANNER PAGE
-
-elif page == "QR Scanner":
-  st.markdown("<div class='section-title'> QR & Barcode Scanner</div>", unsafe_allow_html=True)
-  st.markdown("<div class='sub-text'>Upload an image to scan for QR codes and barcodes</div>", unsafe_allow_html=True)
-  
-  qr_scanner = QRBarcodeScanner()
-  if qr_scanner.pyzbar is None:
-    st.warning("QR/barcode scanning is unavailable because the native ZBar library could not be loaded.")
-  
-  file = st.file_uploader("Upload Image for Scanning", type=["jpg", "jpeg", "png"], disabled=qr_scanner.pyzbar is None)
-  
-  if file:
-    img = Image.open(file)
-    img_array = np.array(img)
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-      st.markdown("<div class='card-box'><b> Input Image</b></div>", unsafe_allow_html=True)
-      st.image(img, width=420)
-    
-    with col2:
-      st.markdown("<div class='card-box'><b> Scan Results</b></div>", unsafe_allow_html=True)
-      
-      with st.spinner("Scanning..."):
-        results = qr_scanner.scan(cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR))
-      
-      if results:
-        for i, result in enumerate(results):
-          st.success(f"**Code {i+1} Detected**")
-          st.write(f"**Type:** {result['type']}")
-          st.write(f"**Data:** {result['data']}")
-          st.write("---")
-      else:
-        st.warning("No QR codes or barcodes detected in the image.")
 
 # RESEARCH EVALUATION PAGE
 
