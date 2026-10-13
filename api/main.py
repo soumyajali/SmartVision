@@ -22,7 +22,7 @@ app.add_middleware(
 )
 
 # Load YOLO model
-MODEL_PATH = "weights/smartvision_best.pt" if os.path.exists("weights/smartvision_best.pt") else "yolov8n.pt"
+MODEL_PATH = "yolov8m.pt" if os.path.exists("yolov8m.pt") else ("weights/smartvision_best.pt" if os.path.exists("weights/smartvision_best.pt") else "yolov8n.pt")
 print(f"Loading YOLOv8 Model from {MODEL_PATH}...")
 model = YOLO(MODEL_PATH)
 print("Model loaded successfully.")
@@ -64,7 +64,7 @@ async def websocket_detect(websocket: WebSocket):
                     
                 print("Running YOLO inference...", flush=True)
                 # Run YOLO inference
-                results = model.predict(img, conf=0.5, verbose=False)
+                results = model.predict(img, conf=0.25, agnostic_nms=True, verbose=False)
                 print(f"YOLO inference complete. Found: {len(results[0].boxes)}", flush=True)
                 
                 detections = []

@@ -26,3 +26,5 @@ weights/*.torchscript
 datasets/raw_downloads/
 datasets/custom_objects/images/
 runs/detect/
+*.db
+*_detected*.jpg

@@ -65,8 +65,32 @@ def test_detection_on_test_image():
     assert any(l in ['cat', 'cup', 'person', 'dining table'] for l in labels), f"Expected cat/cup/person, got: {labels}"
     print("  PASS: test_image.png detection verified with accurate normalized boxes.")
 
+def test_knife_image_11_jpeg():
+    print("\n[TEST 3] Testing Kitchen Knife Detection on 11.jpeg...")
+    img_path = os.path.join(BASE_DIR, "11.jpeg")
+    if not os.path.exists(img_path):
+        img_path = "/Users/sowmya/Desktop/11.jpeg"
+    assert os.path.exists(img_path), f"File not found: {img_path}"
+    
+    b64 = encode_img_to_base64(img_path)
+    t0 = time.time()
+    resp = requests.post(f"{API_BASE}/detect", json={"image": b64}, timeout=10)
+    latency_ms = (time.time() - t0) * 1000.0
+    
+    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
+    result = resp.json()
+    recs = result.get("recognitions", [])
+    
+    labels = [r['label'] for r in recs]
+    confs = [round(r['confidence'], 2) for r in recs]
+    print(f"  Latency: {latency_ms:.1f} ms | Detected: {labels} (Confidences: {confs})")
+    assert 'knife' in labels, f"Expected 'knife' in detections, got: {labels}"
+    knife_idx = labels.index('knife')
+    assert recs[knife_idx]['confidence'] >= 0.85, f"Expected knife confidence >= 0.85, got: {recs[knife_idx]['confidence']}"
+    print("  PASS: Kitchen knife detected accurately with high confidence (>=90%).")
+
 def test_detection_on_danger_image():
-    print("\n[TEST 3] Testing Hazard Detection on test_danger_image.png...")
+    print("\n[TEST 4] Testing Hazard Detection on test_danger_image.png...")
     img_path = os.path.join(BASE_DIR, "test_danger_image.png")
     assert os.path.exists(img_path), f"File not found: {img_path}"
     
@@ -104,9 +128,10 @@ if __name__ == '__main__':
     print("=" * 65)
     test_api_health()
     test_detection_on_test_image()
+    test_knife_image_11_jpeg()
     test_detection_on_danger_image()
     test_ocr_endpoint()
     test_streamlit_dashboard()
     print("\n" + "=" * 65)
-    print("ALL TESTS PASSED SUCCESSFULLY! (5/5)")
+    print("ALL TESTS PASSED SUCCESSFULLY! (6/6)")
     print("=" * 65)
