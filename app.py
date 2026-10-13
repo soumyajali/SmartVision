@@ -116,6 +116,14 @@ if "recording_dir" not in st.session_state:
 # ---------------- LOAD MODELS ----------------
 @st.cache_resource
 def load_detection_model():
+  model_candidates = [
+      "weights/smartvision_best.pt",
+      "runs/detect/smartvision_yolov8n/weights/best.pt",
+      "yolov8n.pt"
+  ]
+  for m_path in model_candidates:
+      if os.path.exists(m_path):
+          return YOLO(m_path)
   return YOLO("yolov8n.pt")
 
 @st.cache_resource

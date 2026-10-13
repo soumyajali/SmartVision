@@ -26,9 +26,18 @@ app.add_middleware(
 )
 
 print("Loading Models...")
-# YOLOv8
-yolo_model = YOLO('yolov8s-world.pt')
-yolo_model.set_classes(["person", "coffee mug", "keyboard", "headphones", "glasses", "cell phone"])
+# Production YOLOv8 Model (Trained & Evaluated)
+MODEL_PATH = 'weights/smartvision_best.pt' if os.path.exists('weights/smartvision_best.pt') else 'yolov8n.pt'
+print(f"Loading Primary Object Detection Model from {MODEL_PATH}...")
+yolo_model = YOLO(MODEL_PATH)
+
+# Optional Open-Vocabulary Model (for custom queries)
+world_model = None
+if os.path.exists('yolov8s-world.pt'):
+    try:
+        world_model = YOLO('yolov8s-world.pt')
+    except Exception as e:
+        print(f"Notice: Open-vocabulary YOLO-World model could not be loaded: {e}")
 
 # EasyOCR
 ocr_reader = easyocr.Reader(['en'], gpu=False) # Switch to GPU if available

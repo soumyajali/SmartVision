@@ -1,0 +1,38 @@
+{
+  "smartvision_local": {
+    "type": "local",
+    "license": "MIT",
+    "status": "AVAILABLE",
+    "notes": "527 internal SmartVision video frames & danger test samples"
+  },
+  "huggingface_quickstart_coco": {
+    "type": "huggingface",
+    "license": "CC-BY-4.0",
+    "status": "DOWNLOADED",
+    "notes": "Dataset already cached at /Users/sowmya/Desktop/SmartVision-main/datasets/raw_downloads/huggingface_quickstart_coco."
+  },
+  "coco_official_coco128": {
+    "type": "http",
+    "license": "CC-BY-4.0",
+    "status": "SKIPPED/UNAVAILABLE",
+    "notes": "HTTP download failed: <urlopen error [Errno 54] Connection reset by peer>"
+  },
+  "kaggle_cv_competition": {
+    "type": "kaggle",
+    "license": "Kaggle Competition Data License",
+    "status": "SKIPPED/UNAVAILABLE",
+    "notes": "Kaggle authentication credentials not found in ~/.kaggle/kaggle.json. To enable: 1. Go to https://www.kaggle.com/settings -> Click 'Create New Token'. 2. Place 'kaggle.json' into ~/.kaggle/kaggle.json. 3. Run 'chmod 600 ~/.kaggle/kaggle.json'."
+  },
+  "open_images_v7": {
+    "type": "gsutil_http",
+    "license": "CC-BY-2.0",
+    "status": "SKIPPED/UNAVAILABLE",
+    "notes": "Skipped download due to storage limits: Required 50 GB, but only 17.5 GB available. Use targeted category subset downloads or external cloud storage."
+  },
+  "objects365": {
+    "type": "objects365_portal",
+    "license": "CC-BY-4.0 (Non-commercial / Academic)",
+    "status": "SKIPPED/UNAVAILABLE",
+    "notes": "Skipped download due to storage limits: Required 350 GB, but only 17.5 GB available. Use targeted category subset downloads or external cloud storage."
+  }
+}

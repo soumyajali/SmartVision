@@ -22,13 +22,14 @@ app.add_middleware(
 )
 
 # Load YOLO model
-print("Loading YOLOv8 Model...")
-model = YOLO("yolov8m.pt")
+MODEL_PATH = "weights/smartvision_best.pt" if os.path.exists("weights/smartvision_best.pt") else "yolov8n.pt"
+print(f"Loading YOLOv8 Model from {MODEL_PATH}...")
+model = YOLO(MODEL_PATH)
 print("Model loaded successfully.")
 
 @app.get("/")
 def read_root():
-    return {"status": "System Online", "model": "YOLOv8m"}
+    return {"status": "System Online", "model": os.path.basename(MODEL_PATH)}
 
 @app.websocket("/ws/detect")
 async def websocket_detect(websocket: WebSocket):
