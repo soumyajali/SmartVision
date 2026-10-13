@@ -11,6 +11,7 @@ import subprocess
 import time
 import json
 import hashlib
+import base64
 from datetime import datetime
 import streamlit.components.v1 as components
 import random
@@ -60,6 +61,10 @@ if "dark_mode" not in st.session_state:
   st.session_state["dark_mode"] = False
 if "confidence_threshold" not in st.session_state:
   st.session_state["confidence_threshold"] = 0.25
+if "siren_on_detection" not in st.session_state:
+  st.session_state["siren_on_detection"] = True
+if "_last_siren_time" not in st.session_state:
+  st.session_state["_last_siren_time"] = 0.0
 # Initialize Core Utilities
 if 'perf_monitor' not in st.session_state:
   st.session_state['perf_monitor'] = PerformanceMonitor()
@@ -329,6 +334,39 @@ def speak_in_browser(message: str):
   )
 
 
+def play_siren_sound(cooldown: float = 2.0, force: bool = False):
+  """Plays siren.wav via macOS afplay and in-browser HTML5 Audio with debounce."""
+  now = time.time()
+  last_time = st.session_state.get("_last_siren_time", 0.0)
+  if force or (now - last_time >= cooldown):
+    st.session_state["_last_siren_time"] = now
+    siren_path = os.path.abspath("siren.wav")
+    if os.path.exists(siren_path):
+      # 1. Native Mac system speakers (afplay)
+      try:
+        subprocess.Popen(["afplay", siren_path])
+      except Exception:
+        pass
+      # 2. In-browser audio
+      try:
+        with open(siren_path, "rb") as f:
+          b64_audio = base64.b64encode(f.read()).decode("utf-8")
+        components.html(
+          f"""
+          <script>
+            try {{
+              const snd = new Audio("data:audio/wav;base64,{b64_audio}");
+              snd.volume = 1.0;
+              snd.play().catch(e => console.log("Audio play caught:", e));
+            }} catch(e) {{}}
+          </script>
+          """,
+          height=0,
+        )
+      except Exception:
+        pass
+
+
 def image_description(object_counts: dict) -> str:
   """Create a concise, spoken description from the image detector results."""
   if not object_counts:
@@ -490,6 +528,29 @@ page = st.sidebar.radio(
   label_visibility="collapsed"
 )
 st.session_state["page"] = page
+
+st.sidebar.markdown("---")
+st.sidebar.markdown("<b>Alert & Siren Controls</b>", unsafe_allow_html=True)
+siren_toggle = st.sidebar.toggle(
+  "🚨 Siren on Detection",
+  value=st.session_state.get("siren_on_detection", True),
+  key="siren_toggle",
+  help="Play audio siren whenever any object is detected"
+)
+st.session_state["siren_on_detection"] = siren_toggle
+
+siren_btn_col1, siren_btn_col2 = st.sidebar.columns(2)
+with siren_btn_col1:
+  if st.button("🔊 Play Siren", use_container_width=True):
+    play_siren_sound(force=True)
+    st.toast("Siren triggered!", icon="🚨")
+with siren_btn_col2:
+  if st.button("⏹ Stop Siren", use_container_width=True):
+    try:
+      subprocess.run(["pkill", "-f", "afplay.*siren\\.wav"], check=False)
+    except Exception:
+      pass
+    st.toast("Siren silenced", icon="⏹")
 
 st.sidebar.markdown("---")
 
@@ -687,6 +748,10 @@ if page in ["Dashboard", "Home"]:
           detected_objects_with_conf.append((obj_name, conf))
           object_counts[obj_name] = object_counts.get(obj_name, 0) + 1
           total_detections += 1
+
+    # Play siren if objects detected
+    if total_detections > 0 and st.session_state.get("siren_on_detection", True):
+      play_siren_sound()
           
     # Replace the placeholder with the processed image
     video_placeholder.image(cv2.cvtColor(detected_img, cv2.COLOR_BGR2RGB), use_container_width=True)
@@ -1561,13 +1626,14 @@ elif page == "Object Detection":
       for obj in detected_objects:
         voice_assistant.announce_detection(obj)
     
+    # Siren on object detection
+    if detected_objects and st.session_state.get("siren_on_detection", True):
+      play_siren_sound()
+
     # Dangerous Object Alert
     if found_dangerous:
-      st.error(" DANGEROUS OBJECT DETECTED!")
-      
-      # Use a detached background OS process to bypass browser autoplay restrictions
-      # (No throttle needed here since Streamlit image uploads are discrete events, not continuous streams)
-      os.system(f"afplay {os.path.abspath('siren.wav')} &")
+      st.error("🚨 DANGEROUS OBJECT DETECTED!")
+      play_siren_sound(force=True)
 
       if st.session_state["voice_enabled"]:
         voice_assistant = get_voice_assistant()
@@ -2166,6 +2232,8 @@ elif page == "Border Security (IBVAP)":
     with alert_placeholder.container():
       if active_intrusions:
         st.error(f" INTRUSION DETECTED in: {', '.join(active_intrusions)}")
+        if st.session_state.get("siren_on_detection", True):
+          play_siren_sound()
       if new_alerts:
         st.warning(f" LOITERING WARNING in: {', '.join(new_alerts)}")
       if not active_intrusions and not new_alerts:

@@ -103,8 +103,8 @@ async def websocket_detect(websocket: WebSocket):
                         
                         counts[label] = counts.get(label, 0) + 1
                 
-                # Trigger ambulance siren on backend if harmful object is detected
-                if has_harmful:
+                # Trigger ambulance siren on backend if harmful or any object is detected
+                if has_harmful or len(detections) > 0:
                     current_time = time.time()
                     if current_time - last_siren_time > 2.5:  # Throttle to avoid overlapping sounds
                         subprocess.Popen(["afplay", "siren.wav"])

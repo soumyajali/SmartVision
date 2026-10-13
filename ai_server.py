@@ -1,4 +1,6 @@
 import os
+import subprocess
+import time
 import cv2
 import numpy as np
 import base64
@@ -10,6 +12,8 @@ from ultralytics import YOLO
 import easyocr
 import mediapipe as mp
 import faiss
+
+last_siren_time = 0.0
 
 app = FastAPI(title="Smart Vision Backend")
 
@@ -84,6 +88,15 @@ async def detect_objects(req: ImageRequest):
                     'label': label,
                     'confidence': conf
                 })
+
+        if len(detections) > 0:
+            current_time = time.time()
+            global last_siren_time
+            if current_time - last_siren_time > 2.5:
+                siren_file = os.path.abspath('siren.wav')
+                if os.path.exists(siren_file):
+                    subprocess.Popen(["afplay", siren_file])
+                    last_siren_time = current_time
                 
         return {'recognitions': detections}
     except ValueError as ve:
