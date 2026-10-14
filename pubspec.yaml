@@ -16,11 +16,9 @@ dependencies:
   camera: ^0.10.5+9
   permission_handler: ^11.3.0
   path_provider: ^2.1.2
-#  tflite_flutter: ^0.12.1
-#  tflite_flutter_helper_plus: ^0.0.1
   image: ^3.3.0
   path: ^1.9.0
-  flutter_tts: ^3.8.5
+  flutter_tts: ^4.2.5
   sqflite: ^2.3.0
   intl: ^0.19.0
   fl_chart: ^0.66.0
@@ -29,7 +27,11 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^3.0.1
+  flutter_lints: ^3.0.0
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/models/labels.txt
+    - assets/models/yolov8n.tflite
+    - assets/

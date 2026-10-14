@@ -1,0 +1,212 @@
+{
+  "overall": {
+    "precision": 0.765,
+    "recall": 0.6221,
+    "f1": 0.6862,
+    "map50": 0.6867,
+    "map50_95": 0.4905,
+    "num_test_images": 57
+  },
+  "per_class": [
+    {
+      "class_id": 0,
+      "class_name": "person",
+      "precision": 0.3504,
+      "recall": 0.25,
+      "f1": 0.2918,
+      "map50": 0.245
+    },
+    {
+      "class_id": 1,
+      "class_name": "bicycle",
+      "precision": 0.9184,
+      "recall": 1.0,
+      "f1": 0.9574,
+      "map50": 0.995
+    },
+    {
+      "class_id": 2,
+      "class_name": "car",
+      "precision": 1.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "map50": 0.0535
+    },
+    {
+      "class_id": 3,
+      "class_name": "motorcycle",
+      "precision": 0.9703,
+      "recall": 1.0,
+      "f1": 0.9849,
+      "map50": 0.995
+    },
+    {
+      "class_id": 4,
+      "class_name": "airplane",
+      "precision": 0.4879,
+      "recall": 0.5,
+      "f1": 0.4939,
+      "map50": 0.535
+    },
+    {
+      "class_id": 5,
+      "class_name": "bus",
+      "precision": 0.5943,
+      "recall": 0.6667,
+      "f1": 0.6284,
+      "map50": 0.555
+    },
+    {
+      "class_id": 7,
+      "class_name": "truck",
+      "precision": 0.9087,
+      "recall": 0.5,
+      "f1": 0.6451,
+      "map50": 0.9236
+    },
+    {
+      "class_id": 9,
+      "class_name": "traffic light",
+      "precision": 0.7846,
+      "recall": 0.2857,
+      "f1": 0.4189,
+      "map50": 0.2968
+    },
+    {
+      "class_id": 11,
+      "class_name": "stop sign",
+      "precision": 1.0,
+      "recall": 0.9388,
+      "f1": 0.9685,
+      "map50": 0.995
+    },
+    {
+      "class_id": 13,
+      "class_name": "bench",
+      "precision": 0.8719,
+      "recall": 1.0,
+      "f1": 0.9316,
+      "map50": 0.995
+    },
+    {
+      "class_id": 14,
+      "class_name": "bird",
+      "precision": 0.9027,
+      "recall": 1.0,
+      "f1": 0.9489,
+      "map50": 0.995
+    },
+    {
+      "class_id": 15,
+      "class_name": "cat",
+      "precision": 0.7423,
+      "recall": 0.75,
+      "f1": 0.7461,
+      "map50": 0.62
+    },
+    {
+      "class_id": 17,
+      "class_name": "horse",
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "map50": 0.0
+    },
+    {
+      "class_id": 19,
+      "class_name": "cow",
+      "precision": 0.7316,
+      "recall": 0.75,
+      "f1": 0.7407,
+      "map50": 0.7667
+    },
+    {
+      "class_id": 20,
+      "class_name": "elephant",
+      "precision": 0.9684,
+      "recall": 1.0,
+      "f1": 0.984,
+      "map50": 0.995
+    },
+    {
+      "class_id": 39,
+      "class_name": "bottle",
+      "precision": 0.9302,
+      "recall": 1.0,
+      "f1": 0.9638,
+      "map50": 0.995
+    },
+    {
+      "class_id": 41,
+      "class_name": "cup",
+      "precision": 0.3668,
+      "recall": 0.1467,
+      "f1": 0.2096,
+      "map50": 0.1775
+    },
+    {
+      "class_id": 45,
+      "class_name": "bowl",
+      "precision": 1.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "map50": 0.291
+    },
+    {
+      "class_id": 53,
+      "class_name": "pizza",
+      "precision": 0.9371,
+      "recall": 1.0,
+      "f1": 0.9676,
+      "map50": 0.995
+    },
+    {
+      "class_id": 55,
+      "class_name": "cake",
+      "precision": 0.9564,
+      "recall": 1.0,
+      "f1": 0.9777,
+      "map50": 0.995
+    },
+    {
+      "class_id": 56,
+      "class_name": "chair",
+      "precision": 1.0,
+      "recall": 0.2634,
+      "f1": 0.4169,
+      "map50": 0.835
+    },
+    {
+      "class_id": 57,
+      "class_name": "couch",
+      "precision": 0.8478,
+      "recall": 1.0,
+      "f1": 0.9176,
+      "map50": 0.995
+    },
+    {
+      "class_id": 58,
+      "class_name": "potted plant",
+      "precision": 0.9171,
+      "recall": 0.5,
+      "f1": 0.6472,
+      "map50": 0.9236
+    },
+    {
+      "class_id": 59,
+      "class_name": "bed",
+      "precision": 0.939,
+      "recall": 1.0,
+      "f1": 0.9685,
+      "map50": 0.995
+    },
+    {
+      "class_id": 76,
+      "class_name": "scissors",
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "map50": 0.0
+    }
+  ]
+}

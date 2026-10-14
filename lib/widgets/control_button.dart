@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
+import '../core/constants/app_colors.dart';
 
 class ControlButton extends StatelessWidget {
   final IconData icon;
   final VoidCallback onPressed;
   final bool isActive;
   final Color? color;
+  final double size;
+  final String? tooltip;
 
   const ControlButton({
     super.key,
@@ -12,32 +15,64 @@ class ControlButton extends StatelessWidget {
     required this.onPressed,
     this.isActive = false,
     this.color,
+    this.size = 48,
+    this.tooltip,
   });
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final primaryColor = color ?? theme.colorScheme.primary;
+    final activeColor = color ?? AppColors.neonAccent;
 
-    return Container(
+    Widget button = AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeInOut,
+      width: size,
+      height: size,
       decoration: BoxDecoration(
-        color: isActive ? primaryColor : theme.colorScheme.surface.withOpacity(0.7),
+        color: isActive
+            ? activeColor.withValues(alpha: 0.25)
+            : AppColors.cardBackground.withValues(alpha: 0.75),
         shape: BoxShape.circle,
+        border: Border.all(
+          color: isActive ? activeColor : AppColors.border,
+          width: isActive ? 1.5 : 1.0,
+        ),
         boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.2),
-            blurRadius: 8,
-            offset: const Offset(0, 4),
-          ),
+          if (isActive)
+            BoxShadow(
+              color: activeColor.withValues(alpha: 0.35),
+              blurRadius: 14,
+              spreadRadius: 1,
+            )
+          else
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.4),
+              blurRadius: 8,
+              offset: const Offset(0, 4),
+            ),
         ],
       ),
-      child: IconButton(
-        icon: Icon(
-          icon,
-          color: isActive ? Colors.white : theme.iconTheme.color,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: onPressed,
+          splashColor: AppColors.primaryViolet.withValues(alpha: 0.3),
+          highlightColor: AppColors.primaryViolet.withValues(alpha: 0.1),
+          child: Center(
+            child: Icon(
+              icon,
+              size: size * 0.48,
+              color: isActive ? activeColor : AppColors.primaryText,
+            ),
+          ),
         ),
-        onPressed: onPressed,
       ),
     );
+
+    if (tooltip != null) {
+      return Tooltip(message: tooltip!, child: button);
+    }
+    return button;
   }
 }

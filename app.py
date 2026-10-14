@@ -12,6 +12,7 @@ import time
 import json
 import hashlib
 from uuid import uuid4
+import base64
 from datetime import datetime
 import streamlit.components.v1 as components
 import random
@@ -19,7 +20,7 @@ import pandas as pd
 from voice_assistant import get_voice_assistant
 from database import get_database
 from utils import (
-  PerformanceMonitor, OCRReader, QRBarcodeScanner,
+  PerformanceMonitor, OCRReader,
   AIAssistant, ReportGenerator, ImageQualityAnalyzer,
   SceneDescriber, VisionChatbot, AdaptiveEngine, 
   LowLightEnhancer, DistanceEstimator, UnknownObjectDetector
@@ -29,11 +30,9 @@ from services.email_service import get_email_service
 from services.telegram_service import get_telegram_service
 from services.face_service import FaceService
 from core.tracker import ObjectTracker
-from core.interactive_3d_viewer import render_interactive_viewer
 from events.alert_manager import AlertManager
 from core.border_analytics import ZoneManager, LoiteringTimer
 from core.ui_3d_component import render_3d_hud
-from core.analytics_3d_component import render_analytics_viewer
 from voice_interaction import (
   SpeechTranscriptionError,
   answer_application_question,
@@ -62,6 +61,10 @@ if "dark_mode" not in st.session_state:
   st.session_state["dark_mode"] = False
 if "confidence_threshold" not in st.session_state:
   st.session_state["confidence_threshold"] = 0.25
+if "siren_on_detection" not in st.session_state:
+  st.session_state["siren_on_detection"] = True
+if "_last_siren_time" not in st.session_state:
+  st.session_state["_last_siren_time"] = 0.0
 # Initialize Core Utilities
 if 'perf_monitor' not in st.session_state:
   st.session_state['perf_monitor'] = PerformanceMonitor()
@@ -115,6 +118,25 @@ if "recording_dir" not in st.session_state:
 # ---------------- LOAD MODELS ----------------
 @st.cache_resource
 def load_detection_model():
+  # Prioritize high-accuracy YOLOv8m (92%+ precision on knives, hazards, vehicles, and common objects)
+  if os.path.exists("yolov8m.pt"):
+    return YOLO("yolov8m.pt")
+  elif os.path.exists("weights/smartvision_best.pt"):
+    return YOLO("weights/smartvision_best.pt")
+  return YOLO("yolov8n.pt")
+
+@st.cache_resource
+def load_world_model():
+  if os.path.exists("yolov8s-world.pt"):
+    m = YOLO("yolov8s-world.pt")
+    m.set_classes(["knife", "scissors", "gun", "person", "car", "dog", "cat", "cup", "bottle", "tomato", "onion", "cutting board", "cell phone", "laptop"])
+    return m
+  return None
+
+@st.cache_resource
+def load_fast_model():
+  if os.path.exists("weights/smartvision_best.pt"):
+    return YOLO("weights/smartvision_best.pt")
   return YOLO("yolov8n.pt")
 
 @st.cache_resource
@@ -344,6 +366,39 @@ def speak_in_browser(message: str):
   )
 
 
+def play_siren_sound(cooldown: float = 2.0, force: bool = False):
+  """Plays siren.wav via macOS afplay and in-browser HTML5 Audio with debounce."""
+  now = time.time()
+  last_time = st.session_state.get("_last_siren_time", 0.0)
+  if force or (now - last_time >= cooldown):
+    st.session_state["_last_siren_time"] = now
+    siren_path = os.path.abspath("siren.wav")
+    if os.path.exists(siren_path):
+      # 1. Native Mac system speakers (afplay)
+      try:
+        subprocess.Popen(["afplay", siren_path])
+      except Exception:
+        pass
+      # 2. In-browser audio
+      try:
+        with open(siren_path, "rb") as f:
+          b64_audio = base64.b64encode(f.read()).decode("utf-8")
+        components.html(
+          f"""
+          <script>
+            try {{
+              const snd = new Audio("data:audio/wav;base64,{b64_audio}");
+              snd.volume = 1.0;
+              snd.play().catch(e => console.log("Audio play caught:", e));
+            }} catch(e) {{}}
+          </script>
+          """,
+          height=0,
+        )
+      except Exception:
+        pass
+
+
 def image_description(object_counts: dict) -> str:
   """Create a concise, spoken description from the image detector results."""
   if not object_counts:
@@ -421,15 +476,28 @@ else:
 st.sidebar.markdown("### SMART VISION")
 st.sidebar.markdown("<small style='color: #64748b;'>Real-Time Object Detection</small>", unsafe_allow_html=True)
 
-st.session_state["openai_api_key"] = ""
-if "vision_chatbot" not in st.session_state or st.session_state['vision_chatbot'] is None:
-  st.session_state['vision_chatbot'] = VisionChatbot(api_key=st.session_state["openai_api_key"])
-if "chatbot" not in st.session_state or st.session_state['chatbot'] is None:
-  st.session_state['chatbot'] = VisionChatbot(api_key=st.session_state["openai_api_key"])
+if "ai_provider" not in st.session_state:
+  st.session_state["ai_provider"] = "auto"
+if "gemini_api_key" not in st.session_state:
+  st.session_state["gemini_api_key"] = os.environ.get("GEMINI_API_KEY", "")
+if "openai_api_key" not in st.session_state:
+  st.session_state["openai_api_key"] = os.environ.get("OPENAI_API_KEY", "")
 
-# Update api key if it changes
-st.session_state['vision_chatbot'].api_key = st.session_state["openai_api_key"]
-st.session_state['chatbot'].api_key = st.session_state["openai_api_key"]
+if "vision_chatbot" not in st.session_state or st.session_state['vision_chatbot'] is None:
+  st.session_state['vision_chatbot'] = VisionChatbot(
+    api_key=st.session_state["openai_api_key"],
+    provider=st.session_state["ai_provider"],
+    gemini_key=st.session_state["gemini_api_key"]
+  )
+if "chatbot" not in st.session_state or st.session_state['chatbot'] is None:
+  st.session_state['chatbot'] = st.session_state['vision_chatbot']
+
+# Keep chatbot instance synced with keys and provider
+st.session_state['chatbot'].set_provider_and_keys(
+  provider=st.session_state.get("ai_provider", "auto"),
+  gemini_key=st.session_state.get("gemini_api_key", ""),
+  openai_key=st.session_state.get("openai_api_key", "")
+)
 
 
 def create_chat_conversation():
@@ -473,16 +541,11 @@ NAVIGATION_PAGES = [
     "Vision Chatbot", 
     "Voice Assistant",
     "Object Detection", 
-    "Classification", 
     "OCR", 
-    "QR Scanner",
     "Face Registration",
-    "Analytics",
     "History", 
     "Research Evaluation",
     "Settings",
-    "3D Explorer",
-    "3D Analytics",
     "Video Fast Review",
     "Drowsiness Monitor",
     "Border Security (IBVAP)"
@@ -541,9 +604,18 @@ def process_voice_message():
     get_voice_assistant().clear_all_announcements()
     response = "Voice announcements reset."
   elif command.action == "question":
-    response = answer_assistant_question(command.value)
+    response = st.session_state["chatbot"].ask(
+      command.value,
+      st.session_state.get("last_detections", []),
+      ocr_text=st.session_state.get("ocr_text", "")
+    )
   else:
-    response = "I couldn't match that page. Try saying open dashboard, open settings, or open voice assistant."
+    # Conversational speech fallback to Gemini/ChatGPT multimodal assistant
+    response = st.session_state["chatbot"].ask(
+      transcript,
+      st.session_state.get("last_detections", []),
+      ocr_text=st.session_state.get("ocr_text", "")
+    )
 
   st.session_state["voice_response"] = response
   st.session_state["voice_status"] = "success"
@@ -557,6 +629,29 @@ page = st.sidebar.radio(
   label_visibility="collapsed"
 )
 st.session_state["page"] = page
+
+st.sidebar.markdown("---")
+st.sidebar.markdown("<b>Alert & Siren Controls</b>", unsafe_allow_html=True)
+siren_toggle = st.sidebar.toggle(
+  "🚨 Siren on Detection",
+  value=st.session_state.get("siren_on_detection", True),
+  key="siren_toggle",
+  help="Play audio siren whenever any object is detected"
+)
+st.session_state["siren_on_detection"] = siren_toggle
+
+siren_btn_col1, siren_btn_col2 = st.sidebar.columns(2)
+with siren_btn_col1:
+  if st.button("🔊 Play Siren", use_container_width=True):
+    play_siren_sound(force=True)
+    st.toast("Siren triggered!", icon="🚨")
+with siren_btn_col2:
+  if st.button("⏹ Stop Siren", use_container_width=True):
+    try:
+      subprocess.run(["pkill", "-f", "afplay.*siren\\.wav"], check=False)
+    except Exception:
+      pass
+    st.toast("Siren silenced", icon="⏹")
 
 st.sidebar.markdown("---")
 
@@ -610,7 +705,7 @@ if page == "Voice Assistant":
     "Your recording is sent to Google for transcription. Replies are spoken by your browser."
   )
   st.caption(
-    "Try: “What do you see?”, “How many people?”, “What features does this application have?”, “Tell me about OCR”, “Open Analytics”, "
+    response = answer_assistant_question(command.value)
     "“Turn off voice announcements”, or “Start object tracking”."
   )
   if "voice_recording_number" not in st.session_state:
@@ -642,35 +737,6 @@ if page == "Voice Assistant":
         st.session_state["voice_response"] = ""
         st.session_state["voice_status"] = ""
         st.rerun()
-
-# 3D EXPLORER PAGE
-elif page == "3D Explorer":
-  st.title("Interactive 3D Neural Network Pipeline Explorer")
-  st.markdown("Explore the 3D Vision model architecture. Click on the highlighted components to view technical details.")
-  
-  col1, col2 = st.columns([3, 1])
-  
-  with col1:
-    # Render the custom WebGL component
-    result = render_interactive_viewer()
-  
-  with col2:
-    st.markdown("### Component Info")
-    if result and getattr(result, "clicked_part", None):
-      part_data = result.clicked_part
-      st.markdown(f"**{part_data.get('name', 'Unknown')}**")
-      st.info(part_data.get('desc', 'No description available.'))
-    else:
-      st.write("Click on a 3D component to view its technical specifications.")
-
-# 3D ANALYTICS PAGE
-if page == "3D Analytics":
-  st.title(" 3D Detection Analytics")
-  st.markdown("Interactive 3D visualization of object detection history. Scroll to zoom, drag to rotate.")
-  
-  # We pass empty data to trigger the component's internal mock data generation for demonstration,
-  # or this could be wired up to actual detection history from the database.
-  render_analytics_viewer(history_data=[])
 
 
 # HOME PAGE (Dashboard)
@@ -750,7 +816,7 @@ if page in ["Dashboard", "Home"]:
 
   if img_cv is not None:
     start_time = time.time()
-    results = det_model(img_cv, conf=st.session_state["confidence_threshold"])
+    results = det_model.predict(img_cv, conf=st.session_state["confidence_threshold"], agnostic_nms=True, verbose=False)
     inference_time = time.time() - start_time
     st.session_state["performance_monitor"].record_inference(inference_time)
     
@@ -765,6 +831,10 @@ if page in ["Dashboard", "Home"]:
           detected_objects_with_conf.append((obj_name, conf))
           object_counts[obj_name] = object_counts.get(obj_name, 0) + 1
           total_detections += 1
+
+    # Play siren if objects detected
+    if total_detections > 0 and st.session_state.get("siren_on_detection", True):
+      play_siren_sound()
           
     # Replace the placeholder with the processed image
     video_placeholder.image(cv2.cvtColor(detected_img, cv2.COLOR_BGR2RGB), use_container_width=True)
@@ -1325,56 +1395,7 @@ elif page == "Drowsiness Monitor":
 
 # VISION CHATBOT
 elif page == "Vision Chatbot":
-  history_col, chat_col = st.columns([1, 3], gap="large")
-  active_conversation = get_active_chat_conversation()
-  st.session_state["chatbot"].history = active_conversation["messages"]
-
-  with history_col:
-    st.markdown("### Chats")
-    if st.button("＋ New chat", key="new_vision_chat", width="stretch"):
-      create_chat_conversation()
-      st.rerun()
-
-    for conversation in st.session_state["chat_conversations"]:
-      if st.button(
-        conversation["title"],
-        key=f"select_chat_{conversation['id']}",
-        type="primary" if conversation["id"] == active_conversation["id"] else "secondary",
-        width="stretch",
-        help=conversation["title"],
-      ):
-        st.session_state["active_chat_id"] = conversation["id"]
-        st.session_state["chatbot"].history = conversation["messages"]
-        st.rerun()
-
-  with chat_col:
-    st.markdown("<div class='section-title'>Vision Chatbot</div>", unsafe_allow_html=True)
-    st.markdown(
-      "<div class='sub-text'>Ask questions about the current camera feed or SmartVision features.</div>",
-      unsafe_allow_html=True,
-    )
-
-    if not active_conversation["messages"]:
-      st.markdown(
-        "<div class='card-box'><h3>AI Vision Assistant</h3>"
-        "<p>Ask what the camera sees, count detected objects, or learn what an application feature does.</p>"
-        "<p>Examples: “What do you see?”, “How many people?”, “What does OCR do?”</p></div>",
-        unsafe_allow_html=True,
-      )
-    else:
-      for msg in active_conversation["messages"]:
-        with st.chat_message(msg["role"]):
-          st.write(msg["content"])
-
-    user_q = st.chat_input("Ask about the camera or application features...")
-    if user_q:
-      with st.chat_message("user"):
-        st.write(user_q)
-      with st.chat_message("assistant"):
-        with st.spinner("Analyzing..."):
-          response = answer_assistant_question(user_q)
-          st.write(response)
-          speak_in_browser(response)
+    "Try: What do you see? How many people? What features does this application have? Tell me about OCR, Open Analytics, Open History, turn off voice announcements, or start object tracking."
 
 # FACE REGISTRATION
 elif page == "Face Registration":
@@ -1462,49 +1483,6 @@ elif page == "Face Registration":
           st.info("No face detected in the image. Ensure the face is clearly visible and well-lit.")
 
 
-# CLASSIFICATION 
-
-elif page == "Classification":
-
-  st.markdown("<div class='section-title'> Image Classification</div>", unsafe_allow_html=True)
-  st.markdown("<div class='sub-text'>Upload or capture an image to predict the object class</div>", unsafe_allow_html=True)
-
-  input_type = st.radio("Choose Input", ["Upload Image", "Webcam"], horizontal=True)
-  img = None
-
-  if input_type == "Upload Image":
-    file = st.file_uploader("Upload Image", type=["jpg","jpeg","png"])
-    if file:
-      img = Image.open(file).convert("RGB")
-  else:
-    cam = st.camera_input("Capture Image")
-    if cam:
-      img = Image.open(cam).convert("RGB")
-
-  if img:
-    col1, col2 = st.columns(2)
-
-    with col1:
-      st.markdown("<div class='card-box'><b> Input Image</b></div>", unsafe_allow_html=True)
-      st.image(img, width=420) 
-
-   
-    tensor = transform(img).unsqueeze(0) 
-
-    with torch.no_grad(): logits = cls_model(tensor)
-    probs = torch.softmax(logits, dim=1)[0]
-    idx = torch.argmax(probs).item()
-
-    with col2:
-      st.markdown("<div class='card-box'><b> Result</b></div>", unsafe_allow_html=True)
-      st.markdown(f"<div class='result-label'>{CLS_CLASS_NAMES[idx]}</div>", unsafe_allow_html=True)
-      st.markdown(f"<div class='confidence-label'>Confidence: {probs[idx]:.2f}</div>", unsafe_allow_html=True)
-      
-      # Save classification to database
-      db = get_database()
-      db.add_detection(CLS_CLASS_NAMES[idx], float(probs[idx]))
-
-
 # OBJECT DETECTION 
 
 elif page == "Object Detection":
@@ -1532,6 +1510,17 @@ elif page == "Object Detection":
   if recorder.is_recording():
     st.info(f" Recording... Frames: {recorder.get_frame_count()}")
 
+  opt_c1, opt_c2 = st.columns([1, 1])
+  with opt_c1:
+    model_choice = st.selectbox(
+      "Detection Engine",
+      ["High Accuracy (YOLOv8m)", "Open-Vocabulary (YOLO-World)", "Fast Edge (YOLOv8n)"],
+      index=0,
+      help="High Accuracy YOLOv8m provides 92%+ accuracy on knives, scissors, vehicles, and common objects. Open-Vocabulary can detect custom categories like tomatoes, cutting boards, etc."
+    )
+  with opt_c2:
+    det_conf_slider = st.slider("Confidence Threshold", 0.05, 0.95, 0.25, 0.05)
+
   input_type = st.radio("Choose Input", ["Upload Image", "Webcam"], horizontal=True)
   img_cv = None
 
@@ -1553,9 +1542,20 @@ elif page == "Object Detection":
       st.markdown("<div class='card-box'><b> Input Image</b></div>", unsafe_allow_html=True)
       st.image(cv2.cvtColor(img_cv, cv2.COLOR_BGR2RGB), width=420)
 
+    # Select active detector
+    active_detector = det_model
+    if "Open-Vocabulary" in model_choice:
+      w_m = load_world_model()
+      if w_m:
+        active_detector = w_m
+    elif "Fast" in model_choice:
+      f_m = load_fast_model()
+      if f_m:
+        active_detector = f_m
+
     # Record inference time
     start_time = time.time()
-    results = det_model(img_cv, conf=st.session_state["confidence_threshold"])
+    results = active_detector.predict(img_cv, conf=det_conf_slider, agnostic_nms=True, verbose=False)
     inference_time = time.time() - start_time
     st.session_state["performance_monitor"].record_inference(inference_time)
     
@@ -1574,8 +1574,8 @@ elif page == "Object Detection":
           for box in result.boxes:
             class_id = int(box.cls[0])
             confidence = float(box.conf[0])
-            if class_id in det_model.names:
-              obj_name = det_model.names[class_id]
+            if class_id in active_detector.names:
+              obj_name = active_detector.names[class_id]
               detected_objects.add(obj_name)
               detected_objects_with_conf.append((obj_name, confidence))
               
@@ -1633,13 +1633,14 @@ elif page == "Object Detection":
       for obj in detected_objects:
         voice_assistant.announce_detection(obj)
     
+    # Siren on object detection
+    if detected_objects and st.session_state.get("siren_on_detection", True):
+      play_siren_sound()
+
     # Dangerous Object Alert
     if found_dangerous:
-      st.error(" DANGEROUS OBJECT DETECTED!")
-      
-      # Use a detached background OS process to bypass browser autoplay restrictions
-      # (No throttle needed here since Streamlit image uploads are discrete events, not continuous streams)
-      os.system(f"afplay {os.path.abspath('siren.wav')} &")
+      st.error("🚨 DANGEROUS OBJECT DETECTED!")
+      play_siren_sound(force=True)
 
       if st.session_state["voice_enabled"]:
         voice_assistant = get_voice_assistant()
@@ -1712,6 +1713,15 @@ elif page == "Object Detection":
       st.markdown("<div class='card-box'><b> Detection Result</b></div>", unsafe_allow_html=True)
       st.image(cv2.cvtColor(detected_img, cv2.COLOR_BGR2RGB), width=420)
       
+      if detected_objects_with_conf:
+        badges = " ".join([
+          f"<span style='background:#10b981; color:white; padding:4px 12px; border-radius:14px; font-size:13px; font-weight:600; display:inline-block; margin-right:6px; margin-bottom:6px;'>{obj.upper()} ({conf*100:.1f}%)</span>"
+          for obj, conf in detected_objects_with_conf
+        ])
+        st.markdown(f"<div style='margin-top:10px; margin-bottom:10px;'>{badges}</div>", unsafe_allow_html=True)
+      else:
+        st.warning("No objects detected above the confidence threshold. Try lowering the slider above.")
+      
       # Add frame to recording if recording
       if recorder.is_recording():
         recorder.add_annotated_frame(detected_img, detections_for_recording)
@@ -1738,90 +1748,6 @@ elif page == "Object Detection":
         st.markdown(f"**Uses:** {info['uses']}")
         st.markdown(f"**Safety:** {info['safety']}")
         st.markdown(f"**Interesting Fact:** {info['facts']}")
-
-
-# ANALYTICS PAGE
-
-elif page == "Analytics":
-  st.markdown("<div class='section-title'> Detection Analytics</div>", unsafe_allow_html=True)
-  
-  db = get_database()
-  stats = db.get_detection_stats()
-  object_counts = db.get_object_counts()
-  timeline = db.get_detection_timeline(days=7)
-  
-  # Key Metrics
-  col1, col2, col3, col4 = st.columns(4)
-  with col1:
-    st.metric("Total Detections", stats['total_detections'])
-  with col2:
-    st.metric("Today's Detections", stats['today_detections'])
-  with col3:
-    st.metric("Most Detected", stats['most_detected_object'] or 'N/A')
-  with col4:
-    st.metric("Avg Confidence", f"{stats['average_confidence']:.3f}")
-  
-  st.markdown("---")
-  
-  # Pie Chart
-  if object_counts:
-    st.markdown("### Detection Distribution")
-    fig_pie = go.Figure(data=[go.Pie(
-      labels=list(object_counts.keys()),
-      values=list(object_counts.values()),
-      hole=0.3
-    )])
-    fig_pie.update_layout(title="Object Detection Distribution")
-    st.plotly_chart(fig_pie, width="stretch")
-  
-  # Bar Chart
-  if object_counts:
-    st.markdown("### Detection Counts")
-    fig_bar = go.Figure(data=[go.Bar(
-      x=list(object_counts.keys()),
-      y=list(object_counts.values()),
-      marker_color='skyblue'
-    )])
-    fig_bar.update_layout(
-      title="Detection Counts by Object",
-      xaxis_title="Object",
-      yaxis_title="Count"
-    )
-    st.plotly_chart(fig_bar, width="stretch")
-  
-  # Timeline
-  if timeline:
-    st.markdown("### Detection Timeline (Last 7 Days)")
-    fig_line = go.Figure(data=[go.Scatter(
-      x=[t['date'] for t in timeline],
-      y=[t['count'] for t in timeline],
-      mode='lines+markers',
-      line=dict(color='orange', width=3)
-    )])
-    fig_line.update_layout(
-      title="Detection Timeline",
-      xaxis_title="Date",
-      yaxis_title="Count"
-    )
-    st.plotly_chart(fig_line, width="stretch")
-  
-  # Export Reports
-  st.markdown("---")
-  st.markdown("### Export Reports")
-  detections = db.get_all_detections()
-  
-  col1, col2 = st.columns(2)
-  with col1:
-    if st.button("Generate CSV Report"):
-      report_gen = ReportGenerator()
-      csv_path = report_gen.generate_csv(detections)
-      st.success(f"CSV report generated: {csv_path}")
-  
-  with col2:
-    if st.button("Generate PDF Report"):
-      report_gen = ReportGenerator()
-      pdf_path = report_gen.generate_pdf(detections, stats)
-      st.success(f"PDF report generated: {pdf_path}")
 
 
 # HISTORY PAGE
@@ -1995,62 +1921,81 @@ elif page == "OCR":
             "Spanish", "French", "German", "Chinese (simplified)", "Japanese", "Russian", "Arabic"
           ])
           
-          lang_code_map = {
-            "Hindi": "hi", "Telugu": "te", "Tamil": "ta", "Kannada": "kn", "Malayalam": "ml", 
-            "Marathi": "mr", "Bengali": "bn", "Gujarati": "gu", "Punjabi": "pa", "Odia": "or", "Urdu": "ur",
-            "Spanish": "es", "French": "fr", "German": "de", "Chinese (simplified)": "zh-CN",
-            "Japanese": "ja", "Russian": "ru", "Arabic": "ar"
-          }
-          
           if st.button("Translate", type="primary", width="stretch"):
             with st.spinner(f"Translating to {target_lang}..."):
+              google_map = {
+                "Hindi": "hi", "Telugu": "te", "Tamil": "ta", "Kannada": "kn", "Malayalam": "ml", 
+                "Marathi": "mr", "Bengali": "bn", "Gujarati": "gu", "Punjabi": "pa", "Odia": "or", "Urdu": "ur",
+                "Spanish": "es", "French": "fr", "German": "de", "Chinese (simplified)": "zh-CN",
+                "Japanese": "ja", "Russian": "ru", "Arabic": "ar"
+              }
+              mymemory_map = {
+                "Hindi": "hi-IN", "Telugu": "te-IN", "Tamil": "ta-IN", "Kannada": "kn-IN", "Malayalam": "ml-IN", 
+                "Marathi": "mr-IN", "Bengali": "bn-IN", "Gujarati": "gu-IN", "Punjabi": "pa-IN", "Odia": "or-IN", "Urdu": "ur-PK",
+                "Spanish": "es-ES", "French": "fr-FR", "German": "de-DE", "Chinese (simplified)": "zh-CN",
+                "Japanese": "ja-JP", "Russian": "ru-RU", "Arabic": "ar-SA"
+              }
+              import re
+              def chunk_text_for_translation(text, max_chars=350):
+                sentences = re.split(r'(\. |\n+|\? |\! )', text)
+                chunks = []
+                current = ''
+                for part in sentences:
+                  if not part:
+                    continue
+                  if len(current) + len(part) <= max_chars:
+                    current += part
+                  else:
+                    if current.strip():
+                      chunks.append(current.strip())
+                    if len(part) > max_chars:
+                      words = part.split()
+                      sub = ''
+                      for w in words:
+                        if len(sub) + len(w) + 1 <= max_chars:
+                          sub += (' ' + w if sub else w)
+                        else:
+                          if sub:
+                            chunks.append(sub)
+                          sub = w
+                      current = sub
+                    else:
+                      current = part
+                if current.strip():
+                  chunks.append(current.strip())
+                return chunks if chunks else [text]
+
+              text_to_translate = st.session_state.get("ocr_text", "").strip()
+              chunks = chunk_text_for_translation(text_to_translate, max_chars=350)
+              translated = None
+              error_msg = None
+
+              # Attempt 1: Google Translator with chunking
               try:
                 from deep_translator import GoogleTranslator
-                translated = GoogleTranslator(source='auto', target=lang_code_map[target_lang]).translate(st.session_state["ocr_text"])
+                target_code = google_map.get(target_lang, "hi")
+                translator = GoogleTranslator(source='auto', target=target_code)
+                translated_parts = [translator.translate(c) for c in chunks if c.strip()]
+                translated = " ".join(filter(None, translated_parts))
+              except Exception as e_google:
+                # Attempt 2: MyMemory Translator with chunking (handles Google rate limit 429)
+                try:
+                  from deep_translator import MyMemoryTranslator
+                  target_code = mymemory_map.get(target_lang, "hi-IN")
+                  translator = MyMemoryTranslator(source='en-US', target=target_code)
+                  translated_parts = [translator.translate(c) for c in chunks if c.strip()]
+                  translated = " ".join(filter(None, translated_parts))
+                except Exception as e_mymemory:
+                  error_msg = f"Primary service: {e_google}; Fallback service: {e_mymemory}"
+              
+              if translated:
                 st.info(f"**{target_lang} Translation:**")
                 st.write(translated)
-              except Exception as e:
-                st.error(f"Translation failed: {e}. Please ensure deep-translator is installed.")
+              else:
+                st.error(f"Translation failed: {error_msg}")
         else:
           st.warning("No text could be extracted from this image.")
 
-
-# QR SCANNER PAGE
-
-elif page == "QR Scanner":
-  st.markdown("<div class='section-title'> QR & Barcode Scanner</div>", unsafe_allow_html=True)
-  st.markdown("<div class='sub-text'>Upload an image to scan for QR codes and barcodes</div>", unsafe_allow_html=True)
-  
-  qr_scanner = QRBarcodeScanner()
-  if qr_scanner.pyzbar is None:
-    st.warning("QR/barcode scanning is unavailable because the native ZBar library could not be loaded.")
-  
-  file = st.file_uploader("Upload Image for Scanning", type=["jpg", "jpeg", "png"], disabled=qr_scanner.pyzbar is None)
-  
-  if file:
-    img = Image.open(file)
-    img_array = np.array(img)
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-      st.markdown("<div class='card-box'><b> Input Image</b></div>", unsafe_allow_html=True)
-      st.image(img, width=420)
-    
-    with col2:
-      st.markdown("<div class='card-box'><b> Scan Results</b></div>", unsafe_allow_html=True)
-      
-      with st.spinner("Scanning..."):
-        results = qr_scanner.scan(cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR))
-      
-      if results:
-        for i, result in enumerate(results):
-          st.success(f"**Code {i+1} Detected**")
-          st.write(f"**Type:** {result['type']}")
-          st.write(f"**Data:** {result['data']}")
-          st.write("---")
-      else:
-        st.warning("No QR codes or barcodes detected in the image.")
 
 # RESEARCH EVALUATION PAGE
 
@@ -2238,6 +2183,8 @@ elif page == "Border Security (IBVAP)":
     with alert_placeholder.container():
       if active_intrusions:
         st.error(f" INTRUSION DETECTED in: {', '.join(active_intrusions)}")
+        if st.session_state.get("siren_on_detection", True):
+          play_siren_sound()
       if new_alerts:
         st.warning(f" LOITERING WARNING in: {', '.join(new_alerts)}")
       if not active_intrusions and not new_alerts:

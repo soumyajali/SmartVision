@@ -1,0 +1,33 @@
+{
+  "base_model": "Qwen/Qwen2.5-0.5B-Instruct",
+  "device": "mps",
+  "steps_trained": 3,
+  "final_train_loss": 2.8624,
+  "val_loss": 2.4949,
+  "val_perplexity": 12.12,
+  "lora_r": 8,
+  "lora_alpha": 16,
+  "training_history": [
+    {
+      "step": 1,
+      "train_loss": 2.8018,
+      "perplexity": 16.47,
+      "lr": 0.0002,
+      "elapsed_sec": 6.1
+    },
+    {
+      "step": 2,
+      "train_loss": 3.2965,
+      "perplexity": 27.02,
+      "lr": 0.0001,
+      "elapsed_sec": 9.3
+    },
+    {
+      "step": 3,
+      "train_loss": 2.8624,
+      "perplexity": 17.5,
+      "lr": 0.0,
+      "elapsed_sec": 11.8
+    }
+  ]
+}

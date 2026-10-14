@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import '../core/constants/app_colors.dart'; 
+import '../core/constants/app_colors.dart';
 
 class MainLayoutShell extends StatelessWidget {
   final Widget child;
@@ -12,23 +12,191 @@ class MainLayoutShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Get the current location to highlight the active tab
     final String location = GoRouterState.of(context).uri.path;
+    final isCamera = location == '/camera_detection';
+
+    // If on camera screen on mobile, let the camera screen have full immersive view
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isMobile = constraints.maxWidth < 768;
+
+        if (isMobile) {
+          return _buildMobileLayout(context, location, isCamera);
+        } else {
+          return _buildDesktopLayout(context, location);
+        }
+      },
+    );
+  }
+
+  Widget _buildMobileLayout(BuildContext context, String location, bool isCamera) {
+    // Determine bottom nav index
+    int selectedIndex = 0;
+    if (location == '/home') {
+      selectedIndex = 0;
+    } else if (location == '/camera_detection') {
+      selectedIndex = 1;
+    } else if (location == '/document_screening') {
+      selectedIndex = 2;
+    } else if (location == '/alerts') {
+      selectedIndex = 3;
+    } else if (location == '/statistics') {
+      selectedIndex = 4;
+    } else {
+      selectedIndex = -1;
+    }
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: AppColors.primaryBackground,
+      appBar: isCamera
+          ? null
+          : AppBar(
+              backgroundColor: AppColors.secondaryBackground,
+              elevation: 0,
+              titleSpacing: 16,
+              title: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(7),
+                    decoration: BoxDecoration(
+                      color: AppColors.primaryViolet.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: AppColors.primaryViolet.withValues(alpha: 0.4)),
+                    ),
+                    child: const Icon(Icons.remove_red_eye_rounded, color: AppColors.neonAccent, size: 20),
+                  ),
+                  const SizedBox(width: 10),
+                  const Text(
+                    'SmartVision AI',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.5,
+                      color: AppColors.primaryText,
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                Container(
+                  margin: const EdgeInsets.only(right: 12),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: AppColors.cardBackground,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: const BoxDecoration(
+                          color: AppColors.success,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      const Text(
+                        'LIVE',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.success,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Builder(
+                  builder: (ctx) => IconButton(
+                    icon: const Icon(Icons.menu_rounded, color: AppColors.primaryText),
+                    tooltip: 'All Features',
+                    onPressed: () => Scaffold.of(ctx).openEndDrawer(),
+                  ),
+                ),
+              ],
+            ),
+      endDrawer: _buildNavigationDrawer(context, location),
+      body: child,
+      bottomNavigationBar: isCamera
+          ? null
+          : Container(
+              decoration: const BoxDecoration(
+                color: AppColors.secondaryBackground,
+                border: Border(top: BorderSide(color: AppColors.border, width: 0.8)),
+              ),
+              child: NavigationBar(
+                selectedIndex: selectedIndex >= 0 ? selectedIndex : 0,
+                backgroundColor: AppColors.secondaryBackground,
+                elevation: 0,
+                height: 65,
+                labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+                onDestinationSelected: (idx) {
+                  switch (idx) {
+                    case 0:
+                      context.go('/home');
+                      break;
+                    case 1:
+                      context.go('/camera_detection');
+                      break;
+                    case 2:
+                      context.go('/document_screening');
+                      break;
+                    case 3:
+                      context.go('/alerts');
+                      break;
+                    case 4:
+                      context.go('/statistics');
+                      break;
+                  }
+                },
+                destinations: const [
+                  NavigationDestination(
+                    icon: Icon(Icons.dashboard_outlined),
+                    selectedIcon: Icon(Icons.dashboard_rounded),
+                    label: 'Home',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.camera_alt_outlined),
+                    selectedIcon: Icon(Icons.camera_alt_rounded),
+                    label: 'Scan',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.badge_outlined),
+                    selectedIcon: Icon(Icons.badge_rounded),
+                    label: 'ID Screen',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.warning_amber_rounded),
+                    selectedIcon: Icon(Icons.warning_rounded),
+                    label: 'Alerts',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.analytics_outlined),
+                    selectedIcon: Icon(Icons.analytics_rounded),
+                    label: 'Analytics',
+                  ),
+                ],
+              ),
+            ),
+    );
+  }
+
+  Widget _buildDesktopLayout(BuildContext context, String location) {
+    return Scaffold(
+      backgroundColor: AppColors.primaryBackground,
       body: Row(
         children: [
-          // Sidebar
+          // Desktop / Tablet Sidebar
           Container(
-            width: 280,
+            width: 250,
             decoration: const BoxDecoration(
-              color: Colors.white, // White sidebar
+              color: AppColors.secondaryBackground,
               border: Border(
-                right: BorderSide(
-                  color: AppColors.border, // Subtle border
-                  width: 1.0,
-                ),
+                right: BorderSide(color: AppColors.border, width: 1.0),
               ),
             ),
             child: Column(
@@ -36,115 +204,232 @@ class MainLayoutShell extends StatelessWidget {
               children: [
                 // Logo Area
                 Container(
-                  padding: const EdgeInsets.all(24.0),
+                  padding: const EdgeInsets.all(20.0),
                   child: Row(
                     children: [
-                      const Icon(Icons.visibility, color: AppColors.primary, size: 32),
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: AppColors.primaryViolet.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: AppColors.neonAccent.withValues(alpha: 0.5)),
+                        ),
+                        child: const Icon(Icons.remove_red_eye_rounded, color: AppColors.neonAccent, size: 24),
+                      ),
                       const SizedBox(width: 12),
-                      const Text(
-                        'SmartVision',
-                        style: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 0.5,
-                          color: AppColors.textMain,
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'SmartVision',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 0.5,
+                                color: AppColors.primaryText,
+                              ),
+                            ),
+                            Text(
+                              'AI Vision Suite',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: AppColors.brightViolet,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
                   ),
                 ),
-                
+                const Divider(color: AppColors.border, height: 1),
+                const SizedBox(height: 12),
+
                 // Navigation Items
                 Expanded(
                   child: ListView(
-                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                    padding: const EdgeInsets.symmetric(horizontal: 12.0),
                     children: [
                       _buildNavItem(context, 'Dashboard', Icons.dashboard_outlined, '/home', location),
                       _buildNavItem(context, 'Live Detection', Icons.camera_alt_outlined, '/camera_detection', location),
                       _buildNavItem(context, 'ID Screening', Icons.badge_outlined, '/document_screening', location),
-                      _buildNavItem(context, 'Detections', Icons.search, '/find_object', location),
-                      _buildNavItem(context, 'Alerts', Icons.notifications_none, '/alerts', location),
-                      _buildNavItem(context, 'History', Icons.history, '/history', location),
+                      _buildNavItem(context, 'Find Object', Icons.search_rounded, '/find_object', location),
+                      _buildNavItem(context, 'Threat Alerts', Icons.warning_amber_rounded, '/alerts', location),
+                      _buildNavItem(context, 'Face Biometrics', Icons.face_rounded, '/face_id', location),
+                      _buildNavItem(context, 'Detection History', Icons.history_rounded, '/history', location),
                       _buildNavItem(context, 'Analytics', Icons.analytics_outlined, '/statistics', location),
                       _buildNavItem(context, 'Settings', Icons.settings_outlined, '/settings', location),
-                      _buildNavItem(context, 'About', Icons.info_outline, '/about', location),
+                      _buildNavItem(context, 'About', Icons.info_outline_rounded, '/about', location),
                     ],
                   ),
                 ),
-                
-                // Bottom Area (Health/Status)
+
+                // System Status Footer
                 Container(
-                  padding: const EdgeInsets.all(24.0),
+                  padding: const EdgeInsets.all(16.0),
                   decoration: const BoxDecoration(
                     border: Border(top: BorderSide(color: AppColors.border)),
                   ),
                   child: Row(
                     children: [
                       Container(
-                        width: 12,
-                        height: 12,
+                        width: 10,
+                        height: 10,
                         decoration: const BoxDecoration(
-                          color: AppColors.primary,
+                          color: AppColors.success,
                           shape: BoxShape.circle,
                         ),
                       ),
-                      const SizedBox(width: 12),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: const [
-                          Text('System Secure', style: TextStyle(fontWeight: FontWeight.w600, color: AppColors.textMain)),
-                          Text('All services online', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
-                        ],
-                      )
+                      const SizedBox(width: 10),
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Neural Core Active',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.primaryText,
+                              ),
+                            ),
+                            Text(
+                              'YOLOv8 & TFLite Ready',
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: AppColors.mutedText,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ],
                   ),
                 )
               ],
             ),
           ),
-          
+
           // Main Content Area
-          Expanded(
-            child: child,
-          ),
+          Expanded(child: child),
         ],
+      ),
+    );
+  }
+
+  Widget _buildNavigationDrawer(BuildContext context, String currentLocation) {
+    return Drawer(
+      backgroundColor: AppColors.secondaryBackground,
+      child: SafeArea(
+        child: Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: const BoxDecoration(
+                border: Border(bottom: BorderSide(color: AppColors.border)),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppColors.primaryViolet.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.remove_red_eye, color: AppColors.neonAccent, size: 24),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('SmartVision AI', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.primaryText)),
+                        Text('All Modules & Tools', style: TextStyle(fontSize: 12, color: AppColors.secondaryText)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                children: [
+                  _buildNavItem(context, 'Dashboard', Icons.dashboard_outlined, '/home', currentLocation),
+                  _buildNavItem(context, 'Live Detection', Icons.camera_alt_outlined, '/camera_detection', currentLocation),
+                  _buildNavItem(context, 'ID & Document Screening', Icons.badge_outlined, '/document_screening', currentLocation),
+                  _buildNavItem(context, 'Find Object / Target', Icons.search_rounded, '/find_object', currentLocation),
+                  _buildNavItem(context, 'Threat & Hazard Alerts', Icons.warning_amber_rounded, '/alerts', currentLocation),
+                  _buildNavItem(context, 'Face ID & Biometrics', Icons.face_rounded, '/face_id', currentLocation),
+                  _buildNavItem(context, 'Detection History', Icons.history_rounded, '/history', currentLocation),
+                  _buildNavItem(context, 'Analytics & Stats', Icons.analytics_outlined, '/statistics', currentLocation),
+                  _buildNavItem(context, 'Settings', Icons.settings_outlined, '/settings', currentLocation),
+                  _buildNavItem(context, 'About System', Icons.info_outline_rounded, '/about', currentLocation),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildNavItem(BuildContext context, String title, IconData icon, String route, String currentLocation) {
     final bool isActive = currentLocation == route;
-    
+
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8.0),
-      child: InkWell(
-        onTap: () {
-          context.go(route);
-        },
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          decoration: BoxDecoration(
-            color: isActive ? AppColors.primary.withOpacity(0.08) : Colors.transparent,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Row(
-            children: [
-              Icon(
-                icon,
-                color: isActive ? AppColors.primary : AppColors.textSecondary,
-                size: 22,
+      padding: const EdgeInsets.only(bottom: 4.0),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () {
+            // Close drawer if open
+            if (Navigator.of(context).canPop()) {
+              Navigator.of(context).pop();
+            }
+            context.go(route);
+          },
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+            decoration: BoxDecoration(
+              color: isActive ? AppColors.primaryViolet.withValues(alpha: 0.16) : Colors.transparent,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: isActive ? AppColors.primaryViolet.withValues(alpha: 0.5) : Colors.transparent,
+                width: 1,
               ),
-              const SizedBox(width: 16),
-              Text(
-                title,
-                style: TextStyle(
-                  color: isActive ? AppColors.primary : AppColors.textSecondary,
-                  fontWeight: isActive ? FontWeight.w600 : FontWeight.w500,
-                  fontSize: 15,
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  icon,
+                  color: isActive ? AppColors.neonAccent : AppColors.secondaryText,
+                  size: 20,
                 ),
-              ),
-            ],
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: TextStyle(
+                      color: isActive ? AppColors.primaryText : AppColors.secondaryText,
+                      fontWeight: isActive ? FontWeight.w600 : FontWeight.w500,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+                if (isActive)
+                  Container(
+                    width: 6,
+                    height: 6,
+                    decoration: const BoxDecoration(
+                      color: AppColors.neonAccent,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
       ),

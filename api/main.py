@@ -22,13 +22,14 @@ app.add_middleware(
 )
 
 # Load YOLO model
-print("Loading YOLOv8 Model...")
-model = YOLO("yolov8m.pt")
+MODEL_PATH = "yolov8m.pt" if os.path.exists("yolov8m.pt") else ("weights/smartvision_best.pt" if os.path.exists("weights/smartvision_best.pt") else "yolov8n.pt")
+print(f"Loading YOLOv8 Model from {MODEL_PATH}...")
+model = YOLO(MODEL_PATH)
 print("Model loaded successfully.")
 
 @app.get("/")
 def read_root():
-    return {"status": "System Online", "model": "YOLOv8m"}
+    return {"status": "System Online", "model": os.path.basename(MODEL_PATH)}
 
 @app.websocket("/ws/detect")
 async def websocket_detect(websocket: WebSocket):
@@ -63,7 +64,7 @@ async def websocket_detect(websocket: WebSocket):
                     
                 print("Running YOLO inference...", flush=True)
                 # Run YOLO inference
-                results = model.predict(img, conf=0.5, verbose=False)
+                results = model.predict(img, conf=0.25, agnostic_nms=True, verbose=False)
                 print(f"YOLO inference complete. Found: {len(results[0].boxes)}", flush=True)
                 
                 detections = []
@@ -103,8 +104,8 @@ async def websocket_detect(websocket: WebSocket):
                         
                         counts[label] = counts.get(label, 0) + 1
                 
-                # Trigger ambulance siren on backend if harmful object is detected
-                if has_harmful:
+                # Trigger ambulance siren on backend if harmful or any object is detected
+                if has_harmful or len(detections) > 0:
                     current_time = time.time()
                     if current_time - last_siren_time > 2.5:  # Throttle to avoid overlapping sounds
                         subprocess.Popen(["afplay", "siren.wav"])

@@ -350,7 +350,7 @@ class AIAssistant:
         "Person": "Person detected. Greeting opportunity?",
         "Phone": "Phone detected. Check for notifications.",
         "Bag": "Bag detected. Ensure belongings are secure.",
-        "Knife": "Knife detected. Exercise caution!",
+        "Knife": "⚠️ Knife detected. Exercise caution! Keep blade pointed away and handle with care.",
         "Scissors": "Scissors detected. Handle with care.",
         "Cup": "Cup detected. Beverage time?",
         "Book": "Book detected. Time for reading?"
@@ -375,23 +375,41 @@ class AIAssistant:
             if key.lower() == object_name.lower():
                 return value
         
-        # Default info if not found
+        oname = object_name.lower().strip()
+        # Generative / Category-Aware dynamic resolution
+        if oname in ["knife", "scissors", "fork", "dagger", "sword"]:
+            return {
+                "description": f"Sharp utensil/implement ({object_name}) detected in the workspace.",
+                "uses": "Food preparation, precision cutting, or craftwork.",
+                "safety": "High caution required. Keep fingers curled ('claw grip'), point edges down, and store safely.",
+                "facts": "Knives are among humanity's oldest tools, dating back over 2.5 million years to the Oldowan era."
+            }
+        elif oname in ["tomato", "apple", "banana", "orange", "carrot", "broccoli", "pizza", "sandwich"]:
+            return {
+                "description": f"Fresh food ingredient or item ({object_name}).",
+                "uses": "Culinary preparation, healthy snacking, nutritional consumption.",
+                "safety": "Ensure food is fresh, washed, and handled with clean utensils and surfaces.",
+                "facts": f"{object_name.capitalize()} contains essential vitamins and minerals supporting metabolic wellness."
+            }
+        elif oname in ["car", "bus", "truck", "motorcycle", "bicycle"]:
+            return {
+                "description": f"Vehicular transport unit ({object_name}).",
+                "uses": "Personal or commercial transit, cargo conveyance, mobility.",
+                "safety": "Maintain safe stopping distances, adhere to lane regulations, and observe traffic alerts.",
+                "facts": f"Modern {object_name}s integrate autonomous sensors, telemetry, and advanced safety envelopes."
+            }
+        
+        # Default info with intelligent formatting
         return {
-            "description": f"{object_name} detected in the scene.",
-            "uses": "Various applications depending on context.",
-            "safety": "General safety precautions apply.",
-            "facts": f"{object_name} is one of the many objects our AI can detect."
+            "description": f"{object_name.capitalize()} recognized by SmartVision neural visual perception.",
+            "uses": "Identified in the active environment for tracking, contextual reasoning, and spatial awareness.",
+            "safety": "Standard situational safety precautions recommended.",
+            "facts": f"{object_name.capitalize()} is cataloged within the 80 canonical YOLOv8 classes and real-time open-vocabulary database."
         }
     
     def get_recommendation(self, object_name: str) -> str:
         """
         Get a smart recommendation for a detected object.
-        
-        Args:
-            object_name: Name of the detected object
-            
-        Returns:
-            Recommendation string
         """
         # Try exact match first
         if object_name in self.RECOMMENDATIONS:
@@ -402,8 +420,16 @@ class AIAssistant:
             if key.lower() == object_name.lower():
                 return value
         
+        oname = object_name.lower().strip()
+        if oname in ["knife", "scissors"]:
+            return f"⚠️ {object_name.capitalize()} detected. Keep blade oriented away from fingers and place on a stable surface."
+        elif oname in ["tomato", "apple", "orange", "food"]:
+            return f"🥗 Fresh {object_name} detected. Great time for a healthy snack or fresh recipe preparation!"
+        elif oname in ["car", "motorcycle", "bicycle"]:
+            return f"🚗 Vehicle ({object_name}) in frame. Monitor proximity and maintain safe lane clearance."
+        
         # Default recommendation
-        return f"{object_name} detected."
+        return f"💡 {object_name.capitalize()} detected. Visual tracking and contextual analysis active."
 
 
 class ReportGenerator:
@@ -622,210 +648,51 @@ class SceneDescriber:
 
 class VisionChatbot:
     """
-    A Machine Learning conversational agent that can answer questions about the current scene's context.
-    Trained on a synthetic dataset using TF-IDF and SGD.
+    Advanced Multimodal Conversational Vision Agent that works like ChatGPT and Google Gemini.
+    Powered by SmartVisionAssistant, supporting:
+    - Google Gemini (Gemini 1.5 / 2.0 Flash)
+    - OpenAI ChatGPT (GPT-4o / GPT-4o-mini)
+    - SmartVision Neural AI (Built-in Zero-Key Generative Reasoning Engine)
     """
     
-    def __init__(self, api_key: str = None):
-        self.api_key = api_key
-        self.history = []
-        self.model = None
-        self.objects_list = ["person", "people", "cat", "dog", "car", "bottle", "chair", "laptop", "phone", "book", "cup", "potted plant"]
-        try:
-            import joblib
-            import os
-            model_path = os.path.join("ai_model", "chatbot_intent_model.pkl")
-            if os.path.exists(model_path):
-                self.model = joblib.load(model_path)
-        except Exception as e:
-            print(f"Warning: Could not load intent model: {e}")
-            
-    def ask(self, question: str, context_detections: List[Dict]) -> str:
-        q_lower = question.lower()
-        self.history.append({"role": "user", "content": question})
-        
-        object_counts = {}
-        for det in context_detections:
-            name = det.get('object_name', 'unknown').lower()
-            object_counts[name] = object_counts.get(name, 0) + 1
-            
-        # Try using OpenAI if API key is provided
-        if hasattr(self, 'api_key') and self.api_key and self.api_key.startswith('sk-'):
-            try:
-                import openai
-                client = openai.OpenAI(api_key=self.api_key)
-                
-                # Build context for the AI
-                found_counts = [f"{c} {o}s" if c > 1 else f"{c} {o}" for o, c in object_counts.items()]
-                scene_context = "The scene is empty."
-                if found_counts:
-                    scene_context = f"The scene currently contains: {', '.join(found_counts)}."
-                
-                system_prompt = f"You are SmartVision AI, an intelligent vision assistant. You can see the camera feed. {scene_context} Be helpful, answer the user's questions about the scene based on this context, or chat with them generally."
-                
-                messages = [{"role": "system", "content": system_prompt}]
-                
-                # Keep last 5 messages for context
-                for msg in self.history[-6:-1]: # exclude the latest user message which we append next
-                    messages.append(msg)
-                
-                messages.append({"role": "user", "content": question})
-                
-                chat_completion = client.chat.completions.create(
-                    messages=messages,
-                    model="gpt-3.5-turbo",
-                    max_tokens=150,
-                    temperature=0.7
-                )
-                
-                response = chat_completion.choices[0].message.content
-                self.history[-1] = {"role": "user", "content": question} # Make sure last is just user
-                self.history.append({"role": "assistant", "content": response})
-                return response
-            except Exception as e:
-                print(f"OpenAI Error: {e}. Falling back to local ML model.")
-            
-        # Determine target object from question
-        target_obj = None
-        for obj in self.objects_list:
-            if obj in q_lower:
-                target_obj = obj
-                break
-                
-        # Handle plurals for target matching
-        if target_obj == "people":
-            target_obj = "person"
-            
-        intent = "unknown"
-        if self.model is not None:
-            # Use predict_proba to get confidence
-            try:
-                probs = self.model.predict_proba([q_lower])[0]
-                max_prob_idx = probs.argmax()
-                max_prob = probs[max_prob_idx]
-                
-                # Only accept the prediction if we are somewhat confident
-                if max_prob > 0.45:
-                    intent = self.model.classes_[max_prob_idx]
-                else:
-                    intent = "general"
-            except AttributeError:
-                # Fallback if model doesn't support predict_proba
-                intent = self.model.predict([q_lower])[0]
-        else:
-            # Fallback rule-based matching if model is not loaded
-            if "how many" in q_lower or "count" in q_lower: intent = "count"
-            elif "what do you see" in q_lower or "describe" in q_lower: intent = "describe"
-            elif "where is" in q_lower or "locate" in q_lower: intent = "locate"
-            elif "danger" in q_lower or "safe" in q_lower: intent = "safety"
-            else: intent = "general"
-            
-        response = ""
-        
-        if intent == "count":
-            if target_obj:
-                count = object_counts.get(target_obj, 0)
-                if count > 0:
-                    plural = target_obj + "s" if count > 1 else target_obj
-                    templates = [
-                        f"I have detected {count} {plural} in the current view.",
-                        f"Currently, there are {count} {plural} visible.",
-                        f"My analysis shows {count} {plural} present.",
-                        f"I am observing {count} {plural} at this moment."
-                    ]
-                    response = random.choice(templates)
-                else:
-                    templates = [
-                        f"I do not detect any {target_obj}s in the current view.",
-                        f"There are no {target_obj}s visible at this time.",
-                        f"My sensors do not show any {target_obj}s."
-                    ]
-                    response = random.choice(templates)
-            else:
-                found_counts = [f"{c} {o}" for o, c in object_counts.items()]
-                if found_counts:
-                    templates = [
-                        f"The following objects are detected: {', '.join(found_counts)}.",
-                        f"Currently observing: {', '.join(found_counts)}.",
-                        f"My scan identifies: {', '.join(found_counts)}."
-                    ]
-                    response = random.choice(templates)
-                else:
-                    templates = [
-                        "I am not detecting any recognizable objects at this moment.",
-                        "The current frame appears to be empty.",
-                        "No objects are currently identified in the scene."
-                    ]
-                    response = random.choice(templates)
-                    
-        elif intent == "describe":
-            base_desc = SceneDescriber.generate_description(context_detections)
-            intros = [
-                "Based on my analysis, ",
-                "According to the current scan, ",
-                "Observing the scene, ",
-                ""
-            ]
-            response = random.choice(intros) + base_desc
-            
-        elif intent == "locate":
-            target = target_obj if target_obj else q_lower.replace("where is the ", "").replace("where is a ", "").replace("where is ", "").strip().rstrip("?")
-            
-            locations = []
-            for det in context_detections:
-                if det.get('object_name', '').lower() == target and 'bbox' in det:
-                    box = det['bbox']
-                    if len(box) >= 4:
-                        x_center = (box[0] + box[2]) / 2
-                        if x_center < 320: 
-                            locations.append("on the left side")
-                        else:
-                            locations.append("on the right side")
-            
-            if locations:
-                templates = [
-                    f"The {target} is located {locations[0]}.",
-                    f"I have identified the {target} {locations[0]}.",
-                    f"You can find the {target} {locations[0]}."
-                ]
-                response = random.choice(templates)
-            else:
-                templates = [
-                    f"I am unable to locate the {target} in the current view.",
-                    f"The {target} is not currently visible.",
-                    f"My scan cannot detect a {target} at this time."
-                ]
-                response = random.choice(templates)
-                
-        elif intent == "safety":
-            dangerous_objects = ["knife", "scissors", "gun", "fire", "gas cylinder"]
-            detected_danger = [obj for obj in object_counts.keys() if obj in dangerous_objects]
-            
-            if detected_danger:
-                templates = [
-                    f"Warning: Potentially dangerous items detected: {', '.join(detected_danger)}.",
-                    f"Alert: There are {', '.join(detected_danger)} present in the area.",
-                    f"Caution is advised. I have detected {', '.join(detected_danger)}."
-                ]
-                response = random.choice(templates)
-            else:
-                templates = [
-                    "The scene appears to be secure. No dangerous objects detected.",
-                    "No hazards or dangerous objects are currently visible.",
-                    "The area is clear of identified threats."
-                ]
-                response = random.choice(templates)
-                
-        else: # general / unknown
-            templates = [
-                "I am the SmartVision AI assistant. How may I assist you with the camera feed?",
-                "Hello. I am ready to analyze the scene. Would you like me to count or describe the objects?",
-                "I am fully operational. Please ask me to identify or locate objects.",
-                "Greetings. I can assist by analyzing the current video feed. What would you like to know?"
-            ]
-            response = random.choice(templates)
-            
-        self.history.append({"role": "assistant", "content": response})
+    def __init__(self, api_key: str = None, provider: str = "auto", gemini_key: str = None):
+        self.api_key = api_key or os.environ.get("OPENAI_API_KEY", "")
+        self.gemini_key = gemini_key or os.environ.get("GEMINI_API_KEY", "")
+        self.provider = provider
+        from ai.chatbot.smart_assistant import SmartVisionAssistant
+        self.assistant = SmartVisionAssistant()
+        self.assistant.set_provider_and_keys(
+            provider=self.provider,
+            gemini_key=self.gemini_key,
+            openai_key=self.api_key
+        )
+        self.history = self.assistant.history
+
+    def set_provider_and_keys(self, provider: str, gemini_key: str = "", openai_key: str = ""):
+        self.provider = provider
+        if gemini_key is not None and gemini_key != "":
+            self.gemini_key = gemini_key
+        if openai_key is not None and openai_key != "":
+            self.api_key = openai_key
+        self.assistant.set_provider_and_keys(
+            provider=self.provider,
+            gemini_key=self.gemini_key,
+            openai_key=self.api_key
+        )
+
+    def clear_history(self):
+        self.assistant.clear_history()
+        self.history = self.assistant.history
+
+    def ask(self, question: str, context_detections: List[Dict], ocr_text: str = "") -> str:
+        # Keep keys and provider synced
+        self.assistant.set_provider_and_keys(
+            provider=self.provider,
+            gemini_key=self.gemini_key or os.environ.get("GEMINI_API_KEY", ""),
+            openai_key=self.api_key or os.environ.get("OPENAI_API_KEY", "")
+        )
+        response = self.assistant.ask(question, context_detections=context_detections, ocr_text=ocr_text)
+        self.history = self.assistant.history
         return response
 
 
@@ -883,24 +750,32 @@ class LowLightEnhancer:
 
 class DistanceEstimator:
     """
-    Estimates distance based on bounding box height relative to image height.
-    Assumes standard camera focal length projection approximation.
+    Estimates metric distance based on calibrated pinhole camera model
+    and known real-world physical object dimensions.
     """
     @staticmethod
     def estimate(bbox: List[int], img_height: int, calibration_factor: float = 1.0) -> float:
         # box format: [x1, y1, x2, y2]
         h = bbox[3] - bbox[1]
-        
-        # Avoid division by zero
         if h <= 0: return 99.9
-        
-        # Mock formula: distance is inversely proportional to relative height
-        # A person taking up full frame is ~1m away. 
         relative_height = h / img_height
-        
-        # Base constant chosen for approximation (Focal Length * Real Height)
         distance = calibration_factor / (relative_height + 0.001)
         return round(distance, 1)
+
+    @staticmethod
+    def estimate_metric(label: str, bbox: List[float], img_width: int, img_height: int) -> Dict[str, Any]:
+        """
+        Calibrated metric distance estimation using known physical dimensions.
+        bbox: [x1, y1, x2, y2] in pixels
+        """
+        from core.distance_estimation import default_distance_estimator
+        norm_rect = {
+            'left': float(bbox[0]) / max(1, img_width),
+            'top': float(bbox[1]) / max(1, img_height),
+            'right': float(bbox[2]) / max(1, img_width),
+            'bottom': float(bbox[3]) / max(1, img_height),
+        }
+        return default_distance_estimator.estimate_distance(label, norm_rect)
 
 
 class UnknownObjectDetector:
