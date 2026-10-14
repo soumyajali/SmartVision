@@ -11,7 +11,8 @@ from core_utils import (
     PerformanceMonitor, OCRReader, QRBarcodeScanner,
     AIAssistant, ReportGenerator, ImageQualityAnalyzer, 
     SceneDescriber, VisionChatbot, AdaptiveEngine, LowLightEnhancer, DistanceEstimator, UnknownObjectDetector,
-    get_person_appearance_descriptor, compare_person_appearance, scale_bbox
+    get_person_appearance_descriptor,
+    compare_person_appearance, face_landmarks_to_location, scale_bbox, select_best_person_match
 )
 from .recorder import VideoRecorder, get_video_recorder
 
@@ -20,5 +21,6 @@ __all__ = [
     'AIAssistant', 'ReportGenerator', 'VideoRecorder', 'get_video_recorder',
     'ImageQualityAnalyzer', 'SceneDescriber', 'VisionChatbot',
     'AdaptiveEngine', 'LowLightEnhancer', 'DistanceEstimator', 'UnknownObjectDetector',
-    'get_person_appearance_descriptor', 'compare_person_appearance', 'scale_bbox'
+    'get_person_appearance_descriptor', 'compare_person_appearance',
+    'face_landmarks_to_location', 'scale_bbox', 'select_best_person_match'
 ]

@@ -108,7 +108,7 @@ Open `http://localhost:8501` in your browser to access the live detection dashbo
 
 Open **Voice Assistant** in the dashboard navigation to record a question or command. Assistant responses are spoken through the computer running the Streamlit app.
 
-In **Video Fast Review**, reference-image person matching uses face recognition when a face is visible and clothing-color similarity as a fallback. Increase **Person detection resolution** and lower **Appearance match sensitivity** to improve recall for small or side-view people. This visual fallback is not identity verification and can match other people with similar clothing; no single reference image can guarantee recognition at every angle or distance.
+In **Video Fast Review**, reference-image person matching scans sampled video frames for faces independently of person-box detections, using face recognition, MediaPipe face landmarks, and mirrored-view checks to improve matching across frontal and profile views. Person matches use face embeddings only; clothing and body pose are not used. **Strict**, **Balanced**, and **Tolerant** modes control the face-distance threshold, with higher recall increasing the chance of false matches. Increase **Person detection resolution** to improve recall for distant people. A single reference image cannot train a new identity model or guarantee recognition at every angle.
 
 ### 4. Launch FastAPI Server (for Mobile App)
 

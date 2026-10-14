@@ -23,7 +23,7 @@ from utils import (
   AIAssistant, ReportGenerator, ImageQualityAnalyzer,
   SceneDescriber, VisionChatbot, AdaptiveEngine, 
   LowLightEnhancer, DistanceEstimator, UnknownObjectDetector,
-  get_person_appearance_descriptor, compare_person_appearance, scale_bbox
+  face_landmarks_to_location, scale_bbox, select_best_person_match
 )
 from utils.recorder import get_video_recorder
 from services.email_service import get_email_service
@@ -137,6 +137,97 @@ def load_fast_model():
   if os.path.exists("weights/smartvision_best.pt"):
     return YOLO("weights/smartvision_best.pt")
   return YOLO("yolov8n.pt")
+
+@st.cache_resource
+def load_vfr_face_landmarker():
+  import mediapipe as mp
+
+  model_path = os.path.join(os.path.dirname(__file__), "face_landmarker.task")
+  if not os.path.exists(model_path):
+    raise FileNotFoundError(f"Video Fast Review face model was not found: {model_path}")
+  options = mp.tasks.vision.FaceLandmarkerOptions(
+    base_options=mp.tasks.BaseOptions(model_asset_path=model_path),
+    running_mode=mp.tasks.vision.RunningMode.IMAGE,
+    num_faces=5,
+    min_face_detection_confidence=0.25,
+    min_face_presence_confidence=0.25,
+    min_tracking_confidence=0.25,
+  )
+  return mp.tasks.vision.FaceLandmarker.create_from_options(options)
+
+def get_vfr_face_candidates(image_rgb, face_recognition):
+  import mediapipe as mp
+
+  if image_rgb is None or image_rgb.size == 0:
+    return []
+
+  height, width = image_rgb.shape[:2]
+  upscale = min(3.0, max(1.0, 600.0 / max(height, width)))
+  if upscale > 1.0:
+    recognition_image = cv2.resize(
+      image_rgb,
+      (int(width * upscale), int(height * upscale)),
+      interpolation=cv2.INTER_CUBIC,
+    )
+  else:
+    recognition_image = image_rgb
+
+  locations = []
+  for upsample in (0, 1, 2):
+    locations.extend(
+      face_recognition.face_locations(
+        recognition_image,
+        number_of_times_to_upsample=upsample,
+        model="hog",
+      )
+    )
+
+  mp_image = mp.Image(
+    image_format=mp.ImageFormat.SRGB,
+    data=recognition_image,
+  )
+  landmark_result = load_vfr_face_landmarker().detect(mp_image)
+  for face_landmarks in landmark_result.face_landmarks:
+    location = face_landmarks_to_location(face_landmarks, recognition_image.shape)
+    if location is not None:
+      locations.append(location)
+
+  unique_locations = []
+  for location in sorted(
+    locations,
+    key=lambda box: (box[2] - box[0]) * (box[1] - box[3]),
+    reverse=True,
+  ):
+    top, right, bottom, left = location
+    duplicate = False
+    for kept_top, kept_right, kept_bottom, kept_left in unique_locations:
+      intersection_width = max(0, min(right, kept_right) - max(left, kept_left))
+      intersection_height = max(0, min(bottom, kept_bottom) - max(top, kept_top))
+      intersection = intersection_width * intersection_height
+      area = (right - left) * (bottom - top)
+      kept_area = (kept_right - kept_left) * (kept_bottom - kept_top)
+      union = area + kept_area - intersection
+      if union > 0 and intersection / union > 0.6:
+        duplicate = True
+        break
+    if not duplicate:
+      unique_locations.append(location)
+
+  candidates = []
+  for location in unique_locations:
+    try:
+      encodings = face_recognition.face_encodings(
+        recognition_image,
+        [location],
+        num_jitters=1,
+        model="small",
+      )
+    except (RuntimeError, ValueError, IndexError):
+      continue
+    if encodings:
+      original_location = tuple(int(round(value / upscale)) for value in location)
+      candidates.append((original_location, encodings[0]))
+  return candidates
 
 @st.cache_resource
 def load_classification_model():
@@ -830,9 +921,6 @@ elif page == "Video Fast Review":
     ref_embedding = None
     ref_hist = None
     ref_is_person = False
-    allow_person_appearance = False
-    appearance_sensitivity = 0.40
-    ref_person_appearance = None
 
     if search_type == "Object Category":
       target_object = st.selectbox("Find object:", sorted(CLASS_NAMES.values()), index=0).lower()
@@ -846,7 +934,7 @@ elif page == "Video Fast Review":
 
         # Check if we need to process or re-process this reference image
         cur_ref = st.session_state.get("vfr_ref")
-        need_reprocess = (cur_ref is None or cur_ref.get("version") != 3 or cur_ref.get("hash") != ref_hash)
+        need_reprocess = (cur_ref is None or cur_ref.get("version") != 8 or cur_ref.get("hash") != ref_hash)
 
         if need_reprocess and len(file_bytes) > 0:
           data = np.frombuffer(file_bytes, np.uint8)
@@ -855,7 +943,7 @@ elif page == "Video Fast Review":
             ref_crop = ref_img_cv.copy()
             auto_cat = None
             preview_img = ref_img_cv.copy()
-            found_face_enc = None
+            found_face_encs = []
             is_person = False
             face_error = None
 
@@ -863,26 +951,35 @@ elif page == "Video Fast Review":
             try:
               import face_recognition
               ref_rgb = cv2.cvtColor(ref_img_cv, cv2.COLOR_BGR2RGB)
-              ref_face_locs = face_recognition.face_locations(ref_rgb)
-              if not ref_face_locs:
-                ref_face_locs = face_recognition.face_locations(ref_rgb, number_of_times_to_upsample=1)
+              face_candidates = get_vfr_face_candidates(ref_rgb, face_recognition)
+              if face_candidates:
+                best_face_loc, best_face_enc = max(
+                  face_candidates,
+                  key=lambda item: (item[0][2] - item[0][0]) * (item[0][1] - item[0][3]),
+                )
+                found_face_encs.append(best_face_enc)
+                is_person = True
+                top, right, bottom, left = best_face_loc
+                cv2.rectangle(preview_img, (left, top), (right, bottom), (0, 255, 0), 3)
+                cv2.putText(preview_img, "Target Individual", (left, max(top - 10, 20)), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 255, 0), 2)
 
-              if len(ref_face_locs) > 0:
-                best_face_loc = max(ref_face_locs, key=lambda l: (l[2] - l[0]) * (l[1] - l[3]))
-                ref_face_encs = face_recognition.face_encodings(ref_rgb, [best_face_loc])
-                if len(ref_face_encs) > 0:
-                  found_face_enc = ref_face_encs[0]
-                  is_person = True
-                  top, right, bottom, left = best_face_loc
-                  cv2.rectangle(preview_img, (left, top), (right, bottom), (0, 255, 0), 3)
-                  cv2.putText(preview_img, "Target Individual", (left, max(top - 10, 20)), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 255, 0), 2)
+                mirrored_candidates = get_vfr_face_candidates(
+                  cv2.flip(ref_rgb, 1),
+                  face_recognition,
+                )
+                if mirrored_candidates:
+                  _, mirrored_encoding = max(
+                    mirrored_candidates,
+                    key=lambda item: (item[0][2] - item[0][0]) * (item[0][1] - item[0][3]),
+                  )
+                  if float(np.linalg.norm(best_face_enc - mirrored_encoding)) > 1e-4:
+                    found_face_encs.append(mirrored_encoding)
             except ImportError as exc:
               face_error = f"Person matching requires face-recognition and dlib. Install project dependencies with: pip install -r requirements.txt ({exc})"
             except Exception as exc:
               face_error = f"Could not process the reference image for face matching: {exc}"
 
-            # Use the detected person crop for appearance matching when face matching is unavailable.
-            if not is_person or found_face_enc is not None:
+            if not is_person or found_face_encs:
               try:
                 ref_det_results = det_model(ref_img_cv, conf=0.25, verbose=False)
                 if len(ref_det_results) > 0 and ref_det_results[0].boxes is not None and len(ref_det_results[0].boxes) > 0:
@@ -905,27 +1002,25 @@ elif page == "Video Fast Review":
                     cv2.putText(preview_img, f"Target: {detected_category.title()}", (bx1, max(by1 - 10, 20)), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
               except Exception as exc:
                 if is_person:
-                  face_error = f"Could not prepare the reference person's appearance crop: {exc}"
+                  face_error = f"Could not prepare the reference person's image crop: {exc}"
 
-            if auto_cat == "person" and found_face_enc is None and face_error is None:
-              face_error = "No clear face was detected. Video Fast Review will use clothing and appearance matching instead."
+            if auto_cat == "person" and not found_face_encs and face_error is None:
+              face_error = "No clear face was detected. Person matching requires a clear face in the reference image; clothing will not be used."
             is_person = is_person or auto_cat == "person"
 
             ref_emb = get_image_embedding(ref_crop)
             ref_h = get_color_histogram(ref_crop)
-            ref_person_appearance = get_person_appearance_descriptor(ref_crop) if is_person else None
 
             st.session_state["vfr_ref"] = {
               "name": ref_image_file.name,
               "size": len(file_bytes),
               "hash": ref_hash,
-              "version": 3,
-              "face_enc": found_face_enc,
+              "version": 8,
+              "face_enc": found_face_encs if found_face_encs else None,
               "is_person": is_person,
               "auto_cat": auto_cat,
               "embedding": ref_emb,
               "hist": ref_h,
-              "person_appearance": ref_person_appearance,
               "face_error": face_error,
               "preview_rgb": cv2.cvtColor(preview_img, cv2.COLOR_BGR2RGB),
               "ref_crop": ref_crop
@@ -938,7 +1033,6 @@ elif page == "Video Fast Review":
           ref_is_person = cached["is_person"]
           ref_embedding = cached["embedding"]
           ref_hist = cached["hist"]
-          ref_person_appearance = cached.get("person_appearance")
           auto_cat = cached["auto_cat"]
 
           if cached.get("face_error"):
@@ -946,20 +1040,7 @@ elif page == "Video Fast Review":
 
           if ref_is_person:
             st.success("Target Identified: **Person**")
-            st.caption("Face matching is preferred when the face is visible. Clothing and appearance matching can help with distant, side-view, or turned-away people, but is not identity verification.")
-            allow_person_appearance = st.checkbox(
-              "Match clothing/appearance when face matching is unavailable",
-              value=True,
-              help="Compares clothing colors and their distribution. Lower sensitivity finds more people but can include people wearing similar clothes."
-            )
-            appearance_sensitivity = st.slider(
-              "Appearance match sensitivity",
-              min_value=0.25,
-              max_value=0.75,
-              value=0.40,
-              step=0.05,
-              help="Lower this for distant people or side views. Higher values reduce false matches."
-            )
+            st.caption("Person matches are based only on face embeddings. Clothing, body shape, and pose are not used to identify a person.")
             target_object = "person"
           elif auto_cat:
             st.success(f"Detected Reference Object: **{auto_cat.title()}**")
@@ -977,35 +1058,24 @@ elif page == "Video Fast Review":
               target_object = st.selectbox("Category:", sorted(CLASS_NAMES.values()), index=0).lower()
               if target_object == "person":
                 ref_is_person = True
-                ref_person_appearance = get_person_appearance_descriptor(cached["ref_crop"])
-                cached["person_appearance"] = ref_person_appearance
                 cached["is_person"] = True
                 st.session_state["vfr_ref"] = cached
-                allow_person_appearance = True
-                appearance_sensitivity = st.slider(
-                  "Appearance match sensitivity",
-                  min_value=0.25,
-                  max_value=0.75,
-                  value=0.40,
-                  step=0.05,
-                  help="Lower this for distant people or side views. Higher values reduce false matches."
-                )
 
     precision_mode = st.radio(
       "Matching Precision",
       ["Strict (Highest Precision)", "Balanced (Standard)", "Tolerant (High Recall)"],
       index=0,
-      help="Strict uses higher match thresholds. Appearance matching can still match people with similar visual features or clothing."
+      help="Higher-recall modes allow more face-embedding distance for profile and low-resolution faces; this may increase false matches."
     )
 
     if precision_mode == "Strict (Highest Precision)":
-      max_face_dist = 0.48
+      max_face_dist = 0.45
       min_obj_sim = 0.72
     elif precision_mode == "Balanced (Standard)":
-      max_face_dist = 0.52
+      max_face_dist = 0.50
       min_obj_sim = 0.65
     else:
-      max_face_dist = 0.58
+      max_face_dist = 0.55
       min_obj_sim = 0.55
 
     sample_rate = st.slider("Frames per second to analyze", 1, 5, 1, help="Lower is faster but might miss very brief appearances.")
@@ -1041,6 +1111,14 @@ elif page == "Video Fast Review":
       if search_type == "Reference Image" and (cached is None or (cached["face_enc"] is None and cached["embedding"] is None)):
         st.warning("Please upload a reference image first.")
         can_start = False
+      if (
+        search_type == "Reference Image"
+        and cached is not None
+        and cached.get("is_person")
+        and cached.get("face_enc") is None
+      ):
+        st.warning("No reference face was detected. Upload a clear image with the target person's face visible; clothing cannot be used as a fallback.")
+        can_start = False
 
       if can_start and st.button("Start Fast Review", type="primary", width="stretch"):
         st.markdown("### Search Results")
@@ -1064,12 +1142,12 @@ elif page == "Video Fast Review":
 
         found_timestamps = []
         current_frame = 0
+        face_match_error = None
 
         # Retrieve cached reference data
         ref_face_enc = cached.get("face_enc") if cached else None
         ref_deep_emb = cached.get("embedding") if cached else None
         ref_color_h = cached.get("hist") if cached else None
-        ref_person_appearance = cached.get("person_appearance") if cached else None
         person_class_id = next(
           (class_id for class_id, class_name in CLASS_NAMES.items() if class_name.lower() == "person"),
           None
@@ -1100,12 +1178,13 @@ elif page == "Video Fast Review":
               results = det_model.track(small_frame, persist=True, conf=confidence, verbose=False)
 
             matched_boxes_in_frame = []
+            detected_person_boxes = []
 
             for result in results:
               if result.boxes is not None:
                 for box in result.boxes:
                   class_id = int(box.cls[0])
-                  obj_name = CLASS_NAMES[class_id].lower()
+                  obj_name = "person" if person_search else CLASS_NAMES[class_id].lower()
 
                   if target_object is None or obj_name == target_object:
                     if person_search:
@@ -1117,75 +1196,14 @@ elif page == "Video Fast Review":
                         frame.shape,
                         (640, 480)
                       )
+                      detected_person_boxes.append(
+                        ((match_x1, match_y1, match_x2, match_y2), (x1, y1, x2, y2))
+                      )
                     else:
                       x1, y1, x2, y2 = map(int, box.xyxy[0])
                       match_x1, match_y1, match_x2, match_y2 = x1, y1, x2, y2
                     if search_type == "Reference Image":
-                      is_match = False
-                      match_sim = 0.0
-
-                      if ref_face_enc is not None and obj_name == "person":
-                        # Target is a specific individual: strict face recognition
-                        try:
-                          import face_recognition
-                          frame_h, frame_w = frame.shape[:2]
-                          ox1 = max(0, min(frame_w, match_x1))
-                          oy1 = max(0, min(frame_h, match_y1))
-                          ox2 = max(0, min(frame_w, match_x2))
-                          oy2 = max(0, min(frame_h, match_y2))
-                          person_orig = frame[oy1:oy2, ox1:ox2]
-
-                          if person_orig.size > 0 and person_orig.shape[0] > 15 and person_orig.shape[1] > 15:
-                            p_rgb = cv2.cvtColor(person_orig, cv2.COLOR_BGR2RGB)
-                            upper_body = p_rgb[0 : max(25, int(p_rgb.shape[0] * 0.65)), :]
-                            face_locs = face_recognition.face_locations(upper_body)
-                            if not face_locs:
-                              face_locs = face_recognition.face_locations(p_rgb)
-                            if not face_locs:
-                              face_locs = face_recognition.face_locations(p_rgb, number_of_times_to_upsample=2)
-
-                            if face_locs:
-                              face_encs = face_recognition.face_encodings(p_rgb, face_locs)
-                              for f_loc, enc in zip(face_locs, face_encs):
-                                dist = float(face_recognition.face_distance([ref_face_enc], enc)[0])
-                                if dist <= max_face_dist:
-                                  is_match = True
-                                  match_sim = max(0.0, 1.0 - dist)
-                                  top, right, bottom, left = f_loc
-                                  face_cx = ox1 + (left + right) / 2
-                                  box_cx = (ox1 + ox2) / 2
-                                  box_w = max(1, ox2 - ox1)
-                                  area = (ox2 - ox1) * (oy2 - oy1)
-                                  offset_norm = abs(face_cx - box_cx) / box_w
-                                  matched_boxes_in_frame.append({
-                                    "box": (x1, y1, x2, y2),
-                                    "label": f"Target Match ({match_sim * 100:.0f}%)",
-                                    "sim": match_sim,
-                                    "offset_norm": offset_norm,
-                                    "area": area
-                                  })
-                                  break
-                        except Exception:
-                          pass
-
-                      if obj_name == "person" and ref_is_person:
-                        if not is_match and allow_person_appearance and ref_person_appearance is not None:
-                          orig_h, orig_w = frame.shape[:2]
-                          ox1 = max(0, min(orig_w, match_x1))
-                          oy1 = max(0, min(orig_h, match_y1))
-                          ox2 = max(0, min(orig_w, match_x2))
-                          oy2 = max(0, min(orig_h, match_y2))
-                          roi = frame[oy1:oy2, ox1:ox2]
-                          if roi.size > 0 and roi.shape[0] >= 10 and roi.shape[1] >= 10:
-                            candidate_appearance = get_person_appearance_descriptor(roi)
-                            appearance_sim = compare_person_appearance(ref_person_appearance, candidate_appearance)
-                            if appearance_sim >= appearance_sensitivity:
-                              matched_boxes_in_frame.append({
-                                "box": (x1, y1, x2, y2),
-                                "label": f"Appearance Match ({appearance_sim * 100:.0f}%)",
-                                "sim": appearance_sim
-                              })
-                      elif ref_face_enc is None or obj_name != "person":
+                      if not ref_is_person and (ref_face_enc is None or obj_name != "person"):
                         # Target is a specific object: deep semantic + color distribution matching
                         roi = small_frame[max(0, y1):max(0, y2), max(0, x1):max(0, x2)]
                         if roi.size > 0 and roi.shape[0] >= 10 and roi.shape[1] >= 10 and ref_deep_emb is not None:
@@ -1202,7 +1220,6 @@ elif page == "Video Fast Review":
                           sim = 0.55 * deep_sim + 0.45 * color_sim
                           # Strict threshold for objects: require strong color and deep feature correlation
                           if sim >= min_obj_sim and color_sim >= 0.50:
-                            is_match = True
                             match_sim = sim
                             matched_boxes_in_frame.append({
                               "box": (x1, y1, x2, y2),
@@ -1219,11 +1236,64 @@ elif page == "Video Fast Review":
               if matched_boxes_in_frame and search_type != "Reference Image":
                 break
 
+            if person_search and ref_face_enc is not None:
+              try:
+                import face_recognition
+
+                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                face_candidates = get_vfr_face_candidates(frame_rgb, face_recognition)
+                mirrored_candidates = get_vfr_face_candidates(
+                  cv2.flip(frame_rgb, 1),
+                  face_recognition,
+                )
+                frame_width = frame.shape[1]
+                for location, encoding in mirrored_candidates:
+                  top, right, bottom, left = location
+                  face_candidates.append(
+                    ((top, frame_width - left, bottom, frame_width - right), encoding)
+                  )
+
+                for face_location, encoding in face_candidates:
+                  dist = float(np.min(face_recognition.face_distance(ref_face_enc, encoding)))
+                  if dist <= max_face_dist:
+                    top, right, bottom, left = face_location
+                    face_center_x = (left + right) / 2
+                    face_center_y = (top + bottom) / 2
+                    containing_people = [
+                      (source_box, preview_box)
+                      for source_box, preview_box in detected_person_boxes
+                      if (
+                        source_box[0] <= face_center_x <= source_box[2]
+                        and source_box[1] <= face_center_y <= source_box[3]
+                      )
+                    ]
+                    if containing_people:
+                      _, match_box = min(
+                        containing_people,
+                        key=lambda item: (
+                          (item[0][2] - item[0][0]) * (item[0][3] - item[0][1])
+                        ),
+                      )
+                    else:
+                      match_box = scale_bbox(
+                        (left, top, right, bottom),
+                        frame.shape,
+                        (640, 480),
+                      )
+                    face_sim = max(0.0, 1.0 - dist)
+                    matched_boxes_in_frame.append({
+                      "box": match_box,
+                      "label": f"Face Match ({face_sim * 100:.0f}%)",
+                      "sim": face_sim,
+                      "match_type": "face",
+                    })
+              except Exception as exc:
+                face_match_error = f"Face matching failed while analyzing the video: {exc}"
+
             if len(matched_boxes_in_frame) > 0:
               # For target person: resolve crowd overlap and keep only the true target individual
-              if ref_face_enc is not None:
-                matched_boxes_in_frame.sort(key=lambda m: (m.get("offset_norm", 0), m.get("area", 0)))
-                matched_boxes_in_frame = [matched_boxes_in_frame[0]]
+              if person_search:
+                matched_boxes_in_frame = [select_best_person_match(matched_boxes_in_frame)]
               else:
                 matched_boxes_in_frame.sort(key=lambda m: m["sim"], reverse=True)
                 matched_boxes_in_frame = [matched_boxes_in_frame[0]]
@@ -1264,6 +1334,12 @@ elif page == "Video Fast Review":
               st.markdown("---")
         else:
           results_container.warning(f"Could not find a match for {search_lbl} in the video.")
+          if person_search:
+            results_container.info(
+              "No face match passed the selected precision threshold. Use a clear, unobstructed reference face, increase person detection resolution for distant people, or select a higher-recall precision mode. Clothing is never used to match a person."
+            )
+          if face_match_error:
+            results_container.warning(face_match_error)
         
         try:
           os.unlink(temp_path)
