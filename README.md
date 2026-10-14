@@ -7,13 +7,13 @@
 [![Streamlit](https://img.shields.io/badge/Dashboard-Streamlit-FF4B4B.svg)](https://streamlit.io/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-An intelligent, real-time computer vision and multi-class object recognition ecosystem designed to detect objects, recognize faces, extract text, trigger hazard warnings, and assist users through voice guidance across desktop, web, and mobile (Android) platforms.
+SmartVision includes a Streamlit website and FastAPI AI backend, plus a Flutter mobile app. The mobile app runs supported vision workflows on device and does not require the Python server.
 
 ---
 
 ## 📌 Project Overview
 
-Traditional surveillance and vision recognition systems depend on heavy, costly infrastructure and centralized cloud computing. **SmartVision AI** bridges this gap by delivering lightweight, edge-ready, real-time intelligence using deep learning:
+**SmartVision AI** provides configurable computer-vision workflows through its website and mobile client:
 
 - **Multi-Class Object Detection:** Powered by state-of-the-art **YOLOv8** architectures (`yolov8n`, `yolov8s-world`, `yolov8m`).
 - **Hazard & Dangerous Object Alerting:** Real-time detection of knives, scissors, firearms, and hazardous materials with visual warning banners and automated siren alarms.
@@ -21,7 +21,7 @@ Traditional surveillance and vision recognition systems depend on heavy, costly 
 - **Optical Character Recognition (OCR):** Embedded EasyOCR engine for document screening and text reading.
 - **Voice Assistant & Audio Guidance:** Hands-free speech alerts, spoken questions about the current detections, and voice commands for dashboard navigation and settings.
 - **Interactive Web Dashboard:** Rich Streamlit interface featuring 3D visualizations, live analytics, and detection histories.
-- **Android Mobile App:** Flutter WebView client that opens the same website implementation, including its feature flows and siren controls.
+- **Android Mobile App:** Flutter uses a bundled YOLOv8n TFLite model for local object detection, ML Kit for on-device OCR and drowsiness cues, and local video frame analysis and history. It does not call the FastAPI backend. Identity recognition is not enabled because no trained face-embedding model is bundled.
 
 ---
 
@@ -37,7 +37,7 @@ Traditional surveillance and vision recognition systems depend on heavy, costly 
 | 🗣️ **Voice Assistant (TTS)** | Context-aware audio feedback (avoids repeated spamming, speaks on fresh detections). |
 | 🎙️ **Voice Questions & Commands** | Ask about detected objects in the Vision Chatbot or use spoken commands to navigate dashboard pages and toggle voice announcements or object tracking. Chatbot and voice-input answers are spoken in the browser using its built-in speech synthesis. Voice input transcription uses Google's online recognition service; an internet connection is required and recordings are sent to Google for transcription. |
 | 📊 **Analytics & Detection History** | SQLite-backed database (`detections.db`) tracking detections, metrics, and trends. |
-| 📱 **Mobile Android App** | Flutter client connecting to the FastAPI backend or running on-device inference. |
+| 📱 **Mobile Android App** | Flutter client with camera/image detection, video OCR and review, face-consent flow, drowsiness monitoring, settings, and local analysis history. |
 
 ---
 
@@ -57,10 +57,9 @@ SmartVision/
 │   ├── yolov8s-world.pt       # YOLO-World open-vocabulary model
 │   ├── MobileNET_best.pth     # Custom trained MobileNetV2 classifier
 │   └── haarcascade_*.xml      # Haar Cascade face detection classifier
-├── app/                       # Flutter Mobile Application (Android / iOS)
-│   ├── lib/                   # Dart UI screens, providers, and controllers
-│   ├── android/               # Native Android Gradle configuration
-│   └── pubspec.yaml           # Flutter dependencies and assets
+├── lib/                       # Flutter UI screens, services, and controllers
+├── android/                   # Native Android Gradle configuration
+├── pubspec.yaml               # Flutter dependencies and assets
 ├── datasets/                  # Training and validation image datasets
 ├── tests/                     # Unit and integration test suites
 └── docs/                      # Technical reports, synopses, and presentations
@@ -73,7 +72,7 @@ SmartVision/
 - **Computer Vision & AI:** PyTorch, Ultralytics YOLOv8, MobileNetV2, OpenCV, MediaPipe, EasyOCR, FAISS
 - **Backend & APIs:** FastAPI, Uvicorn, WebSockets, RESTful endpoints
 - **Frontend & Dashboard:** Streamlit, Plotly, HTML5/CSS3, Three.js
-- **Mobile Development:** Flutter (Dart), CameraX, SQLite, TensorFlow Lite
+- **Mobile Development:** Flutter (Dart), Flutter Camera plugin, SQLite
 - **Database & Storage:** SQLite (`detections.db`)
 
 ---
@@ -85,7 +84,7 @@ SmartVision/
 - Flutter SDK (for building the Android app)
 - Android Studio with Android SDK (for mobile deployment)
 
-On first startup, face recognition downloads the OpenCV Zoo YuNet and SFace model files (about 37 MB total) into the local application cache and verifies their SHA-256 hashes. An internet connection is required for this one-time setup; registered face images and recognition remain local and are not uploaded.
+The face-recognition backend may download OpenCV Zoo YuNet and SFace model files into its local application cache on first startup. Mobile face images are sent to the configured FastAPI backend for processing; obtain the subject's consent before registration or recognition.
 
 ### 2. Setup Python Environment
 
@@ -112,7 +111,7 @@ The **Vision Chatbot** page includes a conversation history panel and a **New ch
 
 In **Video Fast Review**, reference-image person matching uses the app's YuNet/SFace face recognizer to compare faces directly in sampled video frames; it does not depend on person detection, clothing, or body shape. **Strict**, **Balanced**, and **Tolerant** modes set the minimum face-similarity threshold, with higher recall increasing the chance of false matches. Increase **Face detection resolution** to improve recall for distant faces. A single reference image cannot train a new identity model or guarantee recognition at every angle.
 
-### 4. Launch FastAPI Server (for Mobile App)
+### 4. Launch FastAPI Server (for the Mobile App)
 
 ```bash
 uvicorn ai_server:app --host 0.0.0.0 --port 8000 --reload
@@ -122,14 +121,12 @@ uvicorn ai_server:app --host 0.0.0.0 --port 8000 --reload
 
 ## 📱 Running the Android Mobile App
 
-The mobile client in `app/` opens the same responsive Smart Vision website in a
-WebView so its detection, OCR, face registration, Fast Review, chatbot, alerts,
-file uploads, and siren controls use the same implementation as the desktop
-site. The website must be running and reachable from the phone.
+The Flutter app performs supported detection and media analysis on the device.
+No Python environment or FastAPI server is required to run the mobile app.
 
 1. **Navigate to the Flutter directory:**
    ```bash
-   cd app
+   cd SmartVision
    ```
 
 2. **Get Flutter dependencies:**
@@ -139,37 +136,26 @@ site. The website must be running and reachable from the phone.
 
 3. **Run on connected Android phone or emulator:**
    ```bash
-   flutter run
+   flutter run -d <android-device-id>
    ```
 
-Before connecting a physical phone, start Streamlit from the repository root so
-it listens on the network:
+4. **Build a debug APK:**
+   ```bash
+   flutter build apk --debug
+   ```
+   The APK is generated at `build/app/outputs/flutter-apk/app-debug.apk`.
 
-```bash
-streamlit run app.py --server.address 0.0.0.0 --server.port 8501
-```
-
-The Android emulator uses `http://10.0.2.2:8501` by default. For a physical
-phone, open the app's connection settings and enter
-`http://<computer-LAN-IP>:8501`; keep the phone and computer on the same Wi-Fi
-network and allow the port through the computer's firewall. The app requests
-camera and microphone permissions when the website uses those features, and
-configures Android WebView to permit siren audio playback.
-
-4. **Build release APK:**
+5. **Build a release APK:**
    ```bash
    flutter build apk --release
    ```
-   The APK will be generated at:  
-   `app/build/app/outputs/flutter-apk/app-release.apk`
+   The APK is generated at `build/app/outputs/flutter-apk/app-release.apk`.
 
 ---
 
 ## 📊 Evaluation & Performance
 
-- **YOLOv8 Inference Speed:** ~15-30ms per frame on modern CPU / GPU.
-- **Classification Accuracy:** >94% on test datasets with MobileNetV2.
-- **Hazard Response Time:** <100ms from frame acquisition to audio-visual siren trigger.
+Mobile inference latency depends on the Android device. The mobile app uses the bundled YOLOv8n TFLite model; it does not use the website's custom PyTorch weights.
 
 ---
 

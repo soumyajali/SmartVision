@@ -3,16 +3,16 @@ import 'package:flutter/material.dart';
 /// Central Design Tokens for SmartVision AI: Futuristic Black & Violet Theme
 class AppColors {
   // Primary Surfaces & Backgrounds
-  static const Color primaryBackground = Color(0xFF08070D);
-  static const Color secondaryBackground = Color(0xFF100D18);
-  static const Color cardBackground = Color(0xFF171221);
-  static const Color elevatedSurface = Color(0xFF21182F);
+  static const Color primaryBackground = Color(0xFF070B16);
+  static const Color secondaryBackground = Color(0xFF0B1424);
+  static const Color cardBackground = Color(0xFF111D31);
+  static const Color elevatedSurface = Color(0xFF192943);
 
   // Violets & Accents
-  static const Color primaryViolet = Color(0xFF8B5CF6);
-  static const Color brightViolet = Color(0xFFA78BFA);
-  static const Color deepViolet = Color(0xFF6D28D9);
-  static const Color neonAccent = Color(0xFFC084FC);
+  static const Color primaryViolet = Color(0xFF6574E8);
+  static const Color brightViolet = Color(0xFF8795FF);
+  static const Color deepViolet = Color(0xFF4656C8);
+  static const Color neonAccent = Color(0xFF62D8F3);
 
   // Typography
   static const Color primaryText = Color(0xFFF8F7FC);
@@ -25,9 +25,9 @@ class AppColors {
   static const Color error = Color(0xFFFB7185);
 
   // Borders & Dividers (subtle violet-gray with low opacity)
-  static const Color border = Color(0x268B5CF6); // 15% opacity violet
+  static const Color border = Color(0x334A6B9E);
   static const Color borderSubtle = Color(0x14FFFFFF); // 8% opacity white
-  static const Color borderStrong = Color(0x408B5CF6); // 25% opacity violet
+  static const Color borderStrong = Color(0x664A6B9E);
 
   // Backwards-compatible aliases
   static const Color primary = primaryViolet;
@@ -46,19 +46,19 @@ class AppColors {
   );
 
   static const LinearGradient cardGradient = LinearGradient(
-    colors: [Color(0xFF191325), Color(0xFF130E1D)],
+    colors: [Color(0xFF14223A), Color(0xFF101A2D)],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
 
   static const LinearGradient heroGradient = LinearGradient(
-    colors: [Color(0xFF2A1B4E), Color(0xFF171224)],
+    colors: [Color(0xFF1D3153), Color(0xFF101A2D)],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
 
   static const LinearGradient neonGlowGradient = LinearGradient(
-    colors: [Color(0x33C084FC), Color(0x056D28D9)],
+    colors: [Color(0x3362D8F3), Color(0x054656C8)],
     begin: Alignment.topCenter,
     end: Alignment.bottomCenter,
   );

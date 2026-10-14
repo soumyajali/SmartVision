@@ -9,7 +9,7 @@ class ImageProcessor {
   static image_lib.Image? processCameraImage(CameraImage cameraImage) {
     try {
       image_lib.Image? img;
-      
+
       if (cameraImage.format.group == ImageFormatGroup.yuv420) {
         img = _convertYUV420ToImage(cameraImage);
       } else if (cameraImage.format.group == ImageFormatGroup.bgra8888) {
@@ -74,7 +74,7 @@ class ImageProcessor {
     return image;
   }
 
-  /// Encodes image to JPEG bytes for backend transmission
+  /// Encodes an image as JPEG bytes for local processing or export.
   static List<int>? convertToJpeg(image_lib.Image image) {
     try {
       return image_lib.encodeJpg(image, quality: 80);

@@ -50,15 +50,19 @@ class AboutScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                   decoration: BoxDecoration(
                     color: AppColors.elevatedSurface,
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(color: AppColors.border),
                   ),
                   child: const Text(
-                    'Version 1.0.0+1 • Production Build',
-                    style: TextStyle(fontSize: 11, color: AppColors.brightViolet, fontWeight: FontWeight.bold),
+                    'Version 1.0.0+1',
+                    style: TextStyle(
+                        fontSize: 11,
+                        color: AppColors.brightViolet,
+                        fontWeight: FontWeight.bold),
                   ),
                 ),
               ],
@@ -77,7 +81,8 @@ class AboutScreen extends StatelessWidget {
             ),
             child: const Text(
               'SmartVision AI is an intelligent real-time computer vision system integrating high-speed object detection, automated identity document screening, threat hazard sentinel alerts, and biometric face verification with synthesized speech announcements.',
-              style: TextStyle(color: AppColors.secondaryText, fontSize: 13, height: 1.5),
+              style: TextStyle(
+                  color: AppColors.secondaryText, fontSize: 13, height: 1.5),
             ),
           ),
 
@@ -86,7 +91,10 @@ class AboutScreen extends StatelessWidget {
           // Core System Capabilities
           const Text(
             'Architectural Capabilities',
-            style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.primaryText),
+            style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.bold,
+                color: AppColors.primaryText),
           ),
           const SizedBox(height: 12),
           _buildFeatureTile(
@@ -98,22 +106,22 @@ class AboutScreen extends StatelessWidget {
           const SizedBox(height: 10),
           _buildFeatureTile(
             Icons.badge_outlined,
-            'Automated ID Screening',
-            'Machine Readable Zone (MRZ) validation with anti-tamper edge consistency checks.',
+            'Document OCR',
+            'Extracts readable text from document images. Authenticity, expiry, MRZ, and tamper checks are not provided by the configured mobile API.',
             AppColors.brightViolet,
           ),
           const SizedBox(height: 10),
           _buildFeatureTile(
             Icons.warning_amber_rounded,
             'Threat & Hazard Sentinel',
-            'Real-time blade, weapon, and fire detection with audio siren dispatch alarms.',
+            'Highlights hazard labels present in the latest object detection result and can announce them with device text-to-speech.',
             AppColors.error,
           ),
           const SizedBox(height: 10),
           _buildFeatureTile(
             Icons.face_rounded,
             'Biometric Face ID',
-            'Face embedding extraction and vector cosine similarity verification.',
+            'On-device face detection is available with consent. Identity recognition and enrollment require a trained face-embedding model that is not currently included.',
             AppColors.success,
           ),
           const SizedBox(height: 10),
@@ -142,21 +150,36 @@ class AboutScreen extends StatelessWidget {
                     Container(
                       width: 8,
                       height: 8,
-                      decoration: const BoxDecoration(color: AppColors.success, shape: BoxShape.circle),
+                      decoration: const BoxDecoration(
+                          color: AppColors.warning, shape: BoxShape.circle),
                     ),
                     const SizedBox(width: 8),
                     const Text(
-                      'System Status: All Engines Operational',
-                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.primaryText),
+                      'Runtime Requirements',
+                      style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.primaryText),
                     ),
                   ],
                 ),
                 const SizedBox(height: 10),
-                const Text('Framework: Flutter 3.x (Dart null-safe)', style: TextStyle(fontSize: 12, color: AppColors.secondaryText)),
+                const Text('Framework: Flutter 3.x (Dart null-safe)',
+                    style: TextStyle(
+                        fontSize: 12, color: AppColors.secondaryText)),
                 const SizedBox(height: 4),
-                const Text('Storage: SQLite with encrypted vector schemas', style: TextStyle(fontSize: 12, color: AppColors.secondaryText)),
+                const Text('Storage: SQLite local detection history',
+                    style: TextStyle(
+                        fontSize: 12, color: AppColors.secondaryText)),
                 const SizedBox(height: 4),
-                const Text('Audio: Native Android Text-to-Speech engine', style: TextStyle(fontSize: 12, color: AppColors.secondaryText)),
+                const Text(
+                    'Object detection and supported media analysis run on device. Translation downloads Google ML Kit language models as needed.',
+                    style: TextStyle(
+                        fontSize: 12, color: AppColors.secondaryText)),
+                const SizedBox(height: 4),
+                const Text('No emergency dispatch integration is configured.',
+                    style: TextStyle(
+                        fontSize: 12, color: AppColors.secondaryText)),
               ],
             ),
           ),
@@ -166,7 +189,8 @@ class AboutScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildFeatureTile(IconData icon, String title, String subtitle, Color color) {
+  Widget _buildFeatureTile(
+      IconData icon, String title, String subtitle, Color color) {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -190,9 +214,17 @@ class AboutScreen extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.primaryText)),
+                Text(title,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                        color: AppColors.primaryText)),
                 const SizedBox(height: 2),
-                Text(subtitle, style: const TextStyle(fontSize: 12, color: AppColors.secondaryText, height: 1.3)),
+                Text(subtitle,
+                    style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.secondaryText,
+                        height: 1.3)),
               ],
             ),
           ),

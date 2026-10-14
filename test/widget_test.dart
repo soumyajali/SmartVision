@@ -7,25 +7,25 @@ import 'package:smart_vision/controllers/detection_controller.dart';
 import 'package:smart_vision/controllers/statistics_controller.dart';
 import 'package:smart_vision/services/camera_service.dart';
 import 'package:smart_vision/services/database_service.dart';
+import 'package:smart_vision/services/on_device_ai_service.dart';
 import 'package:smart_vision/services/speech_service.dart';
 import 'package:smart_vision/services/statistics_service.dart';
-import 'package:smart_vision/services/tflite_service.dart';
 
 void main() {
   testWidgets('SmartVision AI smoke test', (WidgetTester tester) async {
     final camera = CameraService();
-    final tflite = TFLiteService();
     final speech = SpeechService();
+    final localAi = OnDeviceAiService.instance;
     final db = DatabaseService();
     final stats = StatisticsService(db);
     final statsCtrl = StatisticsController(stats);
-    final detectionCtrl = DetectionController(camera, tflite, speech, db);
+    final detectionCtrl = DetectionController(camera, speech, db);
 
     await tester.pumpWidget(
       MultiProvider(
         providers: [
           ChangeNotifierProvider.value(value: camera),
-          ChangeNotifierProvider.value(value: tflite),
+          ChangeNotifierProvider.value(value: localAi),
           ChangeNotifierProvider.value(value: speech),
           Provider.value(value: db),
           Provider.value(value: stats),
@@ -54,10 +54,9 @@ void main() {
 
   test('DetectionController target lock and hazard logic', () {
     final camera = CameraService();
-    final tflite = TFLiteService();
     final speech = SpeechService();
     final db = DatabaseService();
-    final ctrl = DetectionController(camera, tflite, speech, db);
+    final ctrl = DetectionController(camera, speech, db);
 
     // Test target search lock
     ctrl.setSearchTarget('bottle');

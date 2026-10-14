@@ -10,13 +10,16 @@ class CameraService extends ChangeNotifier {
   CameraController? _controller;
   List<CameraDescription> _cameras = [];
   int _selectedCameraIndex = 0;
-  
+
   bool _isInitialized = false;
-  CameraPermissionStatus _permissionStatus = CameraPermissionStatus.undetermined;
+  CameraPermissionStatus _permissionStatus =
+      CameraPermissionStatus.undetermined;
   double _currentZoomLevel = 1.0;
   double _minZoomLevel = 1.0;
   double _maxZoomLevel = 1.0;
   bool _isFlashOn = false;
+  Future<void>? _initialization;
+  String? _initializationError;
 
   CameraController? get controller => _controller;
   bool get isInitialized => _isInitialized;
@@ -25,8 +28,18 @@ class CameraService extends ChangeNotifier {
   double get maxZoomLevel => _maxZoomLevel;
   double get currentZoomLevel => _currentZoomLevel;
   bool get isFlashOn => _isFlashOn;
+  String? get initializationError => _initializationError;
 
-  Future<void> initialize() async {
+  Future<void> initialize() {
+    if (_isInitialized) return Future<void>.value();
+    final existingInitialization = _initialization;
+    if (existingInitialization != null) return existingInitialization;
+    final initialization = _initialize();
+    _initialization = initialization;
+    return initialization.whenComplete(() => _initialization = null);
+  }
+
+  Future<void> _initialize() async {
     await checkPermission();
     if (_permissionStatus == CameraPermissionStatus.granted) {
       await _initCamera();
@@ -68,12 +81,15 @@ class CameraService extends ChangeNotifier {
       }
       await _setupCameraController(_cameras[_selectedCameraIndex]);
     } catch (e) {
+      _initializationError = e.toString();
       log('Error initializing camera: $e');
+      notifyListeners();
     }
   }
 
-  Future<void> _setupCameraController(CameraDescription cameraDescription) async {
-    _controller?.dispose();
+  Future<void> _setupCameraController(
+      CameraDescription cameraDescription) async {
+    await _controller?.dispose();
 
     _controller = CameraController(
       cameraDescription,
@@ -87,15 +103,18 @@ class CameraService extends ChangeNotifier {
       _maxZoomLevel = await _controller!.getMaxZoomLevel();
       _currentZoomLevel = _minZoomLevel;
       _isInitialized = true;
+      _initializationError = null;
       notifyListeners();
     } catch (e) {
+      _initializationError = e.toString();
       log('Error setting up camera controller: $e');
+      notifyListeners();
     }
   }
 
   Future<void> switchCamera() async {
     if (_cameras.isEmpty) return;
-    
+
     _isInitialized = false;
     notifyListeners();
 

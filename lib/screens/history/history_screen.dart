@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -15,6 +17,7 @@ class HistoryScreen extends StatefulWidget {
 
 class _HistoryScreenState extends State<HistoryScreen> {
   late Future<List<DetectionHistory>> _historyFuture;
+  late Future<List<Map<String, dynamic>>> _analysisHistoryFuture;
   final TextEditingController _searchController = TextEditingController();
   String _filterQuery = '';
 
@@ -38,6 +41,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
       } else {
         _historyFuture = dbService.searchDetection(_filterQuery);
       }
+      _analysisHistoryFuture = dbService.getAnalysisHistory(limit: 3);
     });
   }
 
@@ -53,8 +57,60 @@ class _HistoryScreenState extends State<HistoryScreen> {
     _loadHistory();
   }
 
+  void _showAnalysisDetails(Map<String, dynamic> record) {
+    final details = record['details'];
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.cardBackground,
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(
+            20,
+            20,
+            20,
+            MediaQuery.of(context).viewInsets.bottom + 20,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                record['analysis_type']?.toString() ?? 'Analysis',
+                style: const TextStyle(
+                  color: AppColors.primaryText,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                record['summary']?.toString() ?? '',
+                style: const TextStyle(color: AppColors.secondaryText),
+              ),
+              const SizedBox(height: 12),
+              Flexible(
+                child: SingleChildScrollView(
+                  child: SelectableText(
+                    const JsonEncoder.withIndent('  ').convert(details),
+                    style: const TextStyle(
+                      color: AppColors.primaryText,
+                      fontFamily: 'monospace',
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   void _showDetectionDetails(DetectionHistory record) {
-    final dateStr = DateFormat('MMMM dd, yyyy – HH:mm:ss').format(record.timestamp);
+    final dateStr =
+        DateFormat('MMMM dd, yyyy – HH:mm:ss').format(record.timestamp);
     final conf = (record.confidence * 100).toStringAsFixed(1);
     final bbox = record.boundingBox;
 
@@ -93,7 +149,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
                     color: AppColors.primaryViolet.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(20),
@@ -113,7 +170,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
             const SizedBox(height: 16),
             _buildDetailRow('Timestamp', dateStr, Icons.access_time_rounded),
             const SizedBox(height: 8),
-            _buildDetailRow('Database Record ID', '#${record.id ?? "N/A"}', Icons.tag_rounded),
+            _buildDetailRow('Database Record ID', '#${record.id ?? "N/A"}',
+                Icons.tag_rounded),
             const SizedBox(height: 8),
             _buildDetailRow(
               'Bounding Box',
@@ -156,9 +214,15 @@ class _HistoryScreenState extends State<HistoryScreen> {
         children: [
           Icon(icon, size: 18, color: AppColors.brightViolet),
           const SizedBox(width: 12),
-          Text(label, style: const TextStyle(color: AppColors.secondaryText, fontSize: 13)),
+          Text(label,
+              style: const TextStyle(
+                  color: AppColors.secondaryText, fontSize: 13)),
           const Spacer(),
-          Text(value, style: const TextStyle(color: AppColors.primaryText, fontWeight: FontWeight.bold, fontSize: 13)),
+          Text(value,
+              style: const TextStyle(
+                  color: AppColors.primaryText,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13)),
         ],
       ),
     );
@@ -172,16 +236,18 @@ class _HistoryScreenState extends State<HistoryScreen> {
         title: const Text('Detection History'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.delete_sweep_rounded, color: AppColors.error),
+            icon:
+                const Icon(Icons.delete_sweep_rounded, color: AppColors.error),
             tooltip: 'Clear All Records',
             onPressed: () {
               showDialog(
                 context: context,
                 builder: (context) => AlertDialog(
                   backgroundColor: AppColors.cardBackground,
-                  title: const Text('Clear All History', style: TextStyle(color: AppColors.primaryText)),
+                  title: const Text('Clear All History',
+                      style: TextStyle(color: AppColors.primaryText)),
                   content: const Text(
-                    'Are you sure you want to permanently erase all detection event records from SQLite storage?',
+                    'Are you sure you want to permanently erase all saved detection and media analysis records?',
                     style: TextStyle(color: AppColors.secondaryText),
                   ),
                   actions: [
@@ -217,10 +283,12 @@ class _HistoryScreenState extends State<HistoryScreen> {
               style: const TextStyle(color: AppColors.primaryText),
               decoration: InputDecoration(
                 hintText: 'Filter detections by label...',
-                prefixIcon: const Icon(Icons.search_rounded, color: AppColors.neonAccent),
+                prefixIcon: const Icon(Icons.search_rounded,
+                    color: AppColors.neonAccent),
                 suffixIcon: _filterQuery.isNotEmpty
                     ? IconButton(
-                        icon: const Icon(Icons.clear, color: AppColors.mutedText),
+                        icon:
+                            const Icon(Icons.clear, color: AppColors.mutedText),
                         onPressed: () {
                           _searchController.clear();
                           setState(() {
@@ -230,7 +298,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
                         },
                       )
                     : null,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               ),
               onChanged: (val) {
                 setState(() {
@@ -239,6 +308,75 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 });
               },
             ),
+          ),
+
+          FutureBuilder<List<Map<String, dynamic>>>(
+            future: _analysisHistoryFuture,
+            builder: (context, snapshot) {
+              if (snapshot.hasError) {
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Text(
+                    'Could not load media analysis history: ${snapshot.error}',
+                    style: const TextStyle(color: AppColors.error),
+                  ),
+                );
+              }
+              final analyses = snapshot.data ?? const [];
+              if (analyses.isEmpty) return const SizedBox.shrink();
+              return Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Padding(
+                      padding: EdgeInsets.only(bottom: 6),
+                      child: Text(
+                        'Recent Media Analyses',
+                        style: TextStyle(
+                          color: AppColors.primaryText,
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    ...analyses.map((record) {
+                      final timestamp = DateTime.tryParse(
+                          record['timestamp']?.toString() ?? '');
+                      return Card(
+                        color: AppColors.cardBackground,
+                        margin: const EdgeInsets.only(bottom: 6),
+                        child: ListTile(
+                          dense: true,
+                          leading: const Icon(
+                            Icons.analytics_outlined,
+                            color: AppColors.neonAccent,
+                          ),
+                          title: Text(
+                            record['analysis_type']?.toString() ?? 'Analysis',
+                            style:
+                                const TextStyle(color: AppColors.primaryText),
+                          ),
+                          subtitle: Text(
+                            '${record['summary'] ?? ''}'
+                            '${timestamp == null ? '' : ' · ${DateFormat('MMM dd, HH:mm').format(timestamp)}'}',
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style:
+                                const TextStyle(color: AppColors.secondaryText),
+                          ),
+                          trailing: const Icon(
+                            Icons.chevron_right_rounded,
+                            color: AppColors.mutedText,
+                          ),
+                          onTap: () => _showAnalysisDetails(record),
+                        ),
+                      );
+                    }),
+                  ],
+                ),
+              );
+            },
           ),
 
           // Detection List
@@ -252,7 +390,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
                 if (snapshot.hasError) {
                   return Center(
-                    child: Text('Error loading history: ${snapshot.error}', style: const TextStyle(color: AppColors.error)),
+                    child: Text('Error loading history: ${snapshot.error}',
+                        style: const TextStyle(color: AppColors.error)),
                   );
                 }
 
@@ -272,18 +411,23 @@ class _HistoryScreenState extends State<HistoryScreen> {
                               shape: BoxShape.circle,
                               border: Border.all(color: AppColors.border),
                             ),
-                            child: const Icon(Icons.history_toggle_off_rounded, size: 48, color: AppColors.mutedText),
+                            child: const Icon(Icons.history_toggle_off_rounded,
+                                size: 48, color: AppColors.mutedText),
                           ),
                           const SizedBox(height: 16),
                           const Text(
                             'No Detection Records Found',
-                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.primaryText),
+                            style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.primaryText),
                           ),
                           const SizedBox(height: 6),
                           const Text(
                             'Detected objects will automatically appear here once real-time tracking is active.',
                             textAlign: TextAlign.center,
-                            style: TextStyle(fontSize: 12, color: AppColors.secondaryText),
+                            style: TextStyle(
+                                fontSize: 12, color: AppColors.secondaryText),
                           ),
                         ],
                       ),
@@ -292,13 +436,16 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 }
 
                 return ListView.separated(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   itemCount: history.length,
                   separatorBuilder: (_, __) => const SizedBox(height: 8),
                   itemBuilder: (context, index) {
                     final record = history[index];
-                    final dateString = DateFormat('MMM dd, yyyy • HH:mm:ss').format(record.timestamp);
-                    final confidence = (record.confidence * 100).toStringAsFixed(1);
+                    final dateString = DateFormat('MMM dd, yyyy • HH:mm:ss')
+                        .format(record.timestamp);
+                    final confidence =
+                        (record.confidence * 100).toStringAsFixed(1);
 
                     return Dismissible(
                       key: Key('record_${record.id}_$index'),
@@ -313,9 +460,13 @@ class _HistoryScreenState extends State<HistoryScreen> {
                         child: const Row(
                           mainAxisAlignment: MainAxisAlignment.end,
                           children: [
-                            Icon(Icons.delete_forever_rounded, color: Colors.white, size: 24),
+                            Icon(Icons.delete_forever_rounded,
+                                color: Colors.white, size: 24),
                             SizedBox(width: 8),
-                            Text('DELETE', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                            Text('DELETE',
+                                style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold)),
                           ],
                         ),
                       ),
@@ -331,23 +482,33 @@ class _HistoryScreenState extends State<HistoryScreen> {
                           border: Border.all(color: AppColors.border),
                         ),
                         child: ListTile(
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 4),
                           onTap: () => _showDetectionDetails(record),
                           leading: Container(
                             padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(
-                              color: AppColors.primaryViolet.withValues(alpha: 0.15),
+                              color: AppColors.primaryViolet
+                                  .withValues(alpha: 0.15),
                               borderRadius: BorderRadius.circular(10),
                             ),
-                            child: const Icon(Icons.center_focus_strong_rounded, color: AppColors.neonAccent, size: 22),
+                            child: const Icon(Icons.center_focus_strong_rounded,
+                                color: AppColors.neonAccent, size: 22),
                           ),
                           title: Text(
                             record.objectName.toUpperCase(),
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.primaryText),
+                            style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                                color: AppColors.primaryText),
                           ),
-                          subtitle: Text(dateString, style: const TextStyle(fontSize: 11, color: AppColors.secondaryText)),
+                          subtitle: Text(dateString,
+                              style: const TextStyle(
+                                  fontSize: 11,
+                                  color: AppColors.secondaryText)),
                           trailing: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 5),
                             decoration: BoxDecoration(
                               color: AppColors.elevatedSurface,
                               borderRadius: BorderRadius.circular(8),

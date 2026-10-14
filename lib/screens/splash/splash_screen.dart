@@ -9,7 +9,8 @@ class SplashScreen extends StatefulWidget {
   State<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderStateMixin {
+class _SplashScreenState extends State<SplashScreen>
+    with SingleTickerProviderStateMixin {
   late AnimationController _animController;
   late Animation<double> _scaleAnimation;
   late Animation<double> _fadeAnimation;
@@ -27,7 +28,9 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
     );
 
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _animController, curve: const Interval(0.0, 0.7, curve: Curves.easeIn)),
+      CurvedAnimation(
+          parent: _animController,
+          curve: const Interval(0.0, 0.7, curve: Curves.easeIn)),
     );
 
     _animController.forward();
@@ -92,7 +95,8 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                             shape: BoxShape.circle,
                             boxShadow: [
                               BoxShadow(
-                                color: AppColors.neonAccent.withValues(alpha: 0.45),
+                                color: AppColors.neonAccent
+                                    .withValues(alpha: 0.45),
                                 blurRadius: 32,
                                 spreadRadius: 6,
                               ),
@@ -136,7 +140,8 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                           height: 32,
                           child: CircularProgressIndicator(
                             strokeWidth: 2.5,
-                            valueColor: AlwaysStoppedAnimation<Color>(AppColors.neonAccent),
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                                AppColors.neonAccent),
                           ),
                         ),
                       ],
@@ -154,8 +159,11 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
             right: 0,
             child: Center(
               child: Text(
-                'v1.0.0 • On-Device AI Pipeline',
-                style: TextStyle(color: AppColors.mutedText, fontSize: 11, letterSpacing: 0.5),
+                'v1.0.0 • SmartVision Mobile',
+                style: TextStyle(
+                    color: AppColors.mutedText,
+                    fontSize: 11,
+                    letterSpacing: 0.5),
               ),
             ),
           ),
