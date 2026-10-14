@@ -11,6 +11,7 @@ import subprocess
 import time
 import json
 import hashlib
+from html import escape
 from uuid import uuid4
 import base64
 from datetime import datetime
@@ -36,6 +37,7 @@ from core.ui_3d_component import render_3d_hud
 from voice_interaction import (
   SpeechTranscriptionError,
   answer_application_question,
+  answer_scene_question,
   parse_voice_command,
   transcribe_audio,
 )
@@ -324,6 +326,131 @@ div[data-testid="stChatMessage"] {
   box-shadow: 0 2px 4px rgba(0,0,0,0.02) !important;
 }
 
+.assistant-hero {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 28px;
+  padding: 34px 38px;
+  margin: 8px 0 26px;
+  border: 1px solid rgba(255,255,255,.18);
+  border-radius: 26px;
+  color: #FFFFFF;
+  background: radial-gradient(circle at 85% 15%, rgba(96,165,250,.38), transparent 28%),
+              linear-gradient(120deg, #10244a 0%, #263c75 52%, #5542a6 100%);
+  box-shadow: 0 18px 42px rgba(42, 57, 112, .18);
+}
+.assistant-hero-copy { position: relative; z-index: 1; max-width: 650px; }
+.assistant-eyebrow {
+  margin-bottom: 10px;
+  color: #c7d2fe;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+}
+.assistant-hero h1 {
+  margin: 0 0 10px;
+  color: #FFFFFF !important;
+  font-size: clamp(29px, 4vw, 42px);
+  font-weight: 750;
+  letter-spacing: -.035em;
+  line-height: 1.12;
+}
+.assistant-hero p { margin: 0; color: #e0e7ff !important; font-size: 15px; line-height: 1.65; }
+.assistant-orb {
+  position: relative;
+  display: grid;
+  flex: 0 0 102px;
+  width: 102px;
+  height: 102px;
+  place-items: center;
+  border: 1px solid rgba(255,255,255,.68);
+  border-radius: 50%;
+  color: #FFFFFF;
+  background: linear-gradient(145deg, #67e8f9, #818cf8 54%, #c084fc);
+  box-shadow: 0 0 0 10px rgba(255,255,255,.08), 0 0 44px rgba(129,140,248,.65);
+  font-size: 39px;
+  animation: assistant-orb-float 4s ease-in-out infinite;
+}
+.assistant-orb:after {
+  position: absolute;
+  inset: -12px;
+  border: 1px solid rgba(224,231,255,.24);
+  border-radius: 50%;
+  content: "";
+}
+@keyframes assistant-orb-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-7px); }
+}
+.assistant-section-label {
+  margin: 0 0 10px;
+  color: #64748B;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+.assistant-card {
+  padding: 16px 18px;
+  margin: 0 0 8px;
+  border: 1px solid #E3E8F4;
+  border-radius: 16px;
+  background: linear-gradient(145deg, #FFFFFF, #F8FAFF);
+  box-shadow: 0 5px 16px rgba(31, 48, 87, .045);
+}
+.assistant-card-label {
+  margin-bottom: 7px;
+  color: #64748B;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+.assistant-card p { margin: 0; color: #1E293B; line-height: 1.65; }
+.st-key-assistant_recorder {
+  padding: 20px 22px 12px;
+  margin: 12px 0 20px;
+  border: 1px solid #DCE4F3;
+  border-radius: 22px;
+  background: linear-gradient(145deg, #FFFFFF 15%, #F2F5FF 100%);
+  box-shadow: 0 12px 28px rgba(34, 55, 102, .07);
+}
+.st-key-assistant_recorder .assistant-recorder-title { color: #172033; font-size: 16px; font-weight: 700; }
+.st-key-assistant_recorder .assistant-recorder-hint { margin: 4px 0 12px; color: #64748B; font-size: 13px; }
+.st-key-assistant_recorder button[kind="primary"] {
+  min-height: 46px;
+  border: 0;
+  border-radius: 13px;
+  background: linear-gradient(100deg, #4F46E5, #7C3AED);
+  box-shadow: 0 6px 16px rgba(99, 75, 215, .2);
+}
+[class*="st-key-assistant_prompt_"] .stButton > button {
+  min-height: 64px;
+  height: 100%;
+  white-space: normal;
+  border: 1px solid #E1E7F2;
+  border-radius: 15px;
+  background: #FFFFFF;
+  color: #334155;
+  box-shadow: 0 4px 14px rgba(31, 48, 87, .04);
+  transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease;
+}
+[class*="st-key-assistant_prompt_"] .stButton > button:hover {
+  transform: translateY(-2px);
+  border-color: #A5B4FC;
+  color: #4338CA;
+  box-shadow: 0 8px 18px rgba(79, 70, 229, .1);
+}
+@media (max-width: 640px) {
+  .assistant-hero { padding: 25px 23px; gap: 15px; border-radius: 21px; }
+  .assistant-orb { flex-basis: 68px; width: 68px; height: 68px; font-size: 28px; }
+  .assistant-recorder { padding: 16px 15px 8px; }
+}
+
 /* Make Video Container Look Pro */
 img, video, canvas {
   border-radius: 16px;
@@ -334,35 +461,66 @@ img, video, canvas {
 st.markdown(get_theme_css(), unsafe_allow_html=True)
 
 
-def speak_in_browser(message: str):
-  """Speak and provide a user-activated replay control in the visitor's browser."""
+def speak_in_browser(message: str, auto_speak: bool = True):
+  """Speak an answer and provide browser controls to replay or stop it."""
   components.html(
     f"""
-    <button id="speak-answer" type="button" style="
-      border: 1px solid #10B981; border-radius: 8px; padding: 8px 14px;
-      background: #FFFFFF; color: #047857; font: 600 14px sans-serif;
-      cursor: pointer;">
-      Speak answer again
-    </button>
+    <div style="display:flex; align-items:center; flex-wrap:wrap; gap:8px; font-family:sans-serif;">
+      <button id="speak-answer" type="button" style="
+        border: 1px solid #c7d2fe; border-radius: 10px; padding: 9px 14px;
+        background: #FFFFFF; color: #4338ca; font: 600 13px sans-serif;
+        cursor: pointer;">
+        ▶ Speak answer
+      </button>
+      <button id="stop-answer" type="button" style="
+        border: 1px solid #fecaca; border-radius: 10px; padding: 9px 14px;
+        background: #fff7f7; color: #b91c1c; font: 600 13px sans-serif;
+        cursor: pointer;">
+        ■ Stop speaking
+      </button>
+      <span id="speech-status" role="status" aria-live="polite"
+        style="color:#64748b; font-size:12px;"></span>
+    </div>
     <script>
     const message = {json.dumps(message)};
-    const button = document.getElementById("speak-answer");
+    const speakButton = document.getElementById("speak-answer");
+    const stopButton = document.getElementById("stop-answer");
+    const status = document.getElementById("speech-status");
     function speakAnswer() {{
       if (!("speechSynthesis" in window)) {{
-        button.textContent = "Speech is not supported by this browser";
+        status.textContent = "Speech is not supported by this browser.";
         return;
       }}
       window.speechSynthesis.cancel();
       const utterance = new SpeechSynthesisUtterance(message);
       utterance.rate = 0.95;
       utterance.volume = 1;
+      utterance.onstart = () => {{ status.textContent = "Speaking…"; }};
+      utterance.onend = () => {{ status.textContent = "Finished speaking."; }};
+      utterance.onerror = (event) => {{
+        status.textContent = ["canceled", "interrupted"].includes(event.error)
+          ? "Speech stopped."
+          : "Could not play speech.";
+      }};
       window.speechSynthesis.speak(utterance);
     }}
-    button.addEventListener("click", speakAnswer);
-    speakAnswer();
+    function stopAnswer() {{
+      if ("speechSynthesis" in window) {{
+        window.speechSynthesis.cancel();
+        status.textContent = "Speech stopped.";
+      }}
+    }}
+    speakButton.addEventListener("click", speakAnswer);
+    stopButton.addEventListener("click", stopAnswer);
+    if ({json.dumps(auto_speak)}) {{
+      speakAnswer();
+    }} else if ("speechSynthesis" in window) {{
+      window.speechSynthesis.cancel();
+      status.textContent = "Automatic speech is off.";
+    }}
     </script>
     """,
-    height=48,
+    height=58,
   )
 
 
@@ -559,9 +717,19 @@ def answer_assistant_question(question):
   if not conversation["messages"]:
     conversation["title"] = question[:40].strip() or "New chat"
 
-  response = answer_application_question(question)
+  response = answer_scene_question(
+    question,
+    st.session_state.get("last_detections", []),
+    ocr_text=st.session_state.get("ocr_text", ""),
+  )
   if response is None:
-    return chatbot.ask(question, st.session_state.get("last_detections", []))
+    response = answer_application_question(question)
+  if response is None:
+    return chatbot.ask(
+      question,
+      st.session_state.get("last_detections", []),
+      ocr_text=st.session_state.get("ocr_text", ""),
+    )
 
   chatbot.history.extend(
     [
@@ -604,18 +772,9 @@ def process_voice_message():
     get_voice_assistant().clear_all_announcements()
     response = "Voice announcements reset."
   elif command.action == "question":
-    response = st.session_state["chatbot"].ask(
-      command.value,
-      st.session_state.get("last_detections", []),
-      ocr_text=st.session_state.get("ocr_text", "")
-    )
+    response = answer_assistant_question(command.value)
   else:
-    # Conversational speech fallback to Gemini/ChatGPT multimodal assistant
-    response = st.session_state["chatbot"].ask(
-      transcript,
-      st.session_state.get("last_detections", []),
-      ocr_text=st.session_state.get("ocr_text", "")
-    )
+    response = answer_assistant_question(transcript)
 
   st.session_state["voice_response"] = response
   st.session_state["voice_status"] = "success"
@@ -695,42 +854,89 @@ st.sidebar.markdown("""
 
 # VOICE ASSISTANT PAGE
 if page == "Voice Assistant":
-  st.markdown("<div class='section-title'>Voice Assistant</div>", unsafe_allow_html=True)
+  greeting = "Good morning" if datetime.now().hour < 12 else (
+    "Good afternoon" if datetime.now().hour < 18 else "Good evening"
+  )
   st.markdown(
-    "<div class='sub-text'>Ask about detected objects or control dashboard features with your voice.</div>",
+    f"""
+    <section class="assistant-hero">
+      <div class="assistant-hero-copy">
+        <div class="assistant-eyebrow">SmartVision Voice Assistant</div>
+        <h1>Hi there! 👋</h1>
+        <p>{greeting}! What can I help you with today? Ask about what's in your image,
+        explain the latest results, or learn how any SmartVision feature works.</p>
+      </div>
+    </section>
+    """,
     unsafe_allow_html=True,
   )
-  st.info(
-    "Speech is transcribed online by Google and requires an internet connection. "
-    "Your recording is sent to Google for transcription. Replies are spoken by your browser."
+
+  if "voice_auto_speak" not in st.session_state:
+    st.session_state["voice_auto_speak"] = True
+  st.toggle(
+    "Automatically speak answers",
+    key="voice_auto_speak",
+    help="Turn this off to keep future answers silent. Use the Speak answer button when you want audio.",
   )
-  st.caption(
-    response = answer_assistant_question(command.value)
-    "“Turn off voice announcements”, or “Start object tracking”."
+
+  st.markdown('<div class="assistant-section-label">Try asking me</div>', unsafe_allow_html=True)
+  prompt_cols = st.columns(3)
+  quick_question = None
+  prompt_examples = (
+    ("👁️  What do you see?", "What do you see in this image?"),
+    ("✨  Explain the results", "Explain the scenario in this input"),
+    ("💡  App features", "What features does this application have?"),
   )
+  for prompt_index, (prompt_col, (label, question)) in enumerate(zip(prompt_cols, prompt_examples)):
+    with prompt_col:
+      with st.container(key=f"assistant_prompt_{prompt_index}"):
+        if st.button(label, key=f"voice_prompt_{prompt_index}", width="stretch"):
+          quick_question = question
+
   if "voice_recording_number" not in st.session_state:
     st.session_state["voice_recording_number"] = 0
   audio_key = f"voice_message_audio_{st.session_state['voice_recording_number']}"
-  st.audio_input("Record a question or command", key=audio_key)
-  st.session_state["voice_message_audio"] = st.session_state.get(audio_key)
-  st.button(
-    "Send voice message",
-    type="primary",
-    width="stretch",
-    on_click=process_voice_message,
-  )
+  with st.container(key="assistant_recorder"):
+    st.markdown(
+      """
+      <div class="assistant-recorder-title">Talk to SmartVision</div>
+      <div class="assistant-recorder-hint">Record a question or command. I'll listen and reply.</div>
+      """,
+      unsafe_allow_html=True,
+    )
+    st.audio_input("Record your question", key=audio_key)
+    st.session_state["voice_message_audio"] = st.session_state.get(audio_key)
+    st.button("Send to assistant", type="primary", width="stretch", on_click=process_voice_message)
+
+  if quick_question:
+    st.session_state["voice_transcript"] = quick_question
+    st.session_state["voice_response"] = answer_assistant_question(quick_question)
+    st.session_state["voice_status"] = "success"
+    st.session_state["voice_speech_pending"] = True
+    st.rerun()
 
   if st.session_state.get("voice_transcript"):
-    st.markdown("**You said:**")
-    st.write(st.session_state["voice_transcript"])
+    st.markdown('<div class="assistant-section-label">Your conversation</div>', unsafe_allow_html=True)
+    st.markdown(
+      f'<div class="assistant-card"><div class="assistant-card-label">You asked</div>'
+      f'<p>{escape(st.session_state["voice_transcript"])}</p></div>',
+      unsafe_allow_html=True,
+    )
   if st.session_state.get("voice_response"):
     if st.session_state.get("voice_status") == "error":
-      st.error(st.session_state["voice_response"])
+      st.error(st.session_state["voice_response"], icon="⚠️")
     else:
-      st.success(st.session_state["voice_response"])
-      if st.session_state.pop("voice_speech_pending", False):
-        speak_in_browser(st.session_state["voice_response"])
-      if st.button("Record next question", type="primary", width="stretch"):
+      st.markdown(
+        f'<div class="assistant-card"><div class="assistant-card-label">SmartVision says</div>'
+        f'<p>{escape(st.session_state["voice_response"])}</p></div>',
+        unsafe_allow_html=True,
+      )
+      should_auto_speak = st.session_state.pop("voice_speech_pending", False)
+      speak_in_browser(
+        st.session_state["voice_response"],
+        auto_speak=should_auto_speak and st.session_state.get("voice_auto_speak", True),
+      )
+      if st.button("Ask another question", type="primary", width="stretch"):
         st.session_state["voice_recording_number"] += 1
         st.session_state["voice_message_audio"] = None
         st.session_state["voice_transcript"] = ""
@@ -1395,7 +1601,185 @@ elif page == "Drowsiness Monitor":
 
 # VISION CHATBOT
 elif page == "Vision Chatbot":
-    "Try: What do you see? How many people? What features does this application have? Tell me about OCR, Open Analytics, Open History, turn off voice announcements, or start object tracking."
+  active_conversation = get_active_chat_conversation()
+  st.session_state["chatbot"].history = active_conversation["messages"]
+
+  with st.expander("Chat history", expanded=False):
+    st.markdown("### Chats")
+    if st.button("New chat", key="new_vision_chat", width="stretch"):
+      create_chat_conversation()
+      st.rerun()
+
+    for conversation in st.session_state["chat_conversations"]:
+      if st.button(
+        conversation["title"],
+        key=f"select_chat_{conversation['id']}",
+        type="primary" if conversation["id"] == active_conversation["id"] else "secondary",
+        width="stretch",
+        help=conversation["title"],
+      ):
+        st.session_state["active_chat_id"] = conversation["id"]
+        st.session_state["chatbot"].history = conversation["messages"]
+        st.rerun()
+
+  current_provider = st.session_state.get("ai_provider", "auto")
+  has_gemini = bool(st.session_state.get("gemini_api_key", "") or os.environ.get("GEMINI_API_KEY", ""))
+  has_openai = bool(st.session_state.get("openai_api_key", "") or os.environ.get("OPENAI_API_KEY", ""))
+
+  if current_provider == "gemini" or (current_provider == "auto" and has_gemini):
+    badge_label = "✨ Google Gemini 1.5 Flash Connected"
+    badge_color = "#3B82F6"
+    badge_bg = "#EFF6FF"
+  elif current_provider == "openai" or (current_provider == "auto" and has_openai):
+    badge_label = "🤖 OpenAI GPT-4o-mini Connected"
+    badge_color = "#10B981"
+    badge_bg = "#ECFDF5"
+  else:
+    badge_label = "⚡ SmartVision Neural AI Active (Zero-Key Built-in)"
+    badge_color = "#8B5CF6"
+    badge_bg = "#F5F3FF"
+
+  st.markdown(f"""
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
+      <div>
+        <div class='section-title' style='margin-bottom: 4px;'>Multimodal Vision Assistant & Chatbot</div>
+        <div class='sub-text' style='margin-bottom: 0;'>Conversational intelligence like ChatGPT & Gemini with direct camera and visual perception.</div>
+      </div>
+      <div style="background-color: {badge_bg}; border: 1px solid {badge_color}; color: {badge_color}; padding: 6px 14px; border-radius: 20px; font-weight: 600; font-size: 13px; display: flex; align-items: center; gap: 8px;">
+        <div style="width: 8px; height: 8px; background-color: {badge_color}; border-radius: 50%;"></div>
+        {badge_label}
+      </div>
+    </div>
+  """, unsafe_allow_html=True)
+
+  with st.expander("⚙️ AI Engine Settings & API Keys (Gemini / ChatGPT / Zero-Key)", expanded=False):
+    cfg_col1, cfg_col2, cfg_col3 = st.columns([1.6, 2, 2])
+    with cfg_col1:
+      prov_options = [
+        "Auto (Smart Selection)",
+        "Google Gemini 1.5/2.0 Flash",
+        "OpenAI ChatGPT (GPT-4o/mini)",
+        "SmartVision Neural AI (Built-in Zero-Key)",
+      ]
+      prov_val_map = {
+        "Auto (Smart Selection)": "auto",
+        "Google Gemini 1.5/2.0 Flash": "gemini",
+        "OpenAI ChatGPT (GPT-4o/mini)": "openai",
+        "SmartVision Neural AI (Built-in Zero-Key)": "builtin",
+      }
+      curr_idx = {"gemini": 1, "openai": 2, "builtin": 3}.get(current_provider, 0)
+      sel_prov = st.selectbox("Intelligence Provider", prov_options, index=curr_idx)
+      st.session_state["ai_provider"] = prov_val_map[sel_prov]
+
+    with cfg_col2:
+      new_gemini = st.text_input(
+        "Google Gemini API Key",
+        value=st.session_state.get("gemini_api_key", ""),
+        type="password",
+        placeholder="Paste AIzaSy... key (optional)",
+      )
+      if new_gemini != st.session_state.get("gemini_api_key", ""):
+        st.session_state["gemini_api_key"] = new_gemini
+
+    with cfg_col3:
+      new_openai = st.text_input(
+        "OpenAI API Key",
+        value=st.session_state.get("openai_api_key", ""),
+        type="password",
+        placeholder="Paste sk-... key (optional)",
+      )
+      if new_openai != st.session_state.get("openai_api_key", ""):
+        st.session_state["openai_api_key"] = new_openai
+
+    st.caption(
+      "💡 **Tip:** You can obtain a free Google Gemini API key at "
+      "[Google AI Studio](https://aistudio.google.com/app/apikey). "
+      "Once pasted, live Gemini models are unlocked instantly!"
+    )
+    st.session_state["chatbot"].set_provider_and_keys(
+      provider=st.session_state["ai_provider"],
+      gemini_key=st.session_state["gemini_api_key"],
+      openai_key=st.session_state["openai_api_key"],
+    )
+
+  last_dets = st.session_state.get("last_detections", [])
+  ctx_col, btn_col = st.columns([4, 1])
+  with ctx_col:
+    if last_dets:
+      det_summary = ", ".join(
+        f"{d.get('object_name', 'item')} ({d.get('confidence', 0) * 100:.0f}%)"
+        for d in last_dets[:6]
+      )
+      st.markdown(f"""
+        <div style="background-color: #F0FDF4; border: 1px solid #86EFAC; border-radius: 10px; padding: 10px 14px; font-size: 13px; color: #166534; display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 16px;">🟢</span>
+          <div><b>Active Camera Perception:</b> {det_summary}</div>
+        </div>
+      """, unsafe_allow_html=True)
+    else:
+      st.markdown("""
+        <div style="background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 10px; padding: 10px 14px; font-size: 13px; color: #475569; display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 16px;">⚪</span>
+          <div><b>Camera Perception Idle:</b> General Multimodal Intelligence Mode Active. Ask about any topic, objects, recipes, or science.</div>
+        </div>
+      """, unsafe_allow_html=True)
+
+  with btn_col:
+    if st.button("🗑️ Clear Chat", use_container_width=True):
+      st.session_state["chatbot"].clear_history()
+      active_conversation["messages"].clear()
+      st.rerun()
+
+  st.markdown(
+    "<small style='color: #64748B; font-weight: 600; text-transform: uppercase; "
+    "letter-spacing: 0.5px;'>Suggested Prompts</small>",
+    unsafe_allow_html=True,
+  )
+  chip_c1, chip_c2, chip_c3, chip_c4 = st.columns(4)
+  query_to_send = None
+  if chip_c1.button("👁️ What do you see?", use_container_width=True):
+    query_to_send = "What do you see in the camera right now?"
+  if chip_c2.button("🍳 Suggest recipes", use_container_width=True):
+    query_to_send = "What recipes can I cook with the items in the scene?"
+  if chip_c3.button("⚠️ Scan safety hazards", use_container_width=True):
+    query_to_send = "Are there any safety hazards or sharp objects in the frame?"
+  if chip_c4.button("🧠 Explain YOLOv8 AI", use_container_width=True):
+    query_to_send = "How does YOLOv8 object detection work under the hood?"
+
+  st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
+  if not st.session_state["chatbot"].history and not query_to_send:
+    st.markdown("""
+      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px 20px; text-align: center; background: #FAFAFA; border-radius: 16px; border: 1px dashed #CBD5E1; margin: 15px 0;">
+        <div style="width: 64px; height: 64px; background: linear-gradient(135deg, #ECFDF5 0%, #EFF6FF 100%); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-bottom: 16px; box-shadow: 0 8px 20px -4px rgba(59, 130, 246, 0.15); font-size: 28px;">
+          🤖
+        </div>
+        <h3 style="color: #0F172A; font-weight: 700; margin-bottom: 6px;">SmartVision Conversational Assistant</h3>
+        <p style="color: #64748B; font-size: 14px; max-width: 520px; line-height: 1.5; margin-bottom: 0;">
+          Directly integrated with your live camera and image detections. Ask questions about detected items, hazards, cooking recipes, OCR text, or general coding and AI concepts.
+        </p>
+      </div>
+    """, unsafe_allow_html=True)
+  else:
+    for msg in st.session_state["chatbot"].history:
+      avatar = "🧑‍💻" if msg["role"] == "user" else ("✨" if "Gemini" in badge_label else "🤖")
+      with st.chat_message(msg["role"], avatar=avatar):
+        st.markdown(msg["content"])
+
+  user_input = st.chat_input(
+    "Ask SmartVision Assistant anything (camera, objects, recipes, science, coding)..."
+  )
+  if user_input:
+    query_to_send = user_input
+
+  if query_to_send:
+    with st.chat_message("user", avatar="🧑‍💻"):
+      st.markdown(query_to_send)
+    with st.chat_message("assistant", avatar="✨" if "Gemini" in badge_label else "🤖"):
+      with st.spinner("SmartVision Assistant reasoning..."):
+        response = answer_assistant_question(query_to_send)
+        st.markdown(response)
+    speak_in_browser(response)
+    st.rerun()
 
 # FACE REGISTRATION
 elif page == "Face Registration":

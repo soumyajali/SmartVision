@@ -37,7 +37,7 @@ APPLICATION_FEATURES = (
     ),
     (
         ("voice assistant", "voice control", "voice commands", "voice question", "speech assistant", "voice input"),
-        "Voice Assistant accepts recorded questions and commands. It can answer about detections, navigate dashboard pages, toggle voice announcements or object tracking, and reset announcements. Browser speech synthesis reads answers aloud. Speech recognition sends recordings to Google's online service.",
+        "Voice Assistant accepts recorded questions and commands. It can explain SmartVision features and the latest object-detection or OCR results, navigate dashboard pages, toggle voice announcements or object tracking, and reset announcements. Browser speech synthesis reads answers aloud. Speech recognition sends recordings to Google's online service.",
     ),
     (
         ("ocr", "read text", "text recognition", "translate", "translation", "optical character recognition"),
@@ -90,9 +90,94 @@ APPLICATION_FEATURES = (
 
 
 def answer_application_question(question: str) -> str | None:
-    """Answer questions about documented app features; return None for other questions."""
+    """Answer application or latest-result questions using known app and session data."""
     normalized = " ".join(re.sub(r"[^a-z0-9 ]", " ", question.lower()).split())
     if not normalized:
+        return None
+
+    application_io_question = any(
+        phrase in normalized
+        for phrase in (
+            "input and output of this app",
+            "input and output of the app",
+            "input and output of this application",
+            "inputs and outputs",
+            "what does this app take as input",
+            "what does this application take as input",
+            "how does this app work",
+            "how does this application work",
+        )
+    )
+    if application_io_question:
+        return (
+            "SmartVision takes camera captures or uploaded images for object detection, "
+            "images or videos for OCR, videos and optional reference images for video "
+            "review, and recorded audio for voice questions or commands. Depending on "
+            "the feature, it returns labeled objects with confidence scores, recognized "
+            "or translated text, video match timestamps, alerts, and written or spoken "
+            "assistant answers. Results describe the submitted input and selected feature."
+        )
+
+    scene_question = any(
+        phrase in normalized
+        for phrase in (
+            "what do you see",
+            "what can you see",
+            "what is in",
+            "what s in",
+            "what is happening",
+            "explain the scenario",
+            "explain this scenario",
+            "explain scenario",
+            "describe the scene",
+            "describe scenario",
+            "describe the input",
+            "describe input",
+            "describe the output",
+            "describe output",
+            "explain the input",
+            "explain input",
+            "explain the output",
+            "explain output",
+            "explain this image",
+            "what does this image show",
+            "what is shown",
+            "what does this result mean",
+            "what does the output mean",
+            "input and output",
+            "input output",
+            "what did it detect",
+            "what has been detected",
+            "detection result",
+            "detection output",
+            "explain the output",
+            "explain this output",
+            "interpret the output",
+            "explain the results",
+            "explain these results",
+            "interpret these results",
+            "analyze this input",
+            "what is the input",
+            "what is the output",
+        )
+    )
+    ocr_question = any(
+        phrase in normalized
+        for phrase in (
+            "what did ocr read",
+            "what does ocr say",
+            "what does ocr show",
+            "ocr result",
+            "what is the ocr result",
+            "what did it read",
+            "recognized text",
+            "extracted text",
+            "what text was read",
+            "what text is visible",
+            "read the text",
+        )
+    )
+    if scene_question or ocr_question:
         return None
 
     for terms, description in APPLICATION_FEATURES:
@@ -142,6 +227,128 @@ def answer_application_question(question: str) -> str | None:
             "Ask me about any feature for more details."
         )
     return None
+
+
+def answer_scene_question(
+    question: str,
+    detections: Sequence[dict] | None = None,
+    ocr_text: str = "",
+) -> str | None:
+    """Describe the latest detection and OCR output without guessing beyond the results."""
+    normalized = " ".join(re.sub(r"[^a-z0-9 ]", " ", question.lower()).split())
+    scene_question = any(
+        phrase in normalized
+        for phrase in (
+            "what do you see",
+            "what can you see",
+            "what is in",
+            "what s in",
+            "what is happening",
+            "explain the scenario",
+            "explain this scenario",
+            "explain scenario",
+            "describe the scene",
+            "describe scenario",
+            "describe this",
+            "describe the input",
+            "describe input",
+            "describe the output",
+            "describe output",
+            "explain the input",
+            "explain input",
+            "explain the output",
+            "explain output",
+            "explain this image",
+            "what does this image show",
+            "what is shown",
+            "what does this result mean",
+            "what does the output mean",
+            "input and output",
+            "input output",
+            "what did it detect",
+            "what has been detected",
+            "detection result",
+            "detection output",
+            "explain the output",
+            "explain this output",
+            "interpret the output",
+            "explain the results",
+            "explain these results",
+            "interpret these results",
+            "analyze this input",
+            "what is the input",
+            "what is the output",
+        )
+    )
+    ocr_question = any(
+        phrase in normalized
+        for phrase in (
+            "what did ocr read",
+            "what does ocr say",
+            "what does ocr show",
+            "ocr result",
+            "what is the ocr result",
+            "what did it read",
+            "recognized text",
+            "extracted text",
+            "what text was read",
+            "what text is visible",
+            "read the text",
+        )
+    )
+    if not scene_question and not ocr_question:
+        return None
+
+    detected_items: dict[str, list[float]] = {}
+    for detection in detections or ():
+        if not isinstance(detection, dict):
+            continue
+        name = str(detection.get("object_name", detection.get("label", ""))).strip()
+        if not name:
+            continue
+        try:
+            confidence = float(detection.get("confidence", 0))
+        except (TypeError, ValueError):
+            confidence = 0
+        detected_items.setdefault(name, []).append(confidence)
+
+    recognized_text = ocr_text.strip()
+    if ocr_question:
+        if recognized_text:
+            return f"The latest OCR output reads: {recognized_text[:1200]}"
+        return (
+            "There is no OCR text result available yet. Open the OCR page, run text "
+            "extraction on an image or video, and then ask me to read or explain the result."
+        )
+
+    if not detected_items and not recognized_text:
+        return (
+            "I don't have a recent image-analysis result to describe yet. Open Object "
+            "Detection and analyze an image, or run OCR to extract visible text, then "
+            "ask me to explain the result."
+        )
+
+    parts = []
+    if detected_items:
+        descriptions = []
+        for name, confidences in detected_items.items():
+            count = len(confidences)
+            confidence = sum(confidences) / count
+            descriptions.append(
+                f"{count} {name}{'s' if count != 1 else ''} "
+                f"(average detection confidence {confidence:.0%})"
+            )
+        parts.append("The latest object-detection output recognized " + ", ".join(descriptions) + ".")
+    else:
+        parts.append("The latest object-detection output contains no recorded objects.")
+
+    if recognized_text:
+        parts.append(f'The latest OCR output reads: "{recognized_text[:1200]}".')
+    parts.append(
+        "This is based on detected labels and OCR text, not direct understanding of "
+        "the full image pixels. It cannot confirm actions or events not represented in these results."
+    )
+    return " ".join(parts)
 
 
 def transcribe_audio(audio_bytes: bytes) -> str:

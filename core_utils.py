@@ -9,7 +9,7 @@ import psutil
 import cv2
 import numpy as np
 from PIL import Image
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 import easyocr
 from reportlab.lib.pagesizes import letter
 from reportlab.lib import colors
