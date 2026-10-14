@@ -1,0 +1,199 @@
+# SmartVision Automated Dataset Collection & YOLOv8 Training Pipeline Configuration
+
+discovery:
+  kaggle:
+    enabled: true
+    query: "object detection"
+    max_pages: 5
+    page_size: 20
+    sort_by: "votes" # votes, relevance, updated
+  huggingface:
+    enabled: true
+    query: "object-detection"
+    limit: 30
+    sort_by: "downloads"
+
+download_limits:
+  max_downloads: 5               # Maximum datasets to download in a batch
+  max_dataset_size_mb: 400       # Skip individual datasets larger than this (safe for 13GB disk)
+  min_free_disk_gb: 4.0          # Stop all downloads if free disk falls below this threshold
+  retry_attempts: 3              # Retry on transient network errors
+  retry_backoff_sec: 2           # Exponential backoff factor
+  timeout_sec: 180               # Per-request network timeout
+
+taxonomy:
+  canonical_classes:
+    - person
+    - bicycle
+    - car
+    - motorcycle
+    - airplane
+    - bus
+    - train
+    - truck
+    - boat
+    - traffic light
+    - fire hydrant
+    - stop sign
+    - parking meter
+    - bench
+    - bird
+    - cat
+    - dog
+    - horse
+    - sheep
+    - cow
+    - elephant
+    - bear
+    - zebra
+    - giraffe
+    - backpack
+    - umbrella
+    - handbag
+    - tie
+    - suitcase
+    - frisbee
+    - skis
+    - snowboard
+    - sports ball
+    - kite
+    - baseball bat
+    - baseball glove
+    - skateboard
+    - surfboard
+    - tennis racket
+    - bottle
+    - wine glass
+    - cup
+    - fork
+    - knife
+    - spoon
+    - bowl
+    - banana
+    - apple
+    - sandwich
+    - orange
+    - broccoli
+    - carrot
+    - hot dog
+    - pizza
+    - donut
+    - cake
+    - chair
+    - couch
+    - potted plant
+    - bed
+    - dining table
+    - toilet
+    - tv
+    - laptop
+    - mouse
+    - remote
+    - keyboard
+    - cell phone
+    - microwave
+    - oven
+    - toaster
+    - sink
+    - refrigerator
+    - book
+    - clock
+    - vase
+    - scissors
+    - teddy bear
+    - hair drier
+    - toothbrush
+
+  # Synonyms mapped to canonical classes to prevent class fragmentation
+  synonyms:
+    human: person
+    people: person
+    pedestrian: person
+    man: person
+    woman: person
+    boy: person
+    girl: person
+    bag: backpack
+    rucksack: backpack
+    schoolbag: backpack
+    knapsack: backpack
+    bookbag: backpack
+    haversack: backpack
+    purse: handbag
+    pocketbook: handbag
+    tote: handbag
+    luggage: suitcase
+    baggage: suitcase
+    automobile: car
+    vehicle: car
+    sedan: car
+    suv: car
+    motorbike: motorcycle
+    scooter: motorcycle
+    plane: airplane
+    aeroplane: airplane
+    aircraft: airplane
+    stop_sign: stop sign
+    traffic_light: traffic light
+    cellphone: cell phone
+    mobile: cell phone
+    mobile_phone: cell phone
+    smartphone: cell phone
+    phone: cell phone
+    notebook: laptop
+    screen: tv
+    monitor: tv
+    television: tv
+    sofa: couch
+    plant: potted plant
+    pot: potted plant
+    flowerpot: potted plant
+    table: dining table
+    desk: dining table
+    dvd: book
+    firearm: gun
+    pistol: gun
+    handgun: gun
+    rifle: gun
+    blade: knife
+    pocketknife: knife
+    shears: scissors
+
+dataset_preparation:
+  external_datasets_dir: "/Users/sowmya/Desktop/datasets"
+  raw_dir: "datasets/raw_downloads"
+  output_dir: "datasets/custom_objects"
+  manifest_path: "datasets/manifest.json"
+  splits:
+    train: 0.70
+    val: 0.20
+    test: 0.10
+  random_seed: 42
+  image_extensions: [".jpg", ".jpeg", ".png", ".bmp", ".webp"]
+  deduplication:
+    enabled: true
+    hash_algorithm: "md5"
+    dhash_threshold: 4
+
+training:
+  base_model: "yolov8n.pt"         # Base pretrained weights to fine-tune
+  high_acc_base: "yolov8m.pt"      # Optional base for higher accuracy
+  imgsz: 640
+  batch_size: 16
+  epochs: 5                        # 5 for quick local, 20-50 for Colab GPU
+  patience: 10
+  device: "auto"                   # "auto" detects mps, cuda, or cpu
+  seed: 42
+  workers: 2
+  save_period: 2
+  project_dir: "runs/detect"
+  run_name: "smartvision_pipeline_run"
+  weights_export_dir: "weights"
+  production_weight_name: "smartvision_best.pt"
+
+export:
+  formats:
+    - onnx
+    - tflite
+  imgsz: 640
+  half: false

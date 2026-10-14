@@ -1,0 +1,55 @@
+{
+  "engine_load": {
+    "status": "PASS",
+    "time_sec": 2.11
+  },
+  "image_ocr_baseline": {
+    "status": "PASS",
+    "extracted": "SMART VISION",
+    "cer": 0.0,
+    "wer": 0.0
+  },
+  "complex_text_accuracy": {
+    "status": "PASS",
+    "cer": 3.9,
+    "wer": 15.38,
+    "pred": "SMART VISION Al 2026\nTESTING OCR: ACCURACY 99.5%\nLATENCY #1 REALTIME CAMERA"
+  },
+  "degradation": {
+    "dark_cer": 3.9,
+    "blur_cer": 100.0,
+    "noisy_cer": 3.9
+  },
+  "video_ocr": {
+    "status": "PASS",
+    "events": [
+      {
+        "time": "00:00",
+        "text": "TRACKING VEHICLE A-102"
+      },
+      {
+        "time": "00:02",
+        "text": "SPEED: 45 MPH"
+      }
+    ]
+  },
+  "error_handling_local": "PASS",
+  "api_ocr": {
+    "status": "PASS",
+    "response": [
+      "SMART VISION"
+    ]
+  },
+  "api_invalid": {
+    "status": "PASS",
+    "code": 400
+  },
+  "translation": {
+    "status": "BLOCKED/NETWORK",
+    "error": "Server Error: You made too many requests to the server.According to google, you are allowed to make 5 requests per secondand up to 200k requests per day. You can wait and try again later oryou can try the translate_batch function"
+  },
+  "summarization": {
+    "status": "NOT IMPLEMENTED",
+    "detail": "OCR page provides multi-lingual translation (18 languages); text summarization not implemented in OCR flow."
+  }
+}

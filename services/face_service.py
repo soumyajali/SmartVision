@@ -85,14 +85,7 @@ class FaceService:
             return None
             
         gray = cv2.cvtColor(person_roi, cv2.COLOR_BGR2GRAY)
-        detected_faces = self.face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=3)
-        
-        # If no face detected inside person roi, try detecting on full frame if person_box was provided
-        if len(detected_faces) == 0 and person_box is not None:
-            full_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-            detected_faces = self.face_cascade.detectMultiScale(full_gray, scaleFactor=1.1, minNeighbors=3)
-            if len(detected_faces) > 0:
-                gray = full_gray
+        detected_faces = self.face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=4, minSize=(30, 30))
         
         if len(detected_faces) > 0:
             # We'll take the largest face found
