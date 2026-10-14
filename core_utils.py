@@ -9,7 +9,7 @@ import psutil
 import cv2
 import numpy as np
 from PIL import Image
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 import easyocr
 from reportlab.lib.pagesizes import letter
 from reportlab.lib import colors
@@ -18,6 +18,71 @@ from reportlab.lib.styles import getSampleStyleSheet
 import csv
 from datetime import datetime
 import os
+
+
+def get_person_appearance_descriptor(image_bgr: np.ndarray) -> Optional[Tuple[np.ndarray, ...]]:
+    if image_bgr is None or image_bgr.size == 0:
+        return None
+
+    height, width = image_bgr.shape[:2]
+    left, right = int(width * 0.1), max(int(width * 0.9), 1)
+    top, bottom = int(height * 0.1), max(int(height * 0.9), 1)
+    person_crop = image_bgr[top:bottom, left:right]
+    if person_crop.size == 0:
+        person_crop = image_bgr
+
+    resized = cv2.resize(person_crop, (48, 96), interpolation=cv2.INTER_AREA)
+    hsv = cv2.cvtColor(resized, cv2.COLOR_BGR2HSV)
+    regions = [hsv]
+    regions.extend(np.array_split(hsv, 3, axis=0))
+
+    descriptors = []
+    for region in regions:
+        histogram = cv2.calcHist([region], [0, 1], None, [12, 8], [0, 180, 0, 256])
+        cv2.normalize(histogram, histogram, norm_type=cv2.NORM_L1)
+        descriptors.append(histogram)
+    return tuple(descriptors)
+
+
+def compare_person_appearance(
+    reference: Optional[Tuple[np.ndarray, ...]],
+    candidate: Optional[Tuple[np.ndarray, ...]],
+) -> float:
+    if reference is None or candidate is None or len(reference) != 4 or len(candidate) != 4:
+        return 0.0
+
+    global_similarity = 1.0 - float(cv2.compareHist(reference[0], candidate[0], cv2.HISTCMP_BHATTACHARYYA))
+    region_similarities = []
+    for reference_region in reference[1:]:
+        best_similarity = max(
+            1.0 - float(cv2.compareHist(reference_region, candidate_region, cv2.HISTCMP_BHATTACHARYYA))
+            for candidate_region in candidate[1:]
+        )
+        region_similarities.append(best_similarity)
+
+    score = 0.55 * global_similarity + 0.45 * float(np.mean(region_similarities))
+    return max(0.0, min(1.0, score))
+
+
+def scale_bbox(
+    bbox: Tuple[float, float, float, float],
+    source_shape: Tuple[int, ...],
+    target_size: Tuple[int, int],
+) -> Tuple[int, int, int, int]:
+    source_height, source_width = source_shape[:2]
+    target_width, target_height = target_size
+    if source_width <= 0 or source_height <= 0:
+        raise ValueError("Source image dimensions must be positive.")
+
+    scale_x = target_width / source_width
+    scale_y = target_height / source_height
+    x1, y1, x2, y2 = bbox
+    return (
+        max(0, min(target_width, int(x1 * scale_x))),
+        max(0, min(target_height, int(y1 * scale_y))),
+        max(0, min(target_width, int(x2 * scale_x))),
+        max(0, min(target_height, int(y2 * scale_y))),
+    )
 
 
 class PerformanceMonitor:

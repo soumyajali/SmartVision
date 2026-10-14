@@ -10,7 +10,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from core_utils import (
     PerformanceMonitor, OCRReader, QRBarcodeScanner,
     AIAssistant, ReportGenerator, ImageQualityAnalyzer, 
-    SceneDescriber, VisionChatbot, AdaptiveEngine, LowLightEnhancer, DistanceEstimator, UnknownObjectDetector
+    SceneDescriber, VisionChatbot, AdaptiveEngine, LowLightEnhancer, DistanceEstimator, UnknownObjectDetector,
+    get_person_appearance_descriptor, compare_person_appearance, scale_bbox
 )
 from .recorder import VideoRecorder, get_video_recorder
 
@@ -18,5 +19,6 @@ __all__ = [
     'PerformanceMonitor', 'OCRReader', 'QRBarcodeScanner',
     'AIAssistant', 'ReportGenerator', 'VideoRecorder', 'get_video_recorder',
     'ImageQualityAnalyzer', 'SceneDescriber', 'VisionChatbot',
-    'AdaptiveEngine', 'LowLightEnhancer', 'DistanceEstimator', 'UnknownObjectDetector'
+    'AdaptiveEngine', 'LowLightEnhancer', 'DistanceEstimator', 'UnknownObjectDetector',
+    'get_person_appearance_descriptor', 'compare_person_appearance', 'scale_bbox'
 ]

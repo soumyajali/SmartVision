@@ -97,6 +97,8 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
+On Windows, install Microsoft C++ Build Tools with the **Desktop development with C++** workload before installing dependencies; `face-recognition` needs to build its `dlib` dependency.
+
 ### 3. Launch Streamlit Web Dashboard
 
 ```bash
@@ -105,6 +107,8 @@ streamlit run app.py
 Open `http://localhost:8501` in your browser to access the live detection dashboard.
 
 Open **Voice Assistant** in the dashboard navigation to record a question or command. Assistant responses are spoken through the computer running the Streamlit app.
+
+In **Video Fast Review**, reference-image person matching uses face recognition when a face is visible and clothing-color similarity as a fallback. Increase **Person detection resolution** and lower **Appearance match sensitivity** to improve recall for small or side-view people. This visual fallback is not identity verification and can match other people with similar clothing; no single reference image can guarantee recognition at every angle or distance.
 
 ### 4. Launch FastAPI Server (for Mobile App)
 
