@@ -20,6 +20,117 @@ from datetime import datetime
 import os
 
 
+def get_person_appearance_descriptor(image_bgr: np.ndarray) -> Optional[Tuple[np.ndarray, ...]]:
+    if image_bgr is None or image_bgr.size == 0:
+        return None
+
+    height, width = image_bgr.shape[:2]
+    person_crop = image_bgr[
+        int(height * 0.05):max(int(height * 0.95), 1),
+        int(width * 0.1):max(int(width * 0.9), 1),
+    ]
+    if person_crop.size == 0:
+        person_crop = image_bgr
+
+    resized = cv2.resize(person_crop, (48, 96), interpolation=cv2.INTER_AREA)
+    hsv = cv2.cvtColor(resized, cv2.COLOR_BGR2HSV)
+    regions = [hsv, *np.array_split(hsv, 3, axis=0)]
+    descriptors = []
+    for region in regions:
+        histogram = cv2.calcHist([region], [0, 1], None, [12, 8], [0, 180, 0, 256])
+        cv2.normalize(histogram, histogram, norm_type=cv2.NORM_L1)
+        descriptors.append(histogram)
+    return tuple(descriptors)
+
+
+def compare_person_appearance(
+    reference: Optional[Tuple[np.ndarray, ...]],
+    candidate: Optional[Tuple[np.ndarray, ...]],
+) -> float:
+    if reference is None or candidate is None or len(reference) != 4 or len(candidate) != 4:
+        return 0.0
+
+    global_similarity = 1.0 - float(
+        cv2.compareHist(reference[0], candidate[0], cv2.HISTCMP_BHATTACHARYYA)
+    )
+    region_similarities = [
+        max(
+            1.0 - float(cv2.compareHist(reference_region, candidate_region, cv2.HISTCMP_BHATTACHARYYA))
+            for candidate_region in candidate[1:]
+        )
+        for reference_region in reference[1:]
+    ]
+    score = 0.55 * global_similarity + 0.45 * float(np.mean(region_similarities))
+    return max(0.0, min(1.0, score))
+
+
+def face_landmarks_to_location(
+    landmarks: Any,
+    image_shape: Tuple[int, ...],
+    padding: float = 0.2,
+) -> Optional[Tuple[int, int, int, int]]:
+    if len(image_shape) < 2 or image_shape[0] <= 0 or image_shape[1] <= 0 or padding < 0:
+        return None
+
+    try:
+        xs = np.asarray([point.x for point in landmarks], dtype=np.float32)
+        ys = np.asarray([point.y for point in landmarks], dtype=np.float32)
+    except (AttributeError, TypeError, ValueError):
+        points = np.asarray(landmarks, dtype=np.float32)
+        if points.ndim != 2 or points.shape[0] == 0 or points.shape[1] < 2:
+            return None
+        xs, ys = points[:, 0], points[:, 1]
+
+    if xs.size == 0 or ys.size == 0 or not np.all(np.isfinite(xs)) or not np.all(np.isfinite(ys)):
+        return None
+
+    height, width = image_shape[:2]
+    left = float(np.min(xs)) * width
+    right = float(np.max(xs)) * width
+    top = float(np.min(ys)) * height
+    bottom = float(np.max(ys)) * height
+    box_width = right - left
+    box_height = bottom - top
+    if box_width <= 0 or box_height <= 0:
+        return None
+
+    left = max(0, int(left - box_width * padding))
+    right = min(width, int(right + box_width * padding))
+    top = max(0, int(top - box_height * padding))
+    bottom = min(height, int(bottom + box_height * padding))
+    if right - left < 10 or bottom - top < 10:
+        return None
+    return top, right, bottom, left
+
+
+def select_best_person_match(matches: List[Dict[str, Any]]) -> Dict[str, Any]:
+    face_matches = [match for match in matches if match.get("match_type") == "face"]
+    if not face_matches:
+        raise ValueError("At least one face match is required.")
+    return max(face_matches, key=lambda match: match["sim"])
+
+
+def scale_bbox(
+    bbox: Tuple[float, float, float, float],
+    source_shape: Tuple[int, ...],
+    target_size: Tuple[int, int],
+) -> Tuple[int, int, int, int]:
+    source_height, source_width = source_shape[:2]
+    target_width, target_height = target_size
+    if source_width <= 0 or source_height <= 0:
+        raise ValueError("Source image dimensions must be positive.")
+
+    scale_x = target_width / source_width
+    scale_y = target_height / source_height
+    x1, y1, x2, y2 = bbox
+    return (
+        max(0, min(target_width, int(x1 * scale_x))),
+        max(0, min(target_height, int(y1 * scale_y))),
+        max(0, min(target_width, int(x2 * scale_x))),
+        max(0, min(target_height, int(y2 * scale_y))),
+    )
+
+
 class PerformanceMonitor:
     """
     Monitors system performance metrics including FPS, CPU, memory, and inference time.
@@ -125,13 +236,15 @@ class OCRReader:
             print(f"Warning: Could not initialize OCR reader: {e}")
             self.reader = None
     
-    def extract_text(self, image: np.ndarray, min_confidence: float = 0.25) -> List[Dict[str, any]]:
+    def extract_text(self, image: np.ndarray, min_confidence: float = 0.25, rotation_info: list = [90, 180, 270]) -> List[Dict[str, any]]:
         """
         Extract text from an image, sorted in natural reading order (top-to-bottom, left-to-right).
+        Automatically handles any orientation (0°, 90°, 180°, 270°) using rotation_info.
         
         Args:
             image: Input image as numpy array (BGR format from OpenCV)
             min_confidence: Minimum confidence threshold to exclude noise
+            rotation_info: List of rotation angles to check for auto-orientation
             
         Returns:
             List of dictionaries containing text, bounding box, and confidence
@@ -146,7 +259,7 @@ class OCRReader:
             else:
                 image_rgb = image
             
-            results = self.reader.readtext(image_rgb)
+            results = self.reader.readtext(image_rgb, rotation_info=rotation_info)
             
             extracted = []
             for (bbox, text, confidence) in results:
@@ -192,11 +305,12 @@ class OCRReader:
             print(f"Error during OCR: {e}")
             return []
     
-    def extract_text_simple(self, image: np.ndarray, min_confidence: float = 0.25) -> str:
+    def extract_text_simple(self, image: np.ndarray, min_confidence: float = 0.25, rotation_info: list = [90, 180, 270]) -> str:
         """
         Extract text from an image formatted cleanly with line breaks.
+        Supports multi-angle rotation awareness (0°, 90°, 180°, 270°).
         """
-        results = self.extract_text(image, min_confidence=min_confidence)
+        results = self.extract_text(image, min_confidence=min_confidence, rotation_info=rotation_info)
         if not results:
             return ""
         

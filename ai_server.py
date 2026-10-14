@@ -144,14 +144,14 @@ async def detect_text(req: ImageRequest):
         if img is None:
             raise HTTPException(status_code=400, detail="Invalid image format")
 
-        results = ocr_reader.readtext(img)
+        results = ocr_reader.readtext(img, rotation_info=[90, 180, 270])
         
         text_detections = []
         for (bbox, text, prob) in results:
             # bbox is a list of 4 points: [[x1, y1], [x2, y1], [x2, y2], [x1, y2]]
             text_detections.append({
                 'text': text,
-                'confidence': prob,
+                'confidence': float(prob),
                 'bbox': [[float(p[0]), float(p[1])] for p in bbox]
             })
             

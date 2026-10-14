@@ -99,6 +99,8 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
+On Windows, install Microsoft C++ Build Tools with the **Desktop development with C++** workload before installing dependencies; `face-recognition` needs to build its `dlib` dependency.
+
 ### 3. Launch Streamlit Web Dashboard
 
 ```bash
@@ -109,6 +111,8 @@ Open `http://localhost:8501` in your browser to access the live detection dashbo
 Open **Voice Assistant** in the dashboard navigation to record a question or command. Ask about app features (for example, “What features does this application have?” or “Tell me about OCR”). Assistant responses are spoken through the browser on your device; select **Record next question** after an answer to start another recording.
 
 The **Vision Chatbot** page includes a conversation history panel and a **New chat** button. Conversations are kept in the current Streamlit session and can be selected again from the panel.
+
+In **Video Fast Review**, reference-image person matching scans sampled video frames for faces independently of person-box detections, using face recognition, MediaPipe face landmarks, and mirrored-view checks to improve matching across frontal and profile views. Person matches use face embeddings only; clothing and body pose are not used. **Strict**, **Balanced**, and **Tolerant** modes control the face-distance threshold, with higher recall increasing the chance of false matches. Increase **Person detection resolution** to improve recall for distant people. A single reference image cannot train a new identity model or guarantee recognition at every angle.
 
 ### 4. Launch FastAPI Server (for Mobile App)
 
