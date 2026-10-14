@@ -43,12 +43,21 @@ from voice_interaction import (
 )
 import plotly.graph_objects as go
 import plotly.express as px
+from ui.theme import apply_theme
+from ui.splash import show_splash
 # Removed insecure SSL certificate workaround as per requirements
 # ---------------- CLASS LABELS ----------------
 
 
 # ---------------- PAGE CONFIG ----------------
 st.set_page_config(page_title="Smart Vision AI", page_icon="", layout="wide")
+
+if "splash_done" not in st.session_state:
+  st.session_state["splash_done"] = False
+if not st.session_state.get("splash_done", False):
+  show_splash()
+  st.session_state["splash_done"] = True
+  st.rerun()
 
 # ---------------- SESSION STATE ----------------
 if "face_service" not in st.session_state:
@@ -471,6 +480,7 @@ img, video, canvas {
 </style>
 """
 st.markdown(get_theme_css(), unsafe_allow_html=True)
+apply_theme()
 
 
 def speak_in_browser(message: str, auto_speak: bool = True):
@@ -639,12 +649,14 @@ def get_color_histogram(image_bgr):
 
 # ---------------- SIDEBAR ----------------
 import os
+st.sidebar.markdown('<div class="sidebar-logo">', unsafe_allow_html=True)
 if os.path.exists("logo.png"):
   st.sidebar.image("logo.png", use_container_width=True)
 else:
   st.sidebar.markdown("*(Please save the logo as `logo.png` in the project folder to display it here)*")
-st.sidebar.markdown("### SMART VISION")
-st.sidebar.markdown("<small style='color: #64748b;'>Real-Time Object Detection</small>", unsafe_allow_html=True)
+st.sidebar.markdown('</div>', unsafe_allow_html=True)
+st.sidebar.markdown('<p class="sidebar-brand">SMART VISION</p>', unsafe_allow_html=True)
+st.sidebar.markdown('<div class="sidebar-tagline">Real-Time Object Detection</div>', unsafe_allow_html=True)
 
 if "ai_provider" not in st.session_state:
   st.session_state["ai_provider"] = "auto"
@@ -721,6 +733,33 @@ NAVIGATION_PAGES = [
     "Drowsiness Monitor"
 ]
 
+PRIMARY_NAVIGATION_PAGES = [
+  "Dashboard",
+  "Video Fast Review",
+  "OCR",
+  "Face Registration",
+  "Object Detection",
+  "Drowsiness Monitor",
+]
+
+AI_TOOL_NAVIGATION_PAGES = [
+  "Vision Chatbot",
+  "Voice Assistant",
+]
+
+SECONDARY_NAVIGATION_PAGES = [
+  "Research Evaluation",
+  "AutoML & Dataset Pipeline",
+  "History",
+  "Settings",
+]
+
+NAVIGATION_LABELS = {
+  "Video Fast Review": "⏩ Fast Video Review",
+  "Face Registration": "👤 Face Recognition",
+  "Vision Chatbot": "💬 Vision Chatbot",
+  "Voice Assistant": "🎙️ Voice Assistant",
+}
 
 def answer_assistant_question(question):
   chatbot = st.session_state["chatbot"]
@@ -793,13 +832,56 @@ def process_voice_message():
   st.session_state["voice_speech_pending"] = True
 
 
-page = st.sidebar.radio(
-  "Navigation",
-  NAVIGATION_PAGES,
-  key="navigation_page",
-  label_visibility="collapsed"
-)
-st.session_state["page"] = page
+def update_navigation(widget_key):
+  st.session_state["navigation_page"] = st.session_state[widget_key]
+
+
+current_page = st.session_state.get("navigation_page", "Dashboard")
+navigation_widgets = [
+  ("feature_navigation_page", PRIMARY_NAVIGATION_PAGES),
+  ("ai_tools_navigation_page", AI_TOOL_NAVIGATION_PAGES),
+  ("more_navigation_page", SECONDARY_NAVIGATION_PAGES),
+]
+for widget_key, group_pages in navigation_widgets:
+  st.session_state[widget_key] = current_page if current_page in group_pages else None
+
+with st.container(key="feature-navigation"):
+  st.radio(
+    "Main navigation",
+    PRIMARY_NAVIGATION_PAGES,
+    key="feature_navigation_page",
+    index=None,
+    label_visibility="collapsed",
+    format_func=lambda value: NAVIGATION_LABELS.get(value, value),
+    on_change=update_navigation,
+    args=("feature_navigation_page",),
+  )
+
+for group_name, widget_key, group_pages in (
+  ("More", "more_navigation_page", SECONDARY_NAVIGATION_PAGES),
+  ("AI Tools", "ai_tools_navigation_page", AI_TOOL_NAVIGATION_PAGES),
+):
+  st.sidebar.markdown(
+    f"<div class='nav-section'>{escape(group_name)}</div>",
+    unsafe_allow_html=True,
+  )
+  container_key = (
+    "secondary-feature-navigation" if group_name == "More"
+    else "ai-tools-feature-navigation"
+  )
+  with st.sidebar.container(key=container_key):
+    st.radio(
+      group_name,
+      group_pages,
+      key=widget_key,
+      index=None,
+      label_visibility="collapsed",
+      format_func=lambda value: NAVIGATION_LABELS.get(value, value),
+      on_change=update_navigation,
+      args=(widget_key,),
+    )
+
+page = st.session_state["page"] = st.session_state["navigation_page"]
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("<b>Alert & Siren Controls</b>", unsafe_allow_html=True)
@@ -857,9 +939,6 @@ st.sidebar.markdown("""
   <div style="color: #22c55e; margin-bottom: 10px; font-weight: bold;">Model Info</div>
   <div class="model-info-row"><span class="model-info-label">Model</span><span class="model-info-val">YOLOv8</span></div>
   <div class="model-info-row"><span class="model-info-label">Version</span><span class="model-info-val">8.1.0</span></div>
-  <div class="model-info-row"><span class="model-info-label">Backend</span><span class="model-info-val">PyTorch</span></div>
-  <div class="model-info-row"><span class="model-info-label">Device</span><span class="model-info-val">CPU</span></div>
-  <div class="model-info-row"><span class="model-info-label">Status</span><span class="status-ready">Ready</span></div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -963,20 +1042,17 @@ if page in ["Dashboard", "Home"]:
   perf_stats = st.session_state["performance_monitor"].get_stats()
   fps = perf_stats['fps'] if perf_stats else 0.0
   
-  # Top Header
-  hdr_c1, hdr_c2, hdr_c3, hdr_c4, hdr_c5, hdr_c6 = st.columns([4, 1.5, 1, 1.5, 2, 0.5])
+  hdr_c1, hdr_c2, hdr_c3, hdr_c4, hdr_c5 = st.columns([2.7, 0.9, 0.65, 1, 1.1])
   with hdr_c1:
     st.markdown("<div class='section-title'>Live Detection</div><div class='sub-text' style='margin-bottom:20px;'>Real-time object detection and tracking</div>", unsafe_allow_html=True)
   with hdr_c2:
-    st.markdown("<div style='font-size:12px; color:#64748b;'>System Status</div><div style='color: #10b981; font-weight:bold;'> Active</div>", unsafe_allow_html=True)
+    st.markdown("<div style='font-size:12px; color:#64748b;'>System Status</div><div style='color:#10b981; font-weight:bold;'>Active</div>", unsafe_allow_html=True)
   with hdr_c3:
-    st.markdown(f"<div style='font-size:12px; color:#64748b;'>FPS</div><div style='color: #0f172a; font-weight:bold;'>{fps:.1f}</div>", unsafe_allow_html=True)
+    st.markdown(f"<div style='font-size:12px; color:#64748b;'>FPS</div><div style='font-weight:bold;'>{fps:.1f}</div>", unsafe_allow_html=True)
   with hdr_c4:
-    st.markdown("<div style='font-size:12px; color:#64748b;'>Resolution</div><div style='color: #0f172a; font-weight:bold;'>1280 x 720</div>", unsafe_allow_html=True)
+    st.markdown("<div style='font-size:12px; color:#64748b;'>Resolution</div><div style='font-weight:bold;'>1280 x 720</div>", unsafe_allow_html=True)
   with hdr_c5:
     input_type = st.selectbox("Input Source", ["Camera 1", "Upload Image"], label_visibility="collapsed")
-  with hdr_c6:
-    st.markdown("<div style='padding: 6px; border: 1px solid #e2e8f0; border-radius: 8px; text-align:center; color:#64748b; font-size:18px;'></div>", unsafe_allow_html=True)
     
   col_main, col_side = st.columns([2.5, 1])
   
@@ -988,10 +1064,9 @@ if page in ["Dashboard", "Home"]:
   
   with col_main:
     video_placeholder = st.empty()
-    
-    # Capture input immediately so we can process it and get counts
+
     if input_type == "Upload Image":
-      file = st.file_uploader("Upload Image", type=["jpg","jpeg","png"], label_visibility="collapsed")
+      file = st.file_uploader("Upload Image", type=["jpg", "jpeg", "png"], label_visibility="collapsed")
       if file:
         from PIL import Image, ImageOps
         pil = Image.open(file)
@@ -1005,7 +1080,13 @@ if page in ["Dashboard", "Home"]:
         pil = ImageOps.exif_transpose(pil)
         img_cv = cv2.cvtColor(np.array(pil), cv2.COLOR_RGB2BGR)
 
-    if img_cv is not None:
+    if img_cv is None:
+      video_placeholder.markdown(
+        "<div class='dashboard-empty-state'><span aria-hidden='true'>◉</span>"
+        "<span>Upload an image or start the webcam to begin detection.</span></div>",
+        unsafe_allow_html=True,
+      )
+    else:
       rot_col, flip_col = st.columns([2, 1])
       with rot_col:
         od_rot = st.selectbox("Media Rotation", ["0° (Upright)", "90° Clockwise", "180° Inverted", "270° Counter-Clockwise"], index=0, key="od_rot_select")
@@ -1019,21 +1100,26 @@ if page in ["Dashboard", "Home"]:
         img_cv = cv2.rotate(img_cv, cv2.ROTATE_90_COUNTERCLOCKWISE)
       if od_flip:
         img_cv = cv2.flip(img_cv, 1)
-        
-    # Button Row
-    btn_c1, btn_c2, btn_c3, btn_c4, btn_c5 = st.columns([1.5, 1.5, 1, 1, 1])
-    with btn_c1:
-      st.button(" Start Detection", type="primary", use_container_width=True)
-    with btn_c2:
-      st.button(" Stop Detection", use_container_width=True)
-    with btn_c3:
-      st.button(" Capture", use_container_width=True)
-    with btn_c4:
-      st.button(" Record", use_container_width=True)
-    with btn_c5:
-      st.button(" Fullscreen", use_container_width=True)
-      
-    st.markdown("<b>Recent Detections</b><span style='float:right; color:#10b981; font-size:14px; font-weight:600;'>View All</span>", unsafe_allow_html=True)
+
+    button_row_one = st.columns(3)
+    for button_column, label, primary in zip(
+      button_row_one,
+      ("Start Detection", "Stop Detection", "Capture"),
+      (True, False, False),
+    ):
+      with button_column:
+        st.button(label, type="primary" if primary else "secondary", width="stretch")
+
+    button_row_two = st.columns(2)
+    for button_column, label in zip(button_row_two, ("Record", "Fullscreen")):
+      with button_column:
+        st.button(label, type="secondary", width="stretch")
+
+    st.markdown(
+      "<div class='dashboard-recent-heading'><b>Recent Detections</b>"
+      "<span>Latest from detection history</span></div>",
+      unsafe_allow_html=True,
+    )
     recent_cols = st.columns(5)
     recent_history = []
     try:
@@ -1041,27 +1127,26 @@ if page in ["Dashboard", "Home"]:
     except Exception:
       pass
 
-    if not recent_history:
-      recent_history = [
-        {"object_name": name, "confidence": conf, "time": "Just now"}
-        for name, conf in [("Person", 0.93), ("Car", 0.91), ("Motorbike", 0.92), ("Bus", 0.89), ("Bottle", 0.86)]
-      ]
-
     for col, item in zip(recent_cols, recent_history):
       with col:
         obj_name = str(item.get("object_name", "Unknown")).title()
         conf_val = float(item.get("confidence", 0.90))
         t_str = str(item.get("time", "Recent"))
+        confidence_pct = max(0, min(100, round(conf_val * 100)))
         st.markdown(f"""
-        <div style="border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; font-size: 11px;">
-          <div style="height: 60px; background: #0ea5e9; color:white; display:flex; align-items:center; justify-content:center; font-weight:bold;">{obj_name}</div>
-          <div style="padding: 5px;">
-            <b style="color:#0f172a;">{obj_name}</b><br/>
-            <span style="color:#64748b;">{conf_val:.2f} Confidence</span><br/>
-            <span style="color:#94a3b8;">{t_str}</span>
-          </div>
+        <div class="dashboard-recent-card">
+          <div class="dashboard-recent-object">{escape(obj_name)}</div>
+          <div class="dashboard-recent-meta"><span>{confidence_pct}% confidence</span><span>{escape(t_str)}</span></div>
+          <div class="dashboard-confidence-track"><span style="width:{confidence_pct}%;"></span></div>
         </div>
         """, unsafe_allow_html=True)
+
+    if not recent_history:
+      st.markdown(
+        "<div class='dashboard-empty-state'><span aria-hidden='true'>◌</span>"
+        "<span>No recent detections yet</span></div>",
+        unsafe_allow_html=True,
+      )
 
   if img_cv is not None:
     start_time = time.time()
@@ -1096,56 +1181,48 @@ if page in ["Dashboard", "Home"]:
           
     # Replace the placeholder with the processed image
     video_placeholder.image(cv2.cvtColor(detected_img, cv2.COLOR_BGR2RGB), use_container_width=True)
-  else:
-    video_placeholder.info("Upload an image or start the webcam to begin detection.")
 
   with col_side:
-    # Real-time Detections KPI
     st.markdown(f"""
-    <div class='kpi-card'>
-      <div>
-        <div style='font-size:13px; font-weight:600; color:#0f172a;'>Real-time Detections</div>
-        <div style='font-size:36px; font-weight:700; color:#0f172a; line-height:1.2;'>{total_detections}</div>
-        <div style='font-size:12px; color:#10b981; font-weight:500;'>Objects detected</div>
-      </div>
-      <div style='width:60px; height:60px; border-radius:50%; border: 2px dashed #10b981; display:flex; align-items:center; justify-content:center;'>
-        <div style='width:30px; height:30px; border-radius:50%; background-color: rgba(16, 185, 129, 0.2);'></div>
-      </div>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    # Detected Objects List
-    st.markdown("<div class='card-box' style='padding-top:15px; padding-bottom:15px; margin-top:20px;'>", unsafe_allow_html=True)
-    st.markdown("<b style='font-size:14px; color:#0f172a;'>Detected Objects</b>", unsafe_allow_html=True)
-    st.markdown("<br/>", unsafe_allow_html=True)
-    
-    if total_detections > 0:
-      for obj_name, count in object_counts.items():
-        pct = (count / total_detections) * 100
-        st.markdown(f"""
-        <div style='display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; font-size:13px;'>
-          <div style='color:#334155; font-weight:500;'>{obj_name}</div>
-          <div style='display:flex; gap:15px; color:#0f172a;'>
-            <span style='font-weight:600; width:15px;'>{count}</span>
-            <span style='color:#64748b;'>{pct:.1f}%</span>
-          </div>
+      <div class='kpi-card'>
+        <div>
+          <div style='font-size:13px; font-weight:600;'>Real-time Detections</div>
+          <div style='font-size:36px; font-weight:700; line-height:1.2;'>{total_detections}</div>
+          <div style='font-size:12px; color:#10b981; font-weight:500;'>Objects detected</div>
         </div>
-        """, unsafe_allow_html=True)
-    else:
-      st.markdown("<div style='font-size:13px; color:#64748b;'>No objects currently detected.</div>", unsafe_allow_html=True)
-      
-    st.markdown("</div>", unsafe_allow_html=True)
-    
-    # Detection Settings
-    st.markdown("<div class='card-box' style='padding-top:15px;'>", unsafe_allow_html=True)
-    st.markdown("<b style='font-size:14px; color:#0f172a; display:block; margin-bottom:15px;'>Detection Settings</b>", unsafe_allow_html=True)
-    
-    conf_val = st.slider("Confidence Threshold", 0.0, 1.0, 0.5, label_visibility="visible")
-    st.session_state["confidence_threshold"] = conf_val
-    iou_val = st.slider("IoU Threshold", 0.0, 1.0, 0.45)
-    max_det = st.slider("Max Detections", 1, 100, 20)
-    
-    st.markdown("</div>", unsafe_allow_html=True)
+        <div style='width:60px; height:60px; border-radius:50%; border:2px dashed #10b981; display:flex; align-items:center; justify-content:center;'>
+          <div style='width:30px; height:30px; border-radius:50%; background-color:rgba(16,185,129,0.2);'></div>
+        </div>
+      </div>
+      """, unsafe_allow_html=True)
+
+    with st.container(border=True):
+      st.markdown("<b style='font-size:14px;'>Detected Objects</b>", unsafe_allow_html=True)
+      if total_detections > 0:
+        for obj_name, count in object_counts.items():
+          pct = (count / total_detections) * 100
+          st.markdown(f"""
+          <div style='display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; font-size:13px;'>
+            <div style='font-weight:500;'>{escape(obj_name)}</div>
+            <div style='display:flex; gap:15px;'>
+              <span style='font-weight:600; width:15px;'>{count}</span>
+              <span>{pct:.1f}%</span>
+            </div>
+          </div>
+          """, unsafe_allow_html=True)
+      else:
+        st.markdown(
+          "<div class='dashboard-empty-state'><span aria-hidden='true'>◌</span>"
+          "<span>No objects detected yet</span></div>",
+          unsafe_allow_html=True,
+        )
+
+    with st.container(border=True):
+      st.markdown("<b style='font-size:14px; display:block; margin-bottom:15px;'>Detection Settings</b>", unsafe_allow_html=True)
+      conf_val = st.slider("Confidence Threshold", 0.0, 1.0, 0.5, label_visibility="visible")
+      st.session_state["confidence_threshold"] = conf_val
+      iou_val = st.slider("IoU Threshold", 0.0, 1.0, 0.45)
+      max_det = st.slider("Max Detections", 1, 100, 20)
 
 
 # VIDEO FAST REVIEW
@@ -1928,7 +2005,6 @@ elif page == "Face Registration":
 # OBJECT DETECTION 
 
 elif page == "Object Detection":
-
   st.markdown("<div class='section-title'> Object Detection</div>", unsafe_allow_html=True)
   st.markdown("<div class='sub-text'>Upload or capture an image for YOLO detection</div>", unsafe_allow_html=True)
   
