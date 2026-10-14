@@ -844,6 +844,43 @@ def answer_assistant_question(question):
   return response
 
 
+def execute_assistant_command(command):
+  if command.action == "navigate":
+    st.session_state["navigation_page"] = command.value
+    return f"Opening {command.value}."
+  if command.action == "announcements":
+    st.session_state["voice_enabled"] = command.value == "on"
+    return f"Voice announcements turned {command.value}."
+  if command.action == "tracking":
+    st.session_state["enable_tracking"] = command.value == "on"
+    return f"Object tracking turned {command.value}."
+  if command.action == "reset_announcements":
+    get_voice_assistant().clear_all_announcements()
+    return "Voice announcements reset."
+  return None
+
+
+def handle_assistant_message(message):
+  """Handle a typed or transcribed assistant message through one shared path."""
+  command = parse_voice_command(message, NAVIGATION_PAGES)
+  response = execute_assistant_command(command)
+  if response is None:
+    question = command.value if command.action == "question" else message
+    return answer_assistant_question(question), command
+
+  conversation = get_active_chat_conversation()
+  if not conversation["messages"]:
+    conversation["title"] = message[:40].strip() or "New chat"
+  conversation["messages"].extend(
+    [
+      {"role": "user", "content": message},
+      {"role": "assistant", "content": response},
+    ]
+  )
+  st.session_state["chatbot"].history = conversation["messages"]
+  return response, command
+
+
 def process_voice_message():
   audio = st.session_state.get("voice_message_audio")
   if audio is None:
@@ -861,24 +898,7 @@ def process_voice_message():
     return
 
   st.session_state["voice_transcript"] = transcript
-  command = parse_voice_command(transcript, NAVIGATION_PAGES)
-
-  if command.action == "navigate":
-    st.session_state["navigation_page"] = command.value
-    response = f"Opening {command.value}."
-  elif command.action == "announcements":
-    st.session_state["voice_enabled"] = command.value == "on"
-    response = f"Voice announcements turned {command.value}."
-  elif command.action == "tracking":
-    st.session_state["enable_tracking"] = command.value == "on"
-    response = f"Object tracking turned {command.value}."
-  elif command.action == "reset_announcements":
-    get_voice_assistant().clear_all_announcements()
-    response = "Voice announcements reset."
-  elif command.action == "question":
-    response = answer_assistant_question(command.value)
-  else:
-    response = answer_assistant_question(transcript)
+  response, _command = handle_assistant_message(transcript)
 
   st.session_state["voice_response"] = response
   st.session_state["voice_status"] = "success"
@@ -1872,164 +1892,52 @@ elif page == "Vision Chatbot":
         st.session_state["chatbot"].history = conversation["messages"]
         st.rerun()
 
-  current_provider = st.session_state.get("ai_provider", "auto")
-  has_gemini = bool(st.session_state.get("gemini_api_key", "") or os.environ.get("GEMINI_API_KEY", ""))
-  has_openai = bool(st.session_state.get("openai_api_key", "") or os.environ.get("OPENAI_API_KEY", ""))
+  st.markdown("## SmartVision Conversational Assistant")
+  st.markdown(
+    "Type questions the Voice Assistant can answer: ask about the current image or "
+    "latest detection results, explain OCR text, or learn about SmartVision features. "
+    "Replies are shown as text."
+  )
 
-  if current_provider == "gemini" or (current_provider == "auto" and has_gemini):
-    badge_label = "✨ Google Gemini 1.5 Flash Connected"
-    badge_color = "#3B82F6"
-    badge_bg = "#EFF6FF"
-  elif current_provider == "openai" or (current_provider == "auto" and has_openai):
-    badge_label = "🤖 OpenAI GPT-4o-mini Connected"
-    badge_color = "#10B981"
-    badge_bg = "#ECFDF5"
-  else:
-    badge_label = "⚡ SmartVision Neural AI Active (Zero-Key Built-in)"
-    badge_color = "#8B5CF6"
-    badge_bg = "#F5F3FF"
+  query_to_send = None
+  prompt_examples = (
+    ("What do you see?", "What do you see in this image?"),
+    ("Explain the results", "Explain the scenario in this input"),
+    ("App features", "What features does this application have?"),
+  )
+  prompt_cols = st.columns(3)
+  for prompt_index, (prompt_col, (label, question)) in enumerate(zip(prompt_cols, prompt_examples)):
+    with prompt_col:
+      if st.button(label, key=f"chat_assistant_prompt_{prompt_index}", width="stretch"):
+        query_to_send = question
 
-  st.markdown(f"""
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
-      <div>
-        <div class='section-title' style='margin-bottom: 4px;'>Multimodal Vision Assistant & Chatbot</div>
-        <div class='sub-text' style='margin-bottom: 0;'>Conversational intelligence like ChatGPT & Gemini with direct camera and visual perception.</div>
-      </div>
-      <div style="background-color: {badge_bg}; border: 1px solid {badge_color}; color: {badge_color}; padding: 6px 14px; border-radius: 20px; font-weight: 600; font-size: 13px; display: flex; align-items: center; gap: 8px;">
-        <div style="width: 8px; height: 8px; background-color: {badge_color}; border-radius: 50%;"></div>
-        {badge_label}
-      </div>
-    </div>
-  """, unsafe_allow_html=True)
-
-  with st.expander("⚙️ AI Engine Settings & API Keys (Gemini / ChatGPT / Zero-Key)", expanded=False):
-    cfg_col1, cfg_col2, cfg_col3 = st.columns([1.6, 2, 2])
-    with cfg_col1:
-      prov_options = [
-        "Auto (Smart Selection)",
-        "Google Gemini 1.5/2.0 Flash",
-        "OpenAI ChatGPT (GPT-4o/mini)",
-        "SmartVision Neural AI (Built-in Zero-Key)",
-      ]
-      prov_val_map = {
-        "Auto (Smart Selection)": "auto",
-        "Google Gemini 1.5/2.0 Flash": "gemini",
-        "OpenAI ChatGPT (GPT-4o/mini)": "openai",
-        "SmartVision Neural AI (Built-in Zero-Key)": "builtin",
-      }
-      curr_idx = {"gemini": 1, "openai": 2, "builtin": 3}.get(current_provider, 0)
-      sel_prov = st.selectbox("Intelligence Provider", prov_options, index=curr_idx)
-      st.session_state["ai_provider"] = prov_val_map[sel_prov]
-
-    with cfg_col2:
-      new_gemini = st.text_input(
-        "Google Gemini API Key",
-        value=st.session_state.get("gemini_api_key", ""),
-        type="password",
-        placeholder="Paste AIzaSy... key (optional)",
-      )
-      if new_gemini != st.session_state.get("gemini_api_key", ""):
-        st.session_state["gemini_api_key"] = new_gemini
-
-    with cfg_col3:
-      new_openai = st.text_input(
-        "OpenAI API Key",
-        value=st.session_state.get("openai_api_key", ""),
-        type="password",
-        placeholder="Paste sk-... key (optional)",
-      )
-      if new_openai != st.session_state.get("openai_api_key", ""):
-        st.session_state["openai_api_key"] = new_openai
-
-    st.caption(
-      "💡 **Tip:** You can obtain a free Google Gemini API key at "
-      "[Google AI Studio](https://aistudio.google.com/app/apikey). "
-      "Once pasted, live Gemini models are unlocked instantly!"
-    )
-    st.session_state["chatbot"].set_provider_and_keys(
-      provider=st.session_state["ai_provider"],
-      gemini_key=st.session_state["gemini_api_key"],
-      openai_key=st.session_state["openai_api_key"],
-    )
-
-  last_dets = st.session_state.get("last_detections", [])
-  ctx_col, btn_col = st.columns([4, 1])
-  with ctx_col:
-    if last_dets:
-      det_summary = ", ".join(
-        f"{d.get('object_name', 'item')} ({d.get('confidence', 0) * 100:.0f}%)"
-        for d in last_dets[:6]
-      )
-      st.markdown(f"""
-        <div style="background-color: #F0FDF4; border: 1px solid #86EFAC; border-radius: 10px; padding: 10px 14px; font-size: 13px; color: #166534; display: flex; align-items: center; gap: 8px;">
-          <span style="font-size: 16px;">🟢</span>
-          <div><b>Active Camera Perception:</b> {det_summary}</div>
-        </div>
-      """, unsafe_allow_html=True)
-    else:
-      st.markdown("""
-        <div style="background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 10px; padding: 10px 14px; font-size: 13px; color: #475569; display: flex; align-items: center; gap: 8px;">
-          <span style="font-size: 16px;">⚪</span>
-          <div><b>Camera Perception Idle:</b> General Multimodal Intelligence Mode Active. Ask about any topic, objects, recipes, or science.</div>
-        </div>
-      """, unsafe_allow_html=True)
-
-  with btn_col:
-    if st.button("🗑️ Clear Chat", use_container_width=True):
+  clear_col, _spacer = st.columns([1, 5])
+  with clear_col:
+    if st.button("Clear conversation", key="clear_vision_conversation", width="stretch"):
       st.session_state["chatbot"].clear_history()
       active_conversation["messages"].clear()
       st.rerun()
 
-  st.markdown(
-    "<small style='color: #64748B; font-weight: 600; text-transform: uppercase; "
-    "letter-spacing: 0.5px;'>Suggested Prompts</small>",
-    unsafe_allow_html=True,
-  )
-  chip_c1, chip_c2, chip_c3, chip_c4 = st.columns(4)
-  query_to_send = None
-  if chip_c1.button("👁️ What do you see?", use_container_width=True):
-    query_to_send = "What do you see in the camera right now?"
-  if chip_c2.button("🍳 Suggest recipes", use_container_width=True):
-    query_to_send = "What recipes can I cook with the items in the scene?"
-  if chip_c3.button("⚠️ Scan safety hazards", use_container_width=True):
-    query_to_send = "Are there any safety hazards or sharp objects in the frame?"
-  if chip_c4.button("🧠 Explain YOLOv8 AI", use_container_width=True):
-    query_to_send = "How does YOLOv8 object detection work under the hood?"
-
-  st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
-  if not st.session_state["chatbot"].history and not query_to_send:
-    st.markdown("""
-      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px 20px; text-align: center; background: #FAFAFA; border-radius: 16px; border: 1px dashed #CBD5E1; margin: 15px 0;">
-        <div style="width: 64px; height: 64px; background: linear-gradient(135deg, #ECFDF5 0%, #EFF6FF 100%); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-bottom: 16px; box-shadow: 0 8px 20px -4px rgba(59, 130, 246, 0.15); font-size: 28px;">
-          🤖
-        </div>
-        <h3 style="color: #0F172A; font-weight: 700; margin-bottom: 6px;">SmartVision Conversational Assistant</h3>
-        <p style="color: #64748B; font-size: 14px; max-width: 520px; line-height: 1.5; margin-bottom: 0;">
-          Directly integrated with your live camera and image detections. Ask questions about detected items, hazards, cooking recipes, OCR text, or general coding and AI concepts.
-        </p>
-      </div>
-    """, unsafe_allow_html=True)
-  else:
-    for msg in st.session_state["chatbot"].history:
-      avatar = "🧑‍💻" if msg["role"] == "user" else ("✨" if "Gemini" in badge_label else "🤖")
-      with st.chat_message(msg["role"], avatar=avatar):
-        st.markdown(msg["content"])
+  for msg in st.session_state["chatbot"].history:
+    with st.chat_message(msg["role"]):
+      st.markdown(msg["content"])
 
   user_input = st.chat_input(
-    "Ask SmartVision Assistant anything (camera, objects, recipes, science, coding)..."
+    "Ask about the image, latest results, OCR, or app features..."
   )
   if user_input:
     query_to_send = user_input
 
   if query_to_send:
-    with st.chat_message("user", avatar="🧑‍💻"):
+    with st.chat_message("user"):
       st.markdown(query_to_send)
-    with st.chat_message("assistant", avatar="✨" if "Gemini" in badge_label else "🤖"):
+    with st.chat_message("assistant"):
       with st.spinner("SmartVision Assistant reasoning..."):
-        response = answer_assistant_question(query_to_send)
-        st.markdown(response)
-    speak_in_browser(response)
-    st.rerun()
+        response, command = handle_assistant_message(query_to_send)
+      st.markdown(response)
+      if command.action in {"navigate", "announcements", "tracking", "reset_announcements"}:
+        st.toast(response)
+        st.rerun()
 
 # FACE REGISTRATION
 elif page == "Face Registration":

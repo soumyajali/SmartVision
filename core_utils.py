@@ -805,6 +805,9 @@ class VisionChatbot:
             gemini_key=self.gemini_key or os.environ.get("GEMINI_API_KEY", ""),
             openai_key=self.api_key or os.environ.get("OPENAI_API_KEY", "")
         )
+        # The Streamlit UI switches this wrapper's history when changing chats.
+        # Keep the underlying model on that same list so replies survive reruns.
+        self.assistant.history = self.history
         response = self.assistant.ask(question, context_detections=context_detections, ocr_text=ocr_text)
         self.history = self.assistant.history
         return response

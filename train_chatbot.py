@@ -5,6 +5,63 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import SGDClassifier
 from sklearn.pipeline import make_pipeline
 
+
+SCENE_QUESTION_EXAMPLES = (
+    "what do you see",
+    "what can you see",
+    "what is in",
+    "what s in",
+    "what is happening",
+    "explain the scenario",
+    "explain this scenario",
+    "explain scenario",
+    "describe the scene",
+    "describe scenario",
+    "describe the input",
+    "describe input",
+    "describe the output",
+    "describe output",
+    "explain the input",
+    "explain input",
+    "explain the output",
+    "explain output",
+    "explain this image",
+    "what does this image show",
+    "what is shown",
+    "what does this result mean",
+    "what does the output mean",
+    "input and output",
+    "input output",
+    "what did it detect",
+    "what has been detected",
+    "detection result",
+    "detection output",
+    "explain the output",
+    "explain this output",
+    "interpret the output",
+    "explain the results",
+    "explain these results",
+    "interpret these results",
+    "analyze this input",
+    "what is the input",
+    "what is the output",
+)
+
+OCR_QUESTION_EXAMPLES = (
+    "what did ocr read",
+    "what does ocr say",
+    "what does ocr show",
+    "ocr result",
+    "what is the ocr result",
+    "what did it read",
+    "recognized text",
+    "extracted text",
+    "what text was read",
+    "what text is visible",
+    "read the text",
+)
+
+
 def generate_dataset():
     data = []
     
@@ -49,6 +106,18 @@ def generate_dataset():
             if random.random() > 0.5:
                 text += "?"
             data.append((text, "describe"))
+
+    # Seed the classifier with the question patterns handled by the assistants.
+    for phrase in SCENE_QUESTION_EXAMPLES:
+        for _ in range(50):
+            prefix = random.choice(("", "please ", "can you "))
+            suffix = random.choice(("", "?", " please?"))
+            data.append((f"{prefix}{phrase}{suffix}", "describe"))
+    for phrase in OCR_QUESTION_EXAMPLES:
+        for _ in range(50):
+            prefix = random.choice(("", "please ", "can you "))
+            suffix = random.choice(("", "?", " please?"))
+            data.append((f"{prefix}{phrase}{suffix}", "ocr"))
 
     # 3. LOCATE INTENT
     locate_templates = [

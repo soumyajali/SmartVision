@@ -94,7 +94,10 @@ class SmartVisionAssistant:
                 model_name="gemini-1.5-flash",
                 system_instruction=system_instruction
             )
-            resp = model.generate_content(f"{system_instruction}\n\nUser Question: {question}")
+            resp = model.generate_content(
+                f"{system_instruction}\n\nUser Question: {question}",
+                request_options={"timeout": 15},
+            )
             if resp and resp.text:
                 return resp.text.strip()
         except Exception:
@@ -138,9 +141,13 @@ class SmartVisionAssistant:
             try:
                 import certifi
                 import httpx
-                client = openai.OpenAI(api_key=key, http_client=httpx.Client(verify=certifi.where()))
+                client = openai.OpenAI(
+                    api_key=key,
+                    timeout=15.0,
+                    http_client=httpx.Client(verify=certifi.where(), timeout=15.0),
+                )
             except Exception:
-                client = openai.OpenAI(api_key=key)
+                client = openai.OpenAI(api_key=key, timeout=15.0)
 
             system_prompt = (
                 "You are SmartVision AI, an intelligent vision assistant powered by ChatGPT and YOLOv8 real-time object detection. "
@@ -159,7 +166,8 @@ class SmartVisionAssistant:
                 model="gpt-4o-mini",
                 messages=messages,
                 max_tokens=450,
-                temperature=0.7
+                temperature=0.7,
+                timeout=15.0,
             )
             return completion.choices[0].message.content.strip()
         except Exception:

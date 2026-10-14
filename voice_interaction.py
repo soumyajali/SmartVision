@@ -1,11 +1,45 @@
 """Speech transcription and command parsing for the Streamlit voice assistant."""
 
 from dataclasses import dataclass
+from functools import lru_cache
 from io import BytesIO
+from pathlib import Path
 import re
 from typing import Sequence
 
-import speech_recognition as sr
+try:
+    import speech_recognition as sr
+except ModuleNotFoundError:
+    class _SpeechRecognitionFallback:
+        """Lightweight fallback for environments without SpeechRecognition installed."""
+
+        class UnknownValueError(Exception):
+            pass
+
+        class RequestError(Exception):
+            pass
+
+        class AudioSourceError(Exception):
+            pass
+
+        class Recognizer:
+            def record(self, source):
+                return object()
+
+            def recognize_google(self, audio):
+                raise _SpeechRecognitionFallback.UnknownValueError()
+
+        class AudioFile:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc_value, traceback):
+                return False
+
+    sr = _SpeechRecognitionFallback()
 
 
 @dataclass(frozen=True)
@@ -16,6 +50,29 @@ class VoiceCommand:
 
 class SpeechTranscriptionError(Exception):
     """Raised when an audio recording cannot be transcribed."""
+
+
+@lru_cache(maxsize=1)
+def _load_intent_model():
+    """Load the trained question intent model when its artifact is available."""
+    model_path = Path(__file__).resolve().parent / "ai_model" / "chatbot_intent_model.pkl"
+    if not model_path.is_file():
+        return None
+    try:
+        import joblib
+        return joblib.load(model_path)
+    except Exception:
+        return None
+
+
+def _predict_question_intent(question: str) -> str | None:
+    model = _load_intent_model()
+    if model is None:
+        return None
+    try:
+        return str(model.predict([question])[0])
+    except Exception:
+        return None
 
 
 APPLICATION_FEATURES = (
@@ -297,6 +354,17 @@ def answer_scene_question(
         )
     )
     if not scene_question and not ocr_question:
+        # Use the trained intent model to recognize paraphrases beyond the
+        # explicit examples while preserving exact phrase matching as fallback.
+        visual_terms = (
+            "image", "photo", "picture", "scene", "camera", "input", "output",
+            "result", "detect", "see", "shown", "ocr", "text", "read",
+        )
+        if any(term in normalized for term in visual_terms):
+            intent = _predict_question_intent(normalized)
+            scene_question = intent == "describe"
+            ocr_question = intent == "ocr"
+    if not scene_question and not ocr_question:
         return None
 
     detected_items: dict[str, list[float]] = {}
@@ -376,7 +444,7 @@ def parse_voice_command(
     transcript: str,
     navigation_pages: Sequence[str],
 ) -> VoiceCommand:
-    """Map a spoken command to a supported action; otherwise treat it as a question."""
+    """Map typed or spoken input to an action; otherwise treat it as a question."""
     normalized = re.sub(r"[^a-z0-9 ]", " ", transcript.lower())
     normalized = " ".join(normalized.split())
 
