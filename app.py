@@ -127,11 +127,23 @@ def load_detection_model():
     return YOLO("weights/smartvision_best.pt")
   return YOLO("yolov8n.pt")
 
+UNIVERSAL_EVERYTHING_CLASSES = [
+  "person", "glasses", "spectacles", "sunglasses", "watch", "wristwatch", "ring", "bracelet", "necklace",
+  "backpack", "bag", "handbag", "suitcase",
+  "ceiling fan", "fan", "air conditioner", "blackboard", "whiteboard", "bulletin board",
+  "doors", "door", "windows", "window", "clock", "light", "curtain",
+  "pen", "pencil", "chalk", "duster", "eraser", "marker", "book", "notebook", "paper",
+  "laptop", "computer", "cell phone", "phone", "tablet", "charger", "keyboard", "mouse", "monitor",
+  "chair", "table", "desk", "bench",
+  "bottle", "water bottle", "cup", "mug",
+  "knife", "scissors", "gun", "fire"
+]
+
 @st.cache_resource
 def load_world_model():
   if os.path.exists("yolov8s-world.pt"):
     m = YOLO("yolov8s-world.pt")
-    m.set_classes(["knife", "scissors", "gun", "person", "car", "dog", "cat", "cup", "bottle", "tomato", "onion", "cutting board", "cell phone", "laptop"])
+    m.set_classes(UNIVERSAL_EVERYTHING_CLASSES)
     return m
   return None
 
@@ -699,6 +711,7 @@ NAVIGATION_PAGES = [
     "Vision Chatbot", 
     "Voice Assistant",
     "Object Detection", 
+    "AutoML & Dataset Pipeline",
     "OCR", 
     "Face Registration",
     "History", 
@@ -1022,7 +1035,7 @@ if page in ["Dashboard", "Home"]:
 
   if img_cv is not None:
     start_time = time.time()
-    results = det_model.predict(img_cv, conf=st.session_state["confidence_threshold"], agnostic_nms=True, verbose=False)
+    results = det_model.predict(img_cv, conf=st.session_state["confidence_threshold"], agnostic_nms=False, verbose=False)
     inference_time = time.time() - start_time
     st.session_state["performance_monitor"].record_inference(inference_time)
     
@@ -1898,12 +1911,21 @@ elif page == "Object Detection":
   with opt_c1:
     model_choice = st.selectbox(
       "Detection Engine",
-      ["High Accuracy (YOLOv8m)", "Open-Vocabulary (YOLO-World)", "Fast Edge (YOLOv8n)"],
+      [
+        "🌟 Detect Everything in Frame (Automatic All-Object Vision)",
+        "High Accuracy (YOLOv8m)",
+        "Fast Edge (YOLOv8n)"
+      ],
       index=0,
-      help="High Accuracy YOLOv8m provides 92%+ accuracy on knives, scissors, vehicles, and common objects. Open-Vocabulary can detect custom categories like tomatoes, cutting boards, etc."
+      help="Detect Everything mode automatically finds people, wearables (spects, watch, ring), room items (fan, AC, blackboard), and stationeries (pen, chalk, backpack, chair) with zero configuration."
     )
   with opt_c2:
-    det_conf_slider = st.slider("Confidence Threshold", 0.05, 0.95, 0.25, 0.05)
+    default_conf = 0.15 if "Detect Everything" in model_choice else 0.35
+    det_conf_slider = st.slider(
+      "Confidence Threshold", 
+      0.05, 0.95, default_conf, 0.05,
+      help="Sensitivity slider: 0.10–0.20 detects fine objects like rings, spectacles, watches, and pens without missing them."
+    )
 
   input_type = st.radio("Choose Input", ["Upload Image", "Webcam"], horizontal=True)
   img_cv = None
@@ -1928,9 +1950,10 @@ elif page == "Object Detection":
 
     # Select active detector
     active_detector = det_model
-    if "Open-Vocabulary" in model_choice:
+    if "Detect Everything" in model_choice or "Universal" in model_choice:
       w_m = load_world_model()
       if w_m:
+        w_m.set_classes(UNIVERSAL_EVERYTHING_CLASSES)
         active_detector = w_m
     elif "Fast" in model_choice:
       f_m = load_fast_model()
@@ -1939,7 +1962,7 @@ elif page == "Object Detection":
 
     # Record inference time
     start_time = time.time()
-    results = active_detector.predict(img_cv, conf=det_conf_slider, agnostic_nms=True, verbose=False)
+    results = active_detector.predict(img_cv, conf=det_conf_slider, agnostic_nms=False, verbose=False)
     inference_time = time.time() - start_time
     st.session_state["performance_monitor"].record_inference(inference_time)
     
@@ -2594,3 +2617,209 @@ elif page == "Border Security (IBVAP)":
           st.success(" Perimeter Secure")
           
     cap.release()
+
+elif page == "AutoML & Dataset Pipeline":
+  st.markdown("## 🤖 SmartVision AutoML & Dataset Pipeline")
+  st.markdown(
+    "Automate dataset discovery from Kaggle and Hugging Face, multi-format annotation conversion (YOLO, VOC XML, COCO JSON), "
+    "leak-free splitting, YOLOv8 fine-tuning, benchmark evaluation, and production model export."
+  )
+
+  import yaml
+  from scripts.kaggle_hf_discovery import DatasetDiscoverySuite, get_free_disk_space_gb
+  from scripts.annotation_converters import AnnotationConverter
+  from scripts.model_trainer import ModelTrainerSuite
+
+  config_path = "config/pipeline_config.yaml"
+  pipeline_cfg = {}
+  if os.path.exists(config_path):
+    with open(config_path, "r") as cf:
+      pipeline_cfg = yaml.safe_load(cf)
+
+  discovery_suite = DatasetDiscoverySuite(pipeline_cfg)
+  trainer_suite = ModelTrainerSuite(pipeline_cfg)
+
+  # Top Metric Cards
+  manifest = discovery_suite.load_manifest()
+  datasets_dict = manifest.get("datasets", {})
+  total_discovered = len(datasets_dict)
+  total_downloaded = sum(1 for d in datasets_dict.values() if d.get("status") in ["downloaded", "ready", "AVAILABLE"])
+  
+  data_yaml_path = "datasets/custom_objects/data.yaml"
+  num_classes = 80
+  train_samples_count = 0
+  if os.path.exists("datasets/custom_objects/images/train"):
+    train_samples_count = len(os.listdir("datasets/custom_objects/images/train"))
+  if os.path.exists(data_yaml_path):
+    try:
+      with open(data_yaml_path) as yf:
+        y_data = yaml.safe_load(yf)
+        num_classes = y_data.get("nc", 80)
+    except Exception:
+      pass
+
+  free_disk_gb = get_free_disk_space_gb()
+
+  m_col1, m_col2, m_col3, m_col4 = st.columns(4)
+  with m_col1:
+    st.metric("Discovered Datasets", total_discovered)
+  with m_col2:
+    st.metric("Downloaded Batches", total_downloaded)
+  with m_col3:
+    st.metric("Prepared Train Samples", f"{train_samples_count} ({num_classes} cls)")
+  with m_col4:
+    st.metric("Free Disk Storage", f"{free_disk_gb:.1f} GB", delta=f"{free_disk_gb - 4.0:.1f} GB above limit" if free_disk_gb >= 4.0 else "LOW DISK WARNING")
+
+  st.markdown("---")
+
+  # Navigation Tabs
+  tab1, tab2, tab3, tab4 = st.tabs([
+    "🔍 1. Discovery & Downloads",
+    "⚙️ 2. Annotation & Validation",
+    "🚀 3. YOLOv8 Training & Colab GPU",
+    "📦 4. Export & Rollback"
+  ])
+
+  with tab1:
+    st.markdown("### Automated Dataset Discovery & Batch Downloads")
+    
+    # Kaggle Auth Card
+    is_kaggle_auth, kaggle_msg = discovery_suite.check_kaggle_auth()
+    if is_kaggle_auth:
+      st.success(f" Kaggle API: {kaggle_msg}")
+    else:
+      with st.expander("ℹ️ Kaggle Authentication Setup (Click to Expand)"):
+        st.info(
+          "To enable authenticated Kaggle downloads:\n\n"
+          "**Option A (Recommended):** Set environment variables in your terminal before running Streamlit:\n"
+          "```bash\n"
+          "export KAGGLE_API_TOKEN=\"your_kaggle_token\"\n"
+          "# or\n"
+          "export KAGGLE_USERNAME=\"your_username\" KAGGLE_KEY=\"your_key\"\n"
+          "```\n\n"
+          "**Option B:** Download `kaggle.json` from [Kaggle Account Settings](https://www.kaggle.com/settings) and place at `~/.kaggle/kaggle.json` (`chmod 600 ~/.kaggle/kaggle.json`).\n\n"
+          "*Public Hugging Face Hub and benchmark datasets are always available without authentication.*"
+        )
+
+    act_col1, act_col2 = st.columns(2)
+    with act_col1:
+      if st.button("🔍 Run Discovery (Kaggle & Hugging Face)", use_container_width=True):
+        with st.spinner("Searching repositories for object detection datasets..."):
+          discovered = discovery_suite.run_discovery()
+          st.success(f"Discovery complete! Cataloged {len(discovered)} datasets.")
+          st.rerun()
+
+    with act_col2:
+      if st.button("⬇️ Download Batch (Within Storage Limits)", use_container_width=True):
+        with st.spinner("Downloading batch within storage limits..."):
+          results = discovery_suite.download_batch()
+          st.success(f"Batch completed: {results['downloaded']} downloaded, {results['skipped']} skipped, {results['failed']} failed.")
+          st.rerun()
+
+    # Datasets Table
+    if datasets_dict:
+      st.markdown("#### Cataloged Datasets")
+      table_data = []
+      for ds_id, ds in datasets_dict.items():
+        table_data.append({
+          "ID": ds_id,
+          "Source": ds.get("source", "local"),
+          "Title / Ref": ds.get("title", ds_id),
+          "Size (MB)": ds.get("size_mb", "N/A"),
+          "License": ds.get("license", "Unknown"),
+          "Status": ds.get("status", "discovered")
+        })
+      import pandas as pd
+      df_ds = pd.DataFrame(table_data)
+      st.dataframe(df_ds, use_container_width=True)
+
+  with tab2:
+    st.markdown("### Multi-Format Annotation Converter & Validator")
+    st.markdown(
+      "Automatically detects and standardizes multiple annotation formats:\n"
+      "- **YOLO format** (`.txt` normalized boxes)\n"
+      "- **Pascal VOC XML** (`<bndbox><xmin>...`) with automatic boundary normalization\n"
+      "- **COCO JSON** (`[x, y, w, h]` box arrays)\n"
+      "- **Synonym mapping** into 80 canonical classes (e.g. `schoolbag` -> `backpack`, `mobile` -> `cell phone`)\n"
+      "- **Duplicate image detection** (MD5 & perceptual dHash)\n"
+      "- **Leakage-free splitting** (70% train, 20% val, 10% test)"
+    )
+
+    if st.button("⚙️ Convert & Validate All Datasets", use_container_width=True):
+      with st.spinner("Processing, normalizing, and splitting dataset..."):
+        from scripts.dataset_pipeline import run_prepare_step
+        prep_results = run_prepare_step(pipeline_cfg)
+        st.success(
+          f"✓ Dataset preparation complete! Total samples: {prep_results['total_samples']} "
+          f"(Train: {prep_results['train']}, Val: {prep_results['val']}, Test: {prep_results['test']}). "
+          f"Duplicates skipped: {prep_results['duplicates']}, Corrupted: {prep_results['corrupted']}."
+        )
+        st.rerun()
+
+  with tab3:
+    st.markdown("### YOLOv8 Model Fine-Tuning & GPU Training")
+    t_c1, t_c2 = st.columns([1, 1])
+    with t_c1:
+      base_model_sel = st.selectbox("Base Pretrained Weights", ["yolov8n.pt", "yolov8m.pt"], index=0)
+      epochs_sel = st.slider("Training Epochs (Local)", 1, 20, 5)
+    with t_c2:
+      device_info = trainer_suite.select_device()
+      st.info(f"⚡ Detected Hardware Accelerator: **{device_info.upper()}** (Apple Silicon MPS / CUDA / CPU)")
+
+    train_c1, train_c2 = st.columns(2)
+    with train_c1:
+      if st.button("🚀 Start Local Fine-Tuning", use_container_width=True):
+        with st.spinner(f"Fine-tuning {base_model_sel} for {epochs_sel} epochs on {device_info.upper()}..."):
+          pipeline_cfg["training"]["base_model"] = base_model_sel
+          res = trainer_suite.train(epochs=epochs_sel)
+          st.success(f"✓ Training finished in {res['duration_sec']}s! Model saved to {res['best_weights']}.")
+          st.rerun()
+
+    with train_c2:
+      st.markdown(
+        "**☁️ Train with High-Performance GPU in Google Colab:**\n\n"
+        "For 20–50 epochs with NVIDIA T4/A100 GPU acceleration without draining laptop battery, "
+        "use the included Colab notebook: `SmartVision_Colab_Training.ipynb`."
+      )
+      if os.path.exists("SmartVision_Colab_Training.ipynb"):
+        with open("SmartVision_Colab_Training.ipynb", "r") as nbf:
+          st.download_button(
+            "📥 Download Colab GPU Notebook",
+            data=nbf.read(),
+            file_name="SmartVision_Colab_Training.ipynb",
+            mime="application/x-ipynb+json",
+            use_container_width=True
+          )
+
+    # Benchmark Comparison Section
+    st.markdown("#### Model Benchmark Evaluation on Untouched Test Split")
+    if st.button("📊 Evaluate & Compare Models", use_container_width=True):
+      with st.spinner("Benchmarking on untouched test split..."):
+        comp = trainer_suite.compare_with_baseline()
+        st.json(comp)
+
+  with tab4:
+    st.markdown("### Production Model Export & Rollback")
+    exp_c1, exp_c2 = st.columns(2)
+    with exp_c1:
+      if st.button("📦 Export Model to ONNX & TFLite", use_container_width=True):
+        with st.spinner("Exporting weights to ONNX and TFLite formats..."):
+          exp_res = trainer_suite.export_production_models()
+          st.success(f"Export completed: {exp_res}")
+
+    with exp_c2:
+      if st.button("⏪ Rollback to Previous Backup Model", use_container_width=True):
+        from scripts.dataset_pipeline import rollback_model
+        if rollback_model(pipeline_cfg):
+          st.success("✓ Successfully rolled back production weights to previous backup!")
+        else:
+          st.warning("No backup file found (.bak).")
+
+    # Sample Verification Test
+    st.markdown("#### Real-World Inference Test")
+    test_img_path = "test_image.png"
+    if os.path.exists(test_img_path):
+      if st.button("🧪 Run Verification Inference Test"):
+        detections = trainer_suite.test_inference(test_img_path)
+        st.write(f"Detected {len(detections)} objects:", detections)
+        st.image(test_img_path, width=400)

@@ -14,8 +14,8 @@
   "coco_official_coco128": {
     "type": "http",
     "license": "CC-BY-4.0",
-    "status": "SKIPPED/UNAVAILABLE",
-    "notes": "HTTP download failed: <urlopen error [Errno 54] Connection reset by peer>"
+    "status": "AVAILABLE",
+    "notes": "128 real-world benchmark images downloaded and integrated into custom_objects"
   },
   "kaggle_cv_competition": {
     "type": "kaggle",
