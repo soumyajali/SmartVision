@@ -2,7 +2,7 @@ from pathlib import Path
 
 import cv2
 
-from services.face_service import FaceService
+from services.face_service import FACE_MATCH_THRESHOLD, FaceService
 
 
 DATA_DIR = Path(__file__).parent / "data"
@@ -52,6 +52,44 @@ def test_detected_face_is_not_registered_when_registry_is_empty(tmp_path):
 
     assert recognitions
     assert recognitions[0][0] == "Not Registered"
+
+
+def test_extract_face_embeddings_match_the_reference_face_only(tmp_path):
+    reference_image = cv2.imread(str(DATA_DIR / "face_registered.jpg"))
+    different_image = cv2.imread(str(DATA_DIR / "face_unregistered.jpg"))
+    service = FaceService(str(tmp_path))
+
+    reference_faces = service.extract_face_embeddings(reference_image, 1280)
+    different_faces = service.extract_face_embeddings(different_image, 1280)
+
+    assert reference_faces
+    assert different_faces
+    assert service.compare_face_embeddings(
+        reference_faces[0][1], reference_faces[0][1]
+    ) >= FACE_MATCH_THRESHOLD
+    assert service.compare_face_embeddings(
+        reference_faces[0][1], different_faces[0][1]
+    ) < FACE_MATCH_THRESHOLD
+    assert reference_faces[0][0][2] > reference_faces[0][0][0]
+    assert reference_faces[0][0][3] > reference_faces[0][0][1]
+
+    distant_face = cv2.resize(reference_image, (120, 90))
+    video_frame = cv2.copyMakeBorder(
+        distant_face,
+        400,
+        400,
+        900,
+        900,
+        cv2.BORDER_CONSTANT,
+        value=(80, 80, 80),
+    )
+    video_faces = service.extract_face_embeddings(video_frame, 1280)
+
+    assert video_faces
+    assert max(
+        service.compare_face_embeddings(reference_faces[0][1], encoding)
+        for _, encoding in video_faces
+    ) >= FACE_MATCH_THRESHOLD
 
 
 def test_recognizes_multiple_faces_in_a_single_frame(tmp_path):

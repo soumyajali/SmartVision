@@ -231,7 +231,7 @@ class OCRReader:
     def __init__(self):
         """Initialize the OCR reader with EasyOCR."""
         try:
-            self.reader = easyocr.Reader(['en'], gpu=False)
+            self.reader = easyocr.Reader(['en'], gpu=False, download_enabled=False)
         except Exception as e:
             print(f"Warning: Could not initialize OCR reader: {e}")
             self.reader = None

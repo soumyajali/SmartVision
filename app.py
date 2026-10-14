@@ -25,12 +25,12 @@ from utils import (
   AIAssistant, ReportGenerator, ImageQualityAnalyzer,
   SceneDescriber, VisionChatbot, AdaptiveEngine, 
   LowLightEnhancer, DistanceEstimator, UnknownObjectDetector,
-  face_landmarks_to_location, scale_bbox, select_best_person_match
+  scale_bbox, select_best_person_match
 )
 from utils.recorder import get_video_recorder
 from services.email_service import get_email_service
 from services.telegram_service import get_telegram_service
-from services.face_service import FaceService
+from services.face_service import FACE_MATCH_THRESHOLD, FaceService
 from core.tracker import ObjectTracker
 from events.alert_manager import AlertManager
 from core.border_analytics import ZoneManager, LoiteringTimer
@@ -138,7 +138,11 @@ st.set_page_config(page_title="Smart Vision AI", page_icon="", layout="wide")
 
 # ---------------- SESSION STATE ----------------
 if "face_service" not in st.session_state:
-  st.session_state["face_service"] = FaceService()
+  try:
+    st.session_state["face_service"] = FaceService()
+  except Exception as exc:
+    print(f"Warning: face recognition unavailable in offline mode: {exc}")
+    st.session_state["face_service"] = None
 if "page" not in st.session_state:
   st.session_state["page"] = " Home"
 if "navigation_page" not in st.session_state:
@@ -238,97 +242,6 @@ def load_fast_model():
   if os.path.exists("weights/smartvision_best.pt"):
     return YOLO("weights/smartvision_best.pt")
   return YOLO("yolov8n.pt")
-
-@st.cache_resource
-def load_vfr_face_landmarker():
-  import mediapipe as mp
-
-  model_path = os.path.join(os.path.dirname(__file__), "face_landmarker.task")
-  if not os.path.exists(model_path):
-    raise FileNotFoundError(f"Video Fast Review face model was not found: {model_path}")
-  options = mp.tasks.vision.FaceLandmarkerOptions(
-    base_options=mp.tasks.BaseOptions(model_asset_path=model_path),
-    running_mode=mp.tasks.vision.RunningMode.IMAGE,
-    num_faces=5,
-    min_face_detection_confidence=0.25,
-    min_face_presence_confidence=0.25,
-    min_tracking_confidence=0.25,
-  )
-  return mp.tasks.vision.FaceLandmarker.create_from_options(options)
-
-def get_vfr_face_candidates(image_rgb, face_recognition):
-  import mediapipe as mp
-
-  if image_rgb is None or image_rgb.size == 0:
-    return []
-
-  height, width = image_rgb.shape[:2]
-  upscale = min(3.0, max(1.0, 600.0 / max(height, width)))
-  if upscale > 1.0:
-    recognition_image = cv2.resize(
-      image_rgb,
-      (int(width * upscale), int(height * upscale)),
-      interpolation=cv2.INTER_CUBIC,
-    )
-  else:
-    recognition_image = image_rgb
-
-  locations = []
-  for upsample in (0, 1, 2):
-    locations.extend(
-      face_recognition.face_locations(
-        recognition_image,
-        number_of_times_to_upsample=upsample,
-        model="hog",
-      )
-    )
-
-  mp_image = mp.Image(
-    image_format=mp.ImageFormat.SRGB,
-    data=recognition_image,
-  )
-  landmark_result = load_vfr_face_landmarker().detect(mp_image)
-  for face_landmarks in landmark_result.face_landmarks:
-    location = face_landmarks_to_location(face_landmarks, recognition_image.shape)
-    if location is not None:
-      locations.append(location)
-
-  unique_locations = []
-  for location in sorted(
-    locations,
-    key=lambda box: (box[2] - box[0]) * (box[1] - box[3]),
-    reverse=True,
-  ):
-    top, right, bottom, left = location
-    duplicate = False
-    for kept_top, kept_right, kept_bottom, kept_left in unique_locations:
-      intersection_width = max(0, min(right, kept_right) - max(left, kept_left))
-      intersection_height = max(0, min(bottom, kept_bottom) - max(top, kept_top))
-      intersection = intersection_width * intersection_height
-      area = (right - left) * (bottom - top)
-      kept_area = (kept_right - kept_left) * (kept_bottom - kept_top)
-      union = area + kept_area - intersection
-      if union > 0 and intersection / union > 0.6:
-        duplicate = True
-        break
-    if not duplicate:
-      unique_locations.append(location)
-
-  candidates = []
-  for location in unique_locations:
-    try:
-      encodings = face_recognition.face_encodings(
-        recognition_image,
-        [location],
-        num_jitters=1,
-        model="small",
-      )
-    except (RuntimeError, ValueError, IndexError):
-      continue
-    if encodings:
-      original_location = tuple(int(round(value / upscale)) for value in location)
-      candidates.append((original_location, encodings[0]))
-  return candidates
 
 @st.cache_resource
 def load_classification_model():
@@ -1348,6 +1261,7 @@ elif page == "Video Fast Review":
     ref_embedding = None
     ref_hist = None
     ref_is_person = False
+    face_detection_size = 1280
 
     if search_type == "Object Category":
       target_object = st.selectbox("Find object:", sorted(CLASS_NAMES.values()), index=0).lower()
@@ -1361,7 +1275,7 @@ elif page == "Video Fast Review":
 
         # Check if we need to process or re-process this reference image
         cur_ref = st.session_state.get("vfr_ref")
-        need_reprocess = (cur_ref is None or cur_ref.get("version") != 8 or cur_ref.get("hash") != ref_hash)
+        need_reprocess = (cur_ref is None or cur_ref.get("version") != 9 or cur_ref.get("hash") != ref_hash)
 
         if need_reprocess and len(file_bytes) > 0:
           data = np.frombuffer(file_bytes, np.uint8)
@@ -1374,35 +1288,24 @@ elif page == "Video Fast Review":
             is_person = False
             face_error = None
 
-            # 1. First check if reference image contains a human face
             try:
-              import face_recognition
-              ref_rgb = cv2.cvtColor(ref_img_cv, cv2.COLOR_BGR2RGB)
-              face_candidates = get_vfr_face_candidates(ref_rgb, face_recognition)
+              face_service = st.session_state.get("face_service")
+              if face_service is None or not face_service.is_available():
+                raise RuntimeError("The YuNet/SFace face-recognition service is unavailable.")
+              face_candidates = face_service.extract_face_embeddings(
+                ref_img_cv,
+                face_detection_size,
+              )
               if face_candidates:
-                best_face_loc, best_face_enc = max(
+                best_face_box, best_face_enc = max(
                   face_candidates,
-                  key=lambda item: (item[0][2] - item[0][0]) * (item[0][1] - item[0][3]),
+                  key=lambda item: (item[0][2] - item[0][0]) * (item[0][3] - item[0][1]),
                 )
                 found_face_encs.append(best_face_enc)
                 is_person = True
-                top, right, bottom, left = best_face_loc
+                left, top, right, bottom = best_face_box
                 cv2.rectangle(preview_img, (left, top), (right, bottom), (0, 255, 0), 3)
-                cv2.putText(preview_img, "Target Individual", (left, max(top - 10, 20)), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 255, 0), 2)
-
-                mirrored_candidates = get_vfr_face_candidates(
-                  cv2.flip(ref_rgb, 1),
-                  face_recognition,
-                )
-                if mirrored_candidates:
-                  _, mirrored_encoding = max(
-                    mirrored_candidates,
-                    key=lambda item: (item[0][2] - item[0][0]) * (item[0][1] - item[0][3]),
-                  )
-                  if float(np.linalg.norm(best_face_enc - mirrored_encoding)) > 1e-4:
-                    found_face_encs.append(mirrored_encoding)
-            except ImportError as exc:
-              face_error = f"Person matching requires face-recognition and dlib. Install project dependencies with: pip install -r requirements.txt ({exc})"
+                cv2.putText(preview_img, "Target Face", (left, max(top - 10, 20)), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 255, 0), 2)
             except Exception as exc:
               face_error = f"Could not process the reference image for face matching: {exc}"
 
@@ -1422,11 +1325,11 @@ elif page == "Video Fast Review":
                     detected_category = CLASS_NAMES[int(best_box.cls[0])].lower()
                     if not is_person:
                       auto_cat = detected_category
-                    cropped = ref_img_cv[max(0, by1):max(0, by2), max(0, bx1):max(0, bx2)]
-                    if cropped.size > 0 and cropped.shape[0] > 10 and cropped.shape[1] > 10:
-                      ref_crop = cropped
-                    cv2.rectangle(preview_img, (bx1, by1), (bx2, by2), (0, 255, 0), 3)
-                    cv2.putText(preview_img, f"Target: {detected_category.title()}", (bx1, max(by1 - 10, 20)), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+                      cropped = ref_img_cv[max(0, by1):max(0, by2), max(0, bx1):max(0, bx2)]
+                      if cropped.size > 0 and cropped.shape[0] > 10 and cropped.shape[1] > 10:
+                        ref_crop = cropped
+                      cv2.rectangle(preview_img, (bx1, by1), (bx2, by2), (0, 255, 0), 3)
+                      cv2.putText(preview_img, f"Target: {detected_category.title()}", (bx1, max(by1 - 10, 20)), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
               except Exception as exc:
                 if is_person:
                   face_error = f"Could not prepare the reference person's image crop: {exc}"
@@ -1442,7 +1345,7 @@ elif page == "Video Fast Review":
               "name": ref_image_file.name,
               "size": len(file_bytes),
               "hash": ref_hash,
-              "version": 8,
+              "version": 9,
               "face_enc": found_face_encs if found_face_encs else None,
               "is_person": is_person,
               "auto_cat": auto_cat,
@@ -1454,6 +1357,9 @@ elif page == "Video Fast Review":
             }
 
         cached = st.session_state.get("vfr_ref")
+        if cached is not None and cached.get("version") != 9:
+          cached = None
+          st.session_state["vfr_ref"] = None
         if cached is not None:
           st.image(cached["preview_rgb"], caption="Reference Target", use_container_width=True)
           ref_face_encoding = cached["face_enc"]
@@ -1491,22 +1397,22 @@ elif page == "Video Fast Review":
     precision_mode = st.radio(
       "Matching Precision",
       ["Strict (Highest Precision)", "Balanced (Standard)", "Tolerant (High Recall)"],
-      index=0,
-      help="Higher-recall modes allow more face-embedding distance for profile and low-resolution faces; this may increase false matches."
+      index=1,
+      help="Face similarity thresholds trade precision for recall. Higher-recall modes may increase false matches."
     )
 
     if precision_mode == "Strict (Highest Precision)":
-      max_face_dist = 0.45
+      min_face_similarity = 0.45
       min_obj_sim = 0.72
     elif precision_mode == "Balanced (Standard)":
-      max_face_dist = 0.50
+      min_face_similarity = FACE_MATCH_THRESHOLD
       min_obj_sim = 0.65
     else:
-      max_face_dist = 0.55
+      min_face_similarity = 0.30
       min_obj_sim = 0.55
 
     sample_rate = st.slider("Frames per second to analyze", 1, 5, 1, help="Lower is faster but might miss very brief appearances.")
-    confidence = st.slider("Detection Confidence", 0.05, 1.0, 0.25, 0.05, help="Use a lower value to keep distant or partially visible people.")
+    confidence = st.slider("Detection Confidence", 0.05, 1.0, 0.25, 0.05, help="Use a lower value to keep distant or partially visible objects.")
     vfr_rot = st.selectbox(
       "Video Orientation",
       ["0° (Original)", "90° Clockwise", "180° Inverted", "270° Counter-Clockwise"],
@@ -1514,13 +1420,12 @@ elif page == "Video Fast Review":
       key="vfr_rot_select",
       help="Rotate sideways or upside-down video frames.",
     )
-    person_detection_size = 960
     if search_type == "Reference Image" and ref_is_person:
-      person_detection_size = st.select_slider(
-        "Person detection resolution",
+      face_detection_size = st.select_slider(
+        "Face detection resolution",
         options=[640, 960, 1280],
-        value=960,
-        help="Higher resolution can detect smaller, distant people, but takes longer per frame."
+        value=1280,
+        help="Higher resolution can detect smaller or more distant faces, but takes longer per frame."
       )
 
     st.markdown("</div>", unsafe_allow_html=True)
@@ -1582,11 +1487,8 @@ elif page == "Video Fast Review":
         ref_face_enc = cached.get("face_enc") if cached else None
         ref_deep_emb = cached.get("embedding") if cached else None
         ref_color_h = cached.get("hist") if cached else None
-        person_class_id = next(
-          (class_id for class_id, class_name in CLASS_NAMES.items() if class_name.lower() == "person"),
-          None
-        )
-        person_search = search_type == "Reference Image" and ref_is_person and person_class_id is not None
+        person_search = search_type == "Reference Image" and ref_is_person
+        face_service = st.session_state.get("face_service")
 
         while cap.isOpened():
           ret, frame = cap.read()
@@ -1607,19 +1509,11 @@ elif page == "Video Fast Review":
 
             small_frame = cv2.resize(frame, (640, 480))
             if person_search:
-              results = det_model.track(
-                frame,
-                persist=True,
-                conf=min(confidence, 0.25),
-                imgsz=person_detection_size,
-                classes=[person_class_id],
-                verbose=False
-              )
+              results = []
             else:
               results = det_model.track(small_frame, persist=True, conf=confidence, verbose=False)
 
             matched_boxes_in_frame = []
-            detected_person_boxes = []
 
             for result in results:
               if result.boxes is not None:
@@ -1628,21 +1522,7 @@ elif page == "Video Fast Review":
                   obj_name = "person" if person_search else CLASS_NAMES[class_id].lower()
 
                   if target_object is None or obj_name == target_object:
-                    if person_search:
-                      match_x1, match_y1, match_x2, match_y2 = map(
-                        int, box.xyxy[0].tolist()
-                      )
-                      x1, y1, x2, y2 = scale_bbox(
-                        (match_x1, match_y1, match_x2, match_y2),
-                        frame.shape,
-                        (640, 480)
-                      )
-                      detected_person_boxes.append(
-                        ((match_x1, match_y1, match_x2, match_y2), (x1, y1, x2, y2))
-                      )
-                    else:
-                      x1, y1, x2, y2 = map(int, box.xyxy[0])
-                      match_x1, match_y1, match_x2, match_y2 = x1, y1, x2, y2
+                    x1, y1, x2, y2 = map(int, box.xyxy[0])
                     if search_type == "Reference Image":
                       if not ref_is_person and (ref_face_enc is None or obj_name != "person"):
                         # Target is a specific object: deep semantic + color distribution matching
@@ -1679,52 +1559,22 @@ elif page == "Video Fast Review":
 
             if person_search and ref_face_enc is not None:
               try:
-                import face_recognition
-
-                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                face_candidates = get_vfr_face_candidates(frame_rgb, face_recognition)
-                mirrored_candidates = get_vfr_face_candidates(
-                  cv2.flip(frame_rgb, 1),
-                  face_recognition,
+                if face_service is None or not face_service.is_available():
+                  raise RuntimeError("The YuNet/SFace face-recognition service is unavailable.")
+                face_candidates = face_service.extract_face_embeddings(
+                  frame,
+                  face_detection_size,
                 )
-                frame_width = frame.shape[1]
-                for location, encoding in mirrored_candidates:
-                  top, right, bottom, left = location
-                  face_candidates.append(
-                    ((top, frame_width - left, bottom, frame_width - right), encoding)
+                for face_box, encoding in face_candidates:
+                  face_sim = max(
+                    face_service.compare_face_embeddings(reference, encoding)
+                    for reference in ref_face_enc
                   )
-
-                for face_location, encoding in face_candidates:
-                  dist = float(np.min(face_recognition.face_distance(ref_face_enc, encoding)))
-                  if dist <= max_face_dist:
-                    top, right, bottom, left = face_location
-                    face_center_x = (left + right) / 2
-                    face_center_y = (top + bottom) / 2
-                    containing_people = [
-                      (source_box, preview_box)
-                      for source_box, preview_box in detected_person_boxes
-                      if (
-                        source_box[0] <= face_center_x <= source_box[2]
-                        and source_box[1] <= face_center_y <= source_box[3]
-                      )
-                    ]
-                    if containing_people:
-                      _, match_box = min(
-                        containing_people,
-                        key=lambda item: (
-                          (item[0][2] - item[0][0]) * (item[0][3] - item[0][1])
-                        ),
-                      )
-                    else:
-                      match_box = scale_bbox(
-                        (left, top, right, bottom),
-                        frame.shape,
-                        (640, 480),
-                      )
-                    face_sim = max(0.0, 1.0 - dist)
+                  if face_sim >= min_face_similarity:
+                    match_box = scale_bbox(face_box, frame.shape, (640, 480))
                     matched_boxes_in_frame.append({
                       "box": match_box,
-                      "label": f"Face Match ({face_sim * 100:.0f}%)",
+                      "label": f"Target Face ({face_sim * 100:.0f}%)",
                       "sim": face_sim,
                       "match_type": "face",
                     })
@@ -1764,7 +1614,12 @@ elif page == "Video Fast Review":
         cap.release()
         progress_bar.progress(1.0)
         
-        search_lbl = "custom image" if search_type == "Reference Image" else target_object
+        if person_search:
+          search_lbl = "reference face"
+        elif search_type == "Reference Image":
+          search_lbl = "custom image"
+        else:
+          search_lbl = target_object
         status_text.text(f"Analysis Complete! Found {search_lbl} {len(found_timestamps)} times.")
         
         if found_timestamps:
@@ -1777,7 +1632,7 @@ elif page == "Video Fast Review":
           results_container.warning(f"Could not find a match for {search_lbl} in the video.")
           if person_search:
             results_container.info(
-              "No face match passed the selected precision threshold. Use a clear, unobstructed reference face, increase person detection resolution for distant people, or select a higher-recall precision mode. Clothing is never used to match a person."
+              "No face match passed the selected similarity threshold. Use a clear reference face, increase face detection resolution for distant faces, or select a higher-recall precision mode. Clothing and body shape are never used to match a person."
             )
           if face_match_error:
             results_container.warning(face_match_error)

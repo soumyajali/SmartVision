@@ -46,11 +46,19 @@ if os.path.exists('yolov8s-world.pt'):
     except Exception as e:
         print(f"Notice: Open-vocabulary YOLO-World model could not be loaded: {e}")
 
-# EasyOCR
-ocr_reader = easyocr.Reader(['en'], gpu=False) # Switch to GPU if available
+# EasyOCR - do not force remote downloads in offline environments.
+ocr_reader = None
+try:
+    ocr_reader = easyocr.Reader(['en'], gpu=False, download_enabled=False)
+except Exception as exc:
+    print(f"Warning: EasyOCR model unavailable offline; OCR endpoints will be disabled: {exc}")
 
 # Face Recognition Service & FAISS Vector Index (PPT Slides 10 & 13)
-face_service = FaceService()
+try:
+    face_service = FaceService()
+except Exception as exc:
+    print(f"Warning: Face recognition unavailable offline; using degraded mode: {exc}")
+    face_service = None
 faiss_store = FAISSStore(embedding_dim=128)
 
 print("Models ready!")
@@ -139,6 +147,8 @@ async def detect_objects(req: ImageRequest):
 
 @app.post('/ocr')
 async def detect_text(req: ImageRequest):
+    if ocr_reader is None:
+        return {'texts': [], 'message': 'OCR is unavailable because the model could not be loaded offline.'}
     try:
         img = decode_image(req.image)
         if img is None:
@@ -163,6 +173,11 @@ async def detect_text(req: ImageRequest):
 
 @app.post('/face/register')
 async def register_face(req: FaceRegisterRequest, name: Optional[str] = Query(None)):
+    if face_service is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Face recognition is unavailable because the required model download was blocked in offline mode.",
+        )
     try:
         person_name = req.name or name
         if not person_name:
@@ -190,6 +205,8 @@ async def register_face(req: FaceRegisterRequest, name: Optional[str] = Query(No
 
 @app.post('/face/recognize')
 async def recognize_face(req: ImageRequest):
+    if face_service is None:
+        return {'recognitions': []}
     try:
         img = decode_image(req.image)
         if img is None:

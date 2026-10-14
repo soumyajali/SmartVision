@@ -103,6 +103,12 @@ class FaceService:
     def __init__(self, faces_dir="known_faces"):
         self.faces_dir = faces_dir
         os.makedirs(self.faces_dir, exist_ok=True)
+        self.face_detector = None
+        self.face_recognizer = None
+        self.label_map = {}
+        self.person_embeddings = {}
+        self.is_trained = False
+        self.recognition_history = {}
 
         cache_root = Path(
             os.environ.get("LOCALAPPDATA", str(Path.home() / ".cache"))
@@ -115,16 +121,22 @@ class FaceService:
                 "Face recognition requires an OpenCV build with YuNet and SFace support."
             )
 
-        yunet_path = _ensure_model(model_dir, FACE_MODELS["yunet"])
-        sface_path = _ensure_model(model_dir, FACE_MODELS["sface"])
-        self.face_detector = cv2.FaceDetectorYN_create(
-            yunet_path, "", (320, 320), 0.7, 0.3, 5000
-        )
-        self.face_recognizer = cv2.FaceRecognizerSF_create(sface_path, "")
-        self.label_map = {}
-        self.person_embeddings = {}
-        self.is_trained = False
-        self.recognition_history = {}
+        try:
+            yunet_path = _ensure_model(model_dir, FACE_MODELS["yunet"])
+            sface_path = _ensure_model(model_dir, FACE_MODELS["sface"])
+            self.face_detector = cv2.FaceDetectorYN_create(
+                yunet_path, "", (320, 320), 0.7, 0.3, 5000
+            )
+            self.face_recognizer = cv2.FaceRecognizerSF_create(sface_path, "")
+        except Exception as exc:  # pragma: no cover - offline environment fallback
+            print(
+                "Warning: Face recognition models are unavailable. "
+                f"Falling back to offline-safe mode: {exc}"
+            )
+            self.face_detector = None
+            self.face_recognizer = None
+            return
+
         self.train_model()
 
     def _prepare_frame(self, frame):
@@ -136,13 +148,22 @@ class FaceService:
             return cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR)
         return frame
 
-    def _detect_faces(self, frame):
+    def is_available(self):
+        return self.face_detector is not None and self.face_recognizer is not None
+
+    def _detect_faces(self, frame, max_detection_dimension=MAX_DETECTION_DIMENSION):
+        if not self.is_available():
+            return self._prepare_frame(frame), []
+
+        if max_detection_dimension <= 0:
+            raise ValueError("Maximum face detection dimension must be positive.")
+
         image = self._prepare_frame(frame)
         if image is None:
             return image, []
 
         height, width = image.shape[:2]
-        scale = min(1.0, MAX_DETECTION_DIMENSION / max(height, width))
+        scale = min(1.0, max_detection_dimension / max(height, width))
         detector_image = (
             image
             if scale == 1.0
@@ -172,7 +193,49 @@ class FaceService:
         aligned_face = self.face_recognizer.alignCrop(image, detection)
         return self.face_recognizer.feature(aligned_face).reshape(-1)
 
+    def extract_face_embeddings(
+        self, frame, max_detection_dimension=MAX_DETECTION_DIMENSION
+    ):
+        """Return face boxes and SFace embeddings for a frame."""
+        image, detections = self._detect_faces(frame, max_detection_dimension)
+        if image is None:
+            return []
+
+        candidates = []
+        for detection in sorted(
+            detections, key=lambda face: face[2] * face[3], reverse=True
+        ):
+            x, y, width, height = detection[:4]
+            box = (
+                int(round(x)),
+                int(round(y)),
+                int(round(x + width)),
+                int(round(y + height)),
+            )
+            candidates.append((box, self._embedding(image, detection)))
+        return candidates
+
+    def compare_face_embeddings(self, first, second):
+        """Return the cosine similarity between two SFace embeddings."""
+        if not self.is_available():
+            raise RuntimeError("Face recognition is unavailable.")
+
+        return float(
+            self.face_recognizer.match(
+                first.reshape(1, -1),
+                second.reshape(1, -1),
+                cv2.FaceRecognizerSF_FR_COSINE,
+            )
+        )
+
     def train_model(self):
+        if not self.is_available():
+            self.label_map = {}
+            self.person_embeddings = {}
+            self.is_trained = False
+            self.recognition_history.clear()
+            return
+
         self.label_map = {}
         self.person_embeddings = {}
 
@@ -202,6 +265,11 @@ class FaceService:
 
     def register_face(self, name, image):
         """Save a face image and rebuild the identity embedding gallery."""
+        if not self.is_available():
+            raise RuntimeError(
+                "Face recognition is unavailable because the required model files could not be downloaded."
+            )
+
         prepared_image, detections = self._detect_faces(image)
         if not detections:
             raise ValueError("No clear face was detected in the registration photo.")
@@ -247,6 +315,9 @@ class FaceService:
         self, frame, threshold=FACE_MATCH_THRESHOLD, min_margin=FACE_MATCH_MARGIN
     ):
         """Return registered identities only for strong, unambiguous SFace matches."""
+        if not self.is_available():
+            return []
+
         image, detections = self._detect_faces(frame)
         if image is None:
             return []
@@ -309,6 +380,9 @@ class FaceService:
         required_hits=3,
     ):
         """Recognize a face in a person crop, optionally requiring consistent track hits."""
+        if not self.is_available():
+            return None
+
         if person_box is not None:
             x1, y1, x2, y2 = (int(value) for value in person_box)
             height, width = frame.shape[:2]
@@ -339,6 +413,9 @@ class FaceService:
         self, frame, threshold=FACE_MATCH_THRESHOLD, min_margin=FACE_MATCH_MARGIN
     ):
         """Return the best face as (name, cosine similarity, bounding box)."""
+        if not self.is_available():
+            return None, None, None
+
         recognitions = self.recognize_faces(frame, threshold, min_margin)
         if recognitions:
             return recognitions[0]
