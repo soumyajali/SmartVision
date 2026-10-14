@@ -168,6 +168,12 @@ async def detect_text(req: ImageRequest):
             raise HTTPException(status_code=400, detail="Invalid image format")
 
         results = ocr_reader.readtext(img, rotation_info=[90, 180, 270])
+        if not results:
+            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) if len(img.shape) == 3 else img
+            clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+            enhanced = clahe.apply(gray)
+            enhanced_bgr = cv2.cvtColor(enhanced, cv2.COLOR_GRAY2BGR)
+            results = ocr_reader.readtext(enhanced_bgr, rotation_info=[90, 180, 270])
         
         text_detections = []
         for (bbox, text, prob) in results:

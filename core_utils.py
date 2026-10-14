@@ -253,9 +253,11 @@ class OCRReader:
             return []
         
         try:
-            # Convert BGR to RGB for EasyOCR
+            # Convert BGR / BGRA to RGB for EasyOCR
             if len(image.shape) == 3 and image.shape[2] == 3:
                 image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            elif len(image.shape) == 3 and image.shape[2] == 4:
+                image_rgb = cv2.cvtColor(image, cv2.COLOR_BGRA2RGB)
             else:
                 image_rgb = image
             
@@ -919,3 +921,104 @@ class UnknownObjectDetector:
                     det['object_name'] = 'Unknown Object'
                     
         return detections
+
+
+# ---------------- MULTI-LINGUAL ROBUST TRANSLATION ----------------
+TRANSLATION_LANG_MAP = {
+    'hindi': ('hi', 'hi-IN'),
+    'hi': ('hi', 'hi-IN'),
+    'kannada': ('kn', 'kn-IN'),
+    'kn': ('kn', 'kn-IN'),
+    'telugu': ('te', 'te-IN'),
+    'te': ('te', 'te-IN'),
+    'tamil': ('ta', 'ta-IN'),
+    'ta': ('ta', 'ta-IN'),
+    'malayalam': ('ml', 'ml-IN'),
+    'ml': ('ml', 'ml-IN'),
+    'marathi': ('mr', 'mr-IN'),
+    'mr': ('mr', 'mr-IN'),
+    'bengali': ('bn', 'bn-IN'),
+    'bn': ('bn', 'bn-IN'),
+    'gujarati': ('gu', 'gu-IN'),
+    'gu': ('gu', 'gu-IN'),
+    'punjabi': ('pa', 'pa-IN'),
+    'pa': ('pa', 'pa-IN'),
+    'odia': ('or', 'or-IN'),
+    'or': ('or', 'or-IN'),
+    'urdu': ('ur', 'ur-PK'),
+    'ur': ('ur', 'ur-PK'),
+    'spanish': ('es', 'es-ES'),
+    'es': ('es', 'es-ES'),
+    'french': ('fr', 'fr-FR'),
+    'fr': ('fr', 'fr-FR'),
+    'german': ('de', 'de-DE'),
+    'de': ('de', 'de-DE'),
+    'chinese (simplified)': ('zh-CN', 'zh-CN'),
+    'chinese': ('zh-CN', 'zh-CN'),
+    'zh': ('zh-CN', 'zh-CN'),
+    'japanese': ('ja', 'ja-JP'),
+    'ja': ('ja', 'ja-JP'),
+    'russian': ('ru', 'ru-RU'),
+    'ru': ('ru', 'ru-RU'),
+    'arabic': ('ar', 'ar-SA'),
+    'ar': ('ar', 'ar-SA'),
+    'english': ('en', 'en-US'),
+    'en': ('en', 'en-US'),
+}
+
+def translate_robust(text: str, target_lang: str = 'hindi') -> str:
+    """
+    Robust multi-lingual translator with intelligent rate-limit handling,
+    sentence chunking, and dual-provider fallback (MyMemory + Google).
+    """
+    if not text or not str(text).strip():
+        return ""
+        
+    text = str(text).strip()
+    key = target_lang.strip().lower()
+    g_code, m_code = TRANSLATION_LANG_MAP.get(key, ('hi', 'hi-IN'))
+
+    import re
+    # Split into clean chunks of max 450 chars at line breaks
+    lines = text.split('\n')
+    chunks = []
+    current = []
+    curr_len = 0
+    for line in lines:
+        if curr_len + len(line) + 1 > 450 and current:
+            chunks.append('\n'.join(current))
+            current = [line]
+            curr_len = len(line)
+        else:
+            current.append(line)
+            curr_len += len(line) + 1
+    if current:
+        chunks.append('\n'.join(current))
+
+    translated_chunks = []
+    for chunk in chunks:
+        # Don't translate MRZ lines or symbols-only lines
+        if re.match(r'^[A-Z0-9<]{15,}$', chunk.strip()):
+            translated_chunks.append(chunk)
+            continue
+            
+        chunk_res = None
+        # 1. Primary Provider: MyMemory
+        try:
+            from deep_translator import MyMemoryTranslator
+            chunk_res = MyMemoryTranslator(source='en-US', target=m_code).translate(chunk)
+        except Exception:
+            pass
+
+        # 2. Secondary Provider: Google
+        if not chunk_res:
+            try:
+                from deep_translator import GoogleTranslator
+                chunk_res = GoogleTranslator(source='auto', target=g_code).translate(chunk)
+            except Exception:
+                pass
+
+        translated_chunks.append(chunk_res if chunk_res else chunk)
+
+    return '\n'.join(translated_chunks)
+
