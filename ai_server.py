@@ -198,9 +198,13 @@ async def recognize_face(req: ImageRequest):
         name, conf, bbox = face_service.recognize_face_details(img)
         recognitions = []
         if name:
-            is_unrec = "Unknown" in name or "unknown" in name
-            clean_name = "Unknown" if is_unrec else name
-            conf_val = round(max(0.0, 1.0 - min(1.0, float(conf or 50.0) / 100.0)), 2)
+            is_unrec = name.lower().startswith("unknown") or name == "Not Registered"
+            clean_name = "Not Registered" if is_unrec else name
+            conf_val = (
+                round(max(0.0, min(1.0, float(conf or 0.0))), 2)
+                if clean_name != "Not Registered"
+                else 0.0
+            )
             recognitions.append({
                 "name": clean_name,
                 "confidence": conf_val,

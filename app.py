@@ -43,6 +43,91 @@ from voice_interaction import (
 )
 import plotly.graph_objects as go
 import plotly.express as px
+
+
+def get_detection_labels(frame, result, class_names, face_service):
+  """Return detector labels with person labels replaced by recognized names."""
+  boxes = list(result.boxes) if result.boxes is not None else []
+  labels = [
+    class_names[int(box.cls[0])]
+    for box in boxes
+  ]
+  registered_person_indices = set()
+  assigned_person_indices = set()
+
+  if face_service:
+    person_boxes = []
+    for index, box in enumerate(boxes):
+      if labels[index].lower() == "person":
+        x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
+        person_boxes.append((index, x1, y1, x2, y2))
+
+    for name, _, (fx, fy, fw, fh) in face_service.recognize_faces(frame):
+      if not name:
+        continue
+
+      face_x, face_y = int(fx + fw / 2), int(fy + fh / 2)
+      containing_boxes = [
+        person
+        for person in person_boxes
+        if person[0] not in assigned_person_indices
+        and person[1] <= face_x <= person[3]
+        and person[2] <= face_y <= person[4]
+      ]
+      if containing_boxes:
+        person = min(
+          containing_boxes,
+          key=lambda item: (item[3] - item[1]) * (item[4] - item[2]),
+        )
+        labels[person[0]] = name
+        assigned_person_indices.add(person[0])
+        if name != "Not Registered":
+          registered_person_indices.add(person[0])
+
+  return labels, registered_person_indices
+
+
+def annotate_detections(frame, result, class_names, face_service):
+  """Render detections, replacing a person label with its registered identity."""
+  boxes = list(result.boxes) if result.boxes is not None else []
+  labels, registered_person_indices = get_detection_labels(
+    frame, result, class_names, face_service
+  )
+  annotated = frame.copy()
+  for index, box in enumerate(boxes):
+    x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
+    confidence = float(box.conf[0])
+    label = labels[index]
+    if index in registered_person_indices:
+      color = (0, 200, 0)
+    elif label == "Not Registered":
+      color = (0, 0, 255)
+    else:
+      color = (255, 0, 0)
+    cv2.rectangle(annotated, (x1, y1), (x2, y2), color, 2)
+    text = f"{label} {confidence:.2f}"
+    text_size = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)[0]
+    label_top = max(y1 - text_size[1] - 8, 0)
+    cv2.rectangle(
+      annotated,
+      (x1, label_top),
+      (x1 + text_size[0] + 6, label_top + text_size[1] + 8),
+      color,
+      -1,
+    )
+    cv2.putText(
+      annotated,
+      text,
+      (x1 + 3, label_top + text_size[1] + 3),
+      cv2.FONT_HERSHEY_SIMPLEX,
+      0.6,
+      (255, 255, 255),
+      2,
+    )
+
+  return annotated, labels
+
+
 # Removed insecure SSL certificate workaround as per requirements
 # ---------------- CLASS LABELS ----------------
 
@@ -1039,14 +1124,17 @@ if page in ["Dashboard", "Home"]:
     inference_time = time.time() - start_time
     st.session_state["performance_monitor"].record_inference(inference_time)
     
-    detected_img = results[0].plot()
+    face_service = st.session_state.get("face_service")
+    detected_img, detection_labels = annotate_detections(
+      img_cv, results[0], CLASS_NAMES, face_service
+    )
     results_list = []
     for result in results:
       if result.boxes is not None:
-        for box in result.boxes:
+        for index, box in enumerate(result.boxes):
           class_id = int(box.cls[0])
           conf = float(box.conf[0])
-          obj_name = CLASS_NAMES[class_id]
+          obj_name = detection_labels[index]
           detected_objects_with_conf.append((obj_name, conf))
           object_counts[obj_name] = object_counts.get(obj_name, 0) + 1
           total_detections += 1
@@ -1560,7 +1648,16 @@ elif page == "Drowsiness Monitor":
         # If using webcam, mirror the image for a more natural feel
         if input_method == "Live Webcam":
           frame = cv2.flip(frame, 1)
-          
+
+        face_service = st.session_state.get("face_service")
+        if face_service:
+          for name, _, (x, y, width, height) in face_service.recognize_faces(frame):
+            color = (0, 200, 0) if name != "Not Registered" else (0, 0, 255)
+            cv2.rectangle(frame, (x, y), (x + width, y + height), color, 2)
+            cv2.putText(
+              frame, name, (x, max(y - 10, 20)),
+              cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2,
+            )
         rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
         results = face_mesh.detect(mp_image)
@@ -1822,17 +1919,46 @@ elif page == "Face Registration":
           pil_img = Image.open(reg_image)
           cv_img = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
           
-          saved_path = st.session_state["face_service"].register_face(reg_name, cv_img)
-          st.success(f"Successfully registered {reg_name}!")
+          try:
+            saved_path = st.session_state["face_service"].register_face(reg_name, cv_img)
+          except ValueError as error:
+            st.error(str(error))
+          else:
+            st.success(f"Successfully registered {reg_name}!")
         else:
           st.error("Please provide both a name and a photo.")
       st.markdown("</div>", unsafe_allow_html=True)
       
     with col2:
       st.markdown("<div class='card-box'><b>Registered People</b><br/>", unsafe_allow_html=True)
-      if st.session_state["face_service"].is_trained:
-        for name in sorted(set(st.session_state["face_service"].label_map.values())):
+      face_service = st.session_state["face_service"]
+      registered_names = sorted(set(face_service.label_map.values()))
+      if registered_names:
+        for name in registered_names:
           st.markdown(f"<li><b>{name}</b></li>", unsafe_allow_html=True)
+
+        st.divider()
+        st.markdown("**Delete a registration**")
+        st.caption("This permanently removes all saved face images for the selected person.")
+        selected_name = st.selectbox(
+          "Person to delete",
+          registered_names,
+          key="delete_registered_face_name",
+        )
+        confirm_delete = st.checkbox(
+          f"Confirm deletion of {selected_name}",
+          key=f"confirm_delete_face_{selected_name}",
+        )
+        if st.button(
+          "Delete selected person",
+          disabled=not confirm_delete,
+          key="delete_registered_face",
+        ):
+          deleted_files = face_service.delete_face(selected_name)
+          if deleted_files:
+            st.success(f"Deleted {selected_name} and {len(deleted_files)} saved face image(s).")
+            st.rerun()
+          st.error(f"No saved face images were found for {selected_name}.")
       else:
         st.markdown("No faces registered yet.")
       st.markdown("</div>", unsafe_allow_html=True)
@@ -1859,23 +1985,34 @@ elif page == "Face Registration":
         test_img_cv = cv2.cvtColor(np.array(pil), cv2.COLOR_RGB2BGR)
         
     if test_img_cv is not None:
-      name, conf, bbox = st.session_state["face_service"].recognize_face_details(test_img_cv)
+      recognitions = st.session_state["face_service"].recognize_faces(test_img_cv)
       display_img = test_img_cv.copy()
-      if bbox is not None:
-        fx, fy, fw, fh = bbox
-        color = (0, 200, 0) if (name and not name.startswith("Unknown")) else (0, 0, 255)
+      for name, confidence, (fx, fy, fw, fh) in recognitions:
+        color = (
+          (0, 200, 0)
+          if name and name != "Not Registered"
+          else (0, 0, 255)
+        )
         cv2.rectangle(display_img, (fx, fy), (fx+fw, fy+fh), color, 2)
         label_text = name if name else "Unknown"
         cv2.putText(display_img, label_text, (fx, max(fy-10, 20)), cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2)
       
       t_c1, t_c2 = st.columns(2)
       with t_c1:
-        st.image(cv2.cvtColor(display_img, cv2.COLOR_BGR2RGB), caption="Detection Output", width=400)
+        st.image(
+          cv2.cvtColor(display_img, cv2.COLOR_BGR2RGB),
+          caption=f"Detection Output — {len(recognitions)} face(s)",
+          width=400,
+        )
       with t_c2:
-        if name and not name.startswith("Unknown"):
-          st.success(f" Identified: **{name}** (Match Distance: {conf:.1f})")
-        elif name:
-          st.warning(f" Detected Face: **{name}** (Not closely matching registered faces)")
+        if recognitions:
+          for index, (name, confidence, _) in enumerate(recognitions, start=1):
+            if name != "Not Registered":
+              st.success(
+                f"Face {index}: **{name}** (Match similarity: {confidence:.3f})"
+              )
+            else:
+              st.warning(f"Face {index}: **Not Registered**")
         else:
           st.info("No face detected in the image. Ensure the face is clearly visible and well-lit.")
 
@@ -1966,7 +2103,10 @@ elif page == "Object Detection":
     inference_time = time.time() - start_time
     st.session_state["performance_monitor"].record_inference(inference_time)
     
-    detected_img = results[0].plot()
+    face_service = st.session_state.get("face_service")
+    detected_img, detection_labels = annotate_detections(
+      img_cv, results[0], active_detector.names, face_service
+    )
     
     # Extract detected objects with confidence
     detected_objects = set()
@@ -1978,11 +2118,11 @@ elif page == "Object Detection":
     if results and len(results) > 0:
       for result in results:
         if result.boxes is not None:
-          for box in result.boxes:
+          for index, box in enumerate(result.boxes):
             class_id = int(box.cls[0])
             confidence = float(box.conf[0])
             if class_id in active_detector.names:
-              obj_name = active_detector.names[class_id]
+              obj_name = detection_labels[index]
               detected_objects.add(obj_name)
               detected_objects_with_conf.append((obj_name, confidence))
               
@@ -1996,39 +2136,9 @@ elif page == "Object Detection":
               
               # Check for dangerous objects
   
-            if obj_name == "person":
-              x1, y1, x2, y2 = map(int, box.xyxy[0])
-              face_service = st.session_state.get("face_service")
-              if face_service and face_service.is_trained:
-                person_name = face_service.recognize(img_cv, (x1, y1, x2, y2))
-                if person_name:
-                  # Override the label on the image with a prominent solid background
-                  text_size = cv2.getTextSize(person_name, cv2.FONT_HERSHEY_SIMPLEX, 0.9, 2)[0]
-                  cv2.rectangle(detected_img, (x1, max(y1-30, 0)), (x1 + text_size[0], max(y1-30, 0) + text_size[1] + 10), (0, 200, 0), -1)
-                  cv2.putText(detected_img, person_name, (x1, max(y1-5, 25)), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 255), 2)
-                  # Update the detected objects list with the specific person's name
-                  if "person" in detected_objects:
-                    detected_objects.discard("person")
-                  detected_objects.add(person_name)
-                  detected_objects_with_conf = [(person_name, confidence) if o == "person" else (o, c) for o, c in detected_objects_with_conf]
-                  obj_name = person_name
-
             if obj_name in dangerous_objects:
                 found_dangerous = True
 
-      # If person wasn't detected by YOLO, also check for registered faces directly
-      face_service = st.session_state.get("face_service")
-      if face_service and face_service.is_trained and not any(p in detected_objects for p in face_service.label_map.values()):
-        name, conf, bbox = face_service.recognize_face_details(img_cv, threshold=85)
-        if name and not name.startswith("Unknown") and bbox is not None:
-          fx, fy, fw, fh = bbox
-          text_size = cv2.getTextSize(name, cv2.FONT_HERSHEY_SIMPLEX, 0.9, 2)[0]
-          cv2.rectangle(detected_img, (fx, fy), (fx+fw, fy+fh), (0, 200, 0), 2)
-          cv2.rectangle(detected_img, (fx, max(fy-30, 0)), (fx + text_size[0], max(fy-30, 0) + text_size[1] + 10), (0, 200, 0), -1)
-          cv2.putText(detected_img, name, (fx, max(fy-5, 25)), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 255), 2)
-          detected_objects.add(name)
-          detected_objects_with_conf.append((name, max(0.5, 1.0 - (conf / 100.0))))
-    
     # Voice Assistant integration
     st.session_state["last_detections"] = [
       {"object_name": obj, "confidence": confidence}
@@ -2544,6 +2654,10 @@ elif page == "Border Security (IBVAP)":
     new_alerts = []
     track_boxes = []
     detected_objects = set()
+    face_service = st.session_state.get("face_service")
+    detection_labels, _ = get_detection_labels(
+      frame, results[0], CLASS_NAMES, face_service
+    ) if results else ([], set())
     
     if len(results) > 0 and results[0].boxes is not None:
       boxes = results[0].boxes.xyxy.cpu().numpy()
@@ -2551,7 +2665,7 @@ elif page == "Border Security (IBVAP)":
       
       for i, box in enumerate(boxes):
         x1, y1, x2, y2 = map(int, box)
-        cls_name = CLASS_NAMES[int(classes[i])]
+        cls_name = detection_labels[i]
         detected_objects.add(cls_name)
         
         track_id = i 
@@ -2566,7 +2680,7 @@ elif page == "Border Security (IBVAP)":
           cv2.putText(frame, cls_name, (x1, y1-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
           
         track_boxes.append((track_id, intruded_zones))
-        
+
     for tid, zones in track_boxes:
       alerts = lt.update(tid, zones)
       if alerts:

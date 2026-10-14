@@ -17,7 +17,7 @@ Traditional surveillance and vision recognition systems depend on heavy, costly 
 
 - **Multi-Class Object Detection:** Powered by state-of-the-art **YOLOv8** architectures (`yolov8n`, `yolov8s-world`, `yolov8m`).
 - **Hazard & Dangerous Object Alerting:** Real-time detection of knives, scissors, firearms, and hazardous materials with visual warning banners and automated siren alarms.
-- **Biometric Face Recognition:** MediaPipe Face Landmarker, OpenCV Haar Cascades, and FAISS vector embeddings for registered face identification.
+- **Biometric Face Recognition:** OpenCV YuNet face detection and SFace embeddings for registered identities, with conservative rejection of weak or ambiguous matches.
 - **Optical Character Recognition (OCR):** Embedded EasyOCR engine for document screening and text reading.
 - **Voice Assistant & Audio Guidance:** Hands-free speech alerts, spoken questions about the current detections, and voice commands for dashboard navigation and settings.
 - **Interactive Web Dashboard:** Rich Streamlit interface featuring 3D visualizations, live analytics, and detection histories.
@@ -32,7 +32,7 @@ Traditional surveillance and vision recognition systems depend on heavy, costly 
 | 🔍 **Real-Time Object Detection** | Instant bounding-box localization with confidence scores using YOLOv8. |
 | 🚨 **Dangerous Object Alert System** | Flags weapons, fire, and hazardous objects with loud siren audio and screen warnings. |
 | 🔎 **Object Search ("Find My Item")** | Target-specific tracker alerting users via voice when a specific item appears in view. |
-| 👤 **Face Verification & Recognition** | Recognizes registered identities and flags unknown individuals. |
+| 👤 **Face Verification & Recognition** | Uses aligned face embeddings to identify registered people across changes in lighting, camera angle, scene, and clothing; only close, unambiguous matches receive a registered name. Unmatched or ambiguous faces are marked **Not Registered**. Face Registration lets you manage saved images for each identity. |
 | 📄 **Document Screening & OCR** | Extracts text and scanned information from live camera feed. |
 | 🗣️ **Voice Assistant (TTS)** | Context-aware audio feedback (avoids repeated spamming, speaks on fresh detections). |
 | 🎙️ **Voice Questions & Commands** | Ask about detected objects in the Vision Chatbot or use spoken commands to navigate dashboard pages and toggle voice announcements or object tracking. Chatbot and voice-input answers are spoken in the browser using its built-in speech synthesis. Voice input transcription uses Google's online recognition service; an internet connection is required and recordings are sent to Google for transcription. |
@@ -84,6 +84,8 @@ SmartVision/
 - Python 3.10 or higher
 - Flutter SDK (for building the Android app)
 - Android Studio with Android SDK (for mobile deployment)
+
+On first startup, face recognition downloads the OpenCV Zoo YuNet and SFace model files (about 37 MB total) into the local application cache and verifies their SHA-256 hashes. An internet connection is required for this one-time setup; registered face images and recognition remain local and are not uploaded.
 
 ### 2. Setup Python Environment
 
