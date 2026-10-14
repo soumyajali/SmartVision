@@ -7,6 +7,7 @@ import '../../core/constants/app_colors.dart';
 import '../../models/detection_settings.dart';
 import '../../services/camera_service.dart';
 import '../../services/database_service.dart';
+import '../../services/smartvision_api_service.dart';
 import '../../services/speech_service.dart';
 import '../../services/tflite_service.dart';
 
@@ -35,7 +36,13 @@ class SettingsScreen extends StatelessWidget {
           _buildDetectionSettingsCard(context),
           const SizedBox(height: 24),
 
-          // 3. Database & Storage Management
+          // 3. Backend AI Microservice Section
+          _buildSectionHeader('FastAPI Microservice Core', Icons.cloud_sync_rounded),
+          const SizedBox(height: 10),
+          _buildBackendApiCard(context),
+          const SizedBox(height: 24),
+
+          // 4. Database & Storage Management
           _buildSectionHeader('Storage & Audit Records', Icons.storage_rounded),
           const SizedBox(height: 10),
           _buildStorageCard(context),
@@ -356,6 +363,154 @@ class SettingsScreen extends StatelessWidget {
                     style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6)),
                     onPressed: isGranted ? cameraService.switchCamera : openAppSettings,
                     child: Text(isGranted ? 'Flip Cam' : 'Open Settings', style: const TextStyle(fontSize: 12)),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildBackendApiCard(BuildContext context) {
+    final apiService = SmartVisionApiService();
+
+    return AnimatedBuilder(
+      animation: apiService,
+      builder: (context, _) {
+        final isOnline = apiService.isBackendOnline;
+        final url = apiService.baseUrl;
+
+        return Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: AppColors.cardBackground,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'FastAPI Microservice (ai_server.py)',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.primaryText),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        url,
+                        style: const TextStyle(fontSize: 12, color: AppColors.brightViolet, fontFamily: 'monospace'),
+                      ),
+                    ],
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: isOnline ? AppColors.success.withValues(alpha: 0.15) : AppColors.error.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: isOnline ? AppColors.success : AppColors.error),
+                    ),
+                    child: Text(
+                      isOnline ? 'ONLINE' : 'OFFLINE',
+                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: isOnline ? AppColors.success : AppColors.error),
+                    ),
+                  ),
+                ],
+              ),
+              const Divider(color: AppColors.border, height: 20),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: AppColors.border),
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                      ),
+                      onPressed: () async {
+                        final ok = await apiService.checkHealth();
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              backgroundColor: ok ? AppColors.success : AppColors.error,
+                              content: Text(ok ? 'Backend active and healthy!' : 'Failed to reach $url'),
+                            ),
+                          );
+                        }
+                      },
+                      icon: const Icon(Icons.network_ping_rounded, size: 16, color: AppColors.neonAccent),
+                      label: const Text('Test Connection', style: TextStyle(fontSize: 12, color: AppColors.primaryText)),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: AppColors.border),
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                      ),
+                      onPressed: () {
+                        final textCtrl = TextEditingController(text: url);
+                        showDialog(
+                          context: context,
+                          builder: (ctx) => AlertDialog(
+                            backgroundColor: AppColors.cardBackground,
+                            title: const Text('Edit Microservice URL', style: TextStyle(color: AppColors.primaryText)),
+                            content: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                TextField(
+                                  controller: textCtrl,
+                                  style: const TextStyle(color: AppColors.primaryText),
+                                  decoration: const InputDecoration(
+                                    labelText: 'URL (e.g. http://192.168.x.x:8000)',
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                const Text('Quick Presets:', style: TextStyle(fontSize: 11, color: AppColors.secondaryText, fontWeight: FontWeight.bold)),
+                                const SizedBox(height: 6),
+                                Wrap(
+                                  spacing: 6,
+                                  runSpacing: 6,
+                                  children: [
+                                    ActionChip(
+                                      label: const Text('Android (10.0.2.2)', style: TextStyle(fontSize: 10)),
+                                      onPressed: () => textCtrl.text = 'http://10.0.2.2:8000',
+                                    ),
+                                    ActionChip(
+                                      label: const Text('Wi-Fi LAN (192.168.146.156)', style: TextStyle(fontSize: 10)),
+                                      onPressed: () => textCtrl.text = 'http://192.168.146.156:8000',
+                                    ),
+                                    ActionChip(
+                                      label: const Text('Local (127.0.0.1)', style: TextStyle(fontSize: 10)),
+                                      onPressed: () => textCtrl.text = 'http://localhost:8000',
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                            actions: [
+                              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+                              ElevatedButton(
+                                onPressed: () {
+                                  apiService.setBaseUrl(textCtrl.text);
+                                  Navigator.pop(ctx);
+                                },
+                                child: const Text('Save'),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.edit_rounded, size: 16, color: AppColors.brightViolet),
+                      label: const Text('Change URL', style: TextStyle(fontSize: 12, color: AppColors.primaryText)),
+                    ),
                   ),
                 ],
               ),

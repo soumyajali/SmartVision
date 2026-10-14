@@ -84,30 +84,24 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        // Futuristic Vision Reticle Icon
+                        // Futuristic Vision Logo
                         Container(
                           width: 110,
                           height: 110,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            gradient: const LinearGradient(
-                              colors: [AppColors.primaryViolet, AppColors.deepViolet],
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                            ),
                             boxShadow: [
                               BoxShadow(
-                                color: AppColors.neonAccent.withValues(alpha: 0.4),
-                                blurRadius: 30,
-                                spreadRadius: 4,
+                                color: AppColors.neonAccent.withValues(alpha: 0.45),
+                                blurRadius: 32,
+                                spreadRadius: 6,
                               ),
                             ],
                           ),
-                          child: const Center(
-                            child: Icon(
-                              Icons.remove_red_eye_rounded,
-                              size: 58,
-                              color: Colors.white,
+                          child: ClipOval(
+                            child: Image.asset(
+                              'assets/logo.png',
+                              fit: BoxFit.cover,
                             ),
                           ),
                         ),

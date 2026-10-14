@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 
@@ -23,6 +24,11 @@ class _CameraDetectionScreenState extends State<CameraDetectionScreen> with Widg
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        context.read<CameraService>().initialize();
+      }
+    });
   }
 
   @override
@@ -236,6 +242,23 @@ class _CameraDetectionScreenState extends State<CameraDetectionScreen> with Widg
                     tooltip: 'Switch Camera',
                     onPressed: cameraService.switchCamera,
                   ),
+                  const SizedBox(width: 8),
+                  ControlButton(
+                    icon: Icons.photo_library_rounded,
+                    tooltip: 'Analyze Image from Gallery',
+                    onPressed: () async {
+                      try {
+                        final picker = ImagePicker();
+                        final picked = await picker.pickImage(source: ImageSource.gallery);
+                        if (picked != null) {
+                          final bytes = await picked.readAsBytes();
+                          if (context.mounted) {
+                            await context.read<DetectionController>().analyzeImageBytes(bytes);
+                          }
+                        }
+                      } catch (_) {}
+                    },
+                  ),
                 ],
               ),
             ],
@@ -247,50 +270,120 @@ class _CameraDetectionScreenState extends State<CameraDetectionScreen> with Widg
 
   Widget _buildLiveDetectionsChipHUD() {
     return Positioned(
-      top: 80,
+      top: 75,
       left: 16,
       right: 16,
       child: Consumer<DetectionController>(
         builder: (context, controller, child) {
-          if (!controller.isDetecting || controller.currentResults.isEmpty) {
+          final results = controller.currentResults;
+          if (!controller.isDetecting && !controller.hasActiveHazard && controller.searchTarget == null) {
             return const SizedBox.shrink();
           }
-
-          final results = controller.currentResults;
-          return SizedBox(
-            height: 36,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              itemCount: results.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 8),
-              itemBuilder: (context, idx) {
-                final r = results[idx];
-                final conf = (r.confidence * 100).toStringAsFixed(0);
-                return Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (controller.hasActiveHazard)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                   decoration: BoxDecoration(
-                    color: AppColors.cardBackground.withValues(alpha: 0.88),
-                    borderRadius: BorderRadius.circular(18),
-                    border: Border.all(color: AppColors.neonAccent.withValues(alpha: 0.6)),
+                    color: const Color(0xFFFF1744).withValues(alpha: 0.9),
+                    borderRadius: BorderRadius.circular(12),
                   ),
                   child: Row(
-                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Icon(Icons.blur_on_rounded, size: 14, color: AppColors.neonAccent),
-                      const SizedBox(width: 6),
+                      const Icon(Icons.warning_amber_rounded, color: Colors.white, size: 20),
+                      const SizedBox(width: 8),
                       Text(
-                        '${r.label.toUpperCase()} $conf%',
-                        style: const TextStyle(
-                          color: AppColors.primaryText,
-                          fontSize: 12,
+                        '🚨 SAFETY ALERT: ${controller.activeHazardLabel?.toUpperCase()} DETECTED',
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                      ),
+                    ],
+                  ),
+                ),
+              if (controller.searchTarget != null)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: controller.isTargetFound
+                        ? const Color(0xFF00E676).withValues(alpha: 0.9)
+                        : AppColors.cardBackground.withValues(alpha: 0.9),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: controller.isTargetFound ? const Color(0xFF00E676) : AppColors.neonAccent,
+                      width: 1.5,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        controller.isTargetFound ? Icons.check_circle_rounded : Icons.radar_rounded,
+                        color: controller.isTargetFound ? Colors.black : AppColors.neonAccent,
+                        size: 18,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        controller.isTargetFound
+                            ? 'TARGET FOUND: "${controller.searchTarget!.toUpperCase()}" IN VIEW'
+                            : 'SEARCHING FOR: "${controller.searchTarget!.toUpperCase()}"...',
+                        style: TextStyle(
+                          color: controller.isTargetFound ? Colors.black : AppColors.primaryText,
                           fontWeight: FontWeight.bold,
+                          fontSize: 12,
                         ),
                       ),
                     ],
                   ),
-                );
-              },
-            ),
+                ),
+              if (controller.isDetecting && results.isNotEmpty)
+                SizedBox(
+                  height: 36,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: results.length,
+                    separatorBuilder: (_, __) => const SizedBox(width: 8),
+                    itemBuilder: (context, idx) {
+                      final r = results[idx];
+                      final conf = (r.confidence * 100).toStringAsFixed(0);
+                      final distStr = r.distanceM != null ? ' • ${r.distanceM!.toStringAsFixed(1)}m' : '';
+                      return Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: r.isHazard
+                              ? const Color(0xFFFF1744).withValues(alpha: 0.25)
+                              : AppColors.cardBackground.withValues(alpha: 0.88),
+                          borderRadius: BorderRadius.circular(18),
+                          border: Border.all(
+                            color: r.isHazard ? const Color(0xFFFF1744) : AppColors.neonAccent.withValues(alpha: 0.6),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              r.isHazard ? Icons.warning_rounded : Icons.blur_on_rounded,
+                              size: 14,
+                              color: r.isHazard ? const Color(0xFFFF8A80) : AppColors.neonAccent,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              '${r.label.toUpperCase()} $conf%$distStr',
+                              style: TextStyle(
+                                color: r.isHazard ? const Color(0xFFFF8A80) : AppColors.primaryText,
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ),
+            ],
           );
         },
       ),
@@ -450,6 +543,12 @@ class _CameraDetectionScreenState extends State<CameraDetectionScreen> with Widg
               onPressed: cameraService.requestPermission,
               icon: const Icon(Icons.check_circle_outline_rounded),
               label: const Text('Grant Camera Access'),
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: () => context.go('/home'),
+              icon: const Icon(Icons.dashboard_rounded),
+              label: const Text('Use Dashboard with Sample Scenes'),
             ),
           ],
         ),

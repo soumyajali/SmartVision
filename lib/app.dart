@@ -5,6 +5,7 @@ import 'core/theme/app_theme.dart';
 import 'screens/about/about_screen.dart';
 import 'screens/analytics/analytics_screen.dart';
 import 'screens/camera_detection/camera_detection_screen.dart';
+import 'screens/chatbot/vision_chatbot_screen.dart';
 import 'screens/danger_alert/danger_alert_screen.dart';
 import 'screens/document_screening/document_screening_screen.dart';
 import 'screens/face_recognition/face_recognition_screen.dart';
@@ -13,6 +14,7 @@ import 'screens/history/history_screen.dart';
 import 'screens/home/home_screen.dart';
 import 'screens/settings/settings_screen.dart';
 import 'screens/splash/splash_screen.dart';
+import 'screens/video_review/video_fast_review_screen.dart';
 import 'widgets/main_layout_shell.dart';
 
 class SmartVisionApp extends StatelessWidget {
@@ -47,6 +49,10 @@ class SmartVisionApp extends StatelessWidget {
               pageBuilder: (context, state) => _buildPageTransition(state, const CameraDetectionScreen()),
             ),
             GoRoute(
+              path: '/chatbot',
+              pageBuilder: (context, state) => _buildPageTransition(state, const VisionChatbotScreen()),
+            ),
+            GoRoute(
               path: '/document_screening',
               pageBuilder: (context, state) => _buildPageTransition(state, const DocumentScreeningScreen()),
             ),
@@ -73,6 +79,10 @@ class SmartVisionApp extends StatelessWidget {
             GoRoute(
               path: '/settings',
               pageBuilder: (context, state) => _buildPageTransition(state, const SettingsScreen()),
+            ),
+            GoRoute(
+              path: '/video_review',
+              pageBuilder: (context, state) => _buildPageTransition(state, const VideoFastReviewScreen()),
             ),
             GoRoute(
               path: '/about',
