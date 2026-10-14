@@ -57,13 +57,16 @@ class MainLayoutShell extends StatelessWidget {
               title: Row(
                 children: [
                   Container(
-                    padding: const EdgeInsets.all(7),
+                    width: 32,
+                    height: 32,
                     decoration: BoxDecoration(
-                      color: AppColors.primaryViolet.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(8),
                       border: Border.all(color: AppColors.primaryViolet.withValues(alpha: 0.4)),
                     ),
-                    child: const Icon(Icons.remove_red_eye_rounded, color: AppColors.neonAccent, size: 20),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(7),
+                      child: Image.asset('assets/logo.png', fit: BoxFit.cover),
+                    ),
                   ),
                   const SizedBox(width: 10),
                   const Text(
@@ -208,13 +211,23 @@ class MainLayoutShell extends StatelessWidget {
                   child: Row(
                     children: [
                       Container(
-                        padding: const EdgeInsets.all(8),
+                        width: 40,
+                        height: 40,
                         decoration: BoxDecoration(
-                          color: AppColors.primaryViolet.withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(10),
                           border: Border.all(color: AppColors.neonAccent.withValues(alpha: 0.5)),
+                          boxShadow: [
+                            BoxShadow(
+                              color: AppColors.neonAccent.withValues(alpha: 0.2),
+                              blurRadius: 10,
+                              spreadRadius: 1,
+                            ),
+                          ],
                         ),
-                        child: const Icon(Icons.remove_red_eye_rounded, color: AppColors.neonAccent, size: 24),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(9),
+                          child: Image.asset('assets/logo.png', fit: BoxFit.cover),
+                        ),
                       ),
                       const SizedBox(width: 12),
                       const Expanded(
@@ -253,10 +266,12 @@ class MainLayoutShell extends StatelessWidget {
                     children: [
                       _buildNavItem(context, 'Dashboard', Icons.dashboard_outlined, '/home', location),
                       _buildNavItem(context, 'Live Detection', Icons.camera_alt_outlined, '/camera_detection', location),
-                      _buildNavItem(context, 'ID Screening', Icons.badge_outlined, '/document_screening', location),
+                      _buildNavItem(context, 'Vision Chatbot', Icons.auto_awesome, '/chatbot', location),
+                      _buildNavItem(context, 'OCR & ID Screening', Icons.badge_outlined, '/document_screening', location),
                       _buildNavItem(context, 'Find Object', Icons.search_rounded, '/find_object', location),
                       _buildNavItem(context, 'Threat Alerts', Icons.warning_amber_rounded, '/alerts', location),
                       _buildNavItem(context, 'Face Biometrics', Icons.face_rounded, '/face_id', location),
+                      _buildNavItem(context, 'Video Fast Review', Icons.movie_filter_rounded, '/video_review', location),
                       _buildNavItem(context, 'Detection History', Icons.history_rounded, '/history', location),
                       _buildNavItem(context, 'Analytics', Icons.analytics_outlined, '/statistics', location),
                       _buildNavItem(context, 'Settings', Icons.settings_outlined, '/settings', location),
@@ -332,12 +347,16 @@ class MainLayoutShell extends StatelessWidget {
               child: Row(
                 children: [
                   Container(
-                    padding: const EdgeInsets.all(8),
+                    width: 38,
+                    height: 38,
                     decoration: BoxDecoration(
-                      color: AppColors.primaryViolet.withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: AppColors.neonAccent.withValues(alpha: 0.4)),
                     ),
-                    child: const Icon(Icons.remove_red_eye, color: AppColors.neonAccent, size: 24),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(9),
+                      child: Image.asset('assets/logo.png', fit: BoxFit.cover),
+                    ),
                   ),
                   const SizedBox(width: 12),
                   const Expanded(
@@ -358,10 +377,12 @@ class MainLayoutShell extends StatelessWidget {
                 children: [
                   _buildNavItem(context, 'Dashboard', Icons.dashboard_outlined, '/home', currentLocation),
                   _buildNavItem(context, 'Live Detection', Icons.camera_alt_outlined, '/camera_detection', currentLocation),
-                  _buildNavItem(context, 'ID & Document Screening', Icons.badge_outlined, '/document_screening', currentLocation),
+                  _buildNavItem(context, 'Vision Chatbot AI', Icons.auto_awesome, '/chatbot', currentLocation),
+                  _buildNavItem(context, 'OCR & ID Screening', Icons.badge_outlined, '/document_screening', currentLocation),
                   _buildNavItem(context, 'Find Object / Target', Icons.search_rounded, '/find_object', currentLocation),
                   _buildNavItem(context, 'Threat & Hazard Alerts', Icons.warning_amber_rounded, '/alerts', currentLocation),
                   _buildNavItem(context, 'Face ID & Biometrics', Icons.face_rounded, '/face_id', currentLocation),
+                  _buildNavItem(context, 'Video Fast Review', Icons.movie_filter_rounded, '/video_review', currentLocation),
                   _buildNavItem(context, 'Detection History', Icons.history_rounded, '/history', currentLocation),
                   _buildNavItem(context, 'Analytics & Stats', Icons.analytics_outlined, '/statistics', currentLocation),
                   _buildNavItem(context, 'Settings', Icons.settings_outlined, '/settings', currentLocation),

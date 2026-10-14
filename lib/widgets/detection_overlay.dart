@@ -51,77 +51,88 @@ class DetectionBoxPainter extends CustomPainter {
     final double scaleX = size.width / modelInputSize;
     final double scaleY = size.height / modelInputSize;
 
-    // Glowing border paint
-    final glowPaint = Paint()
-      ..color = primaryColor.withValues(alpha: 0.35)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 6.0
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4.0);
-
-    // Primary sharp border paint
-    final boxPaint = Paint()
-      ..color = primaryColor
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.0;
-
     // Text tag background
     final tagBgPaint = Paint()
       ..color = AppColors.cardBackground.withValues(alpha: 0.92)
       ..style = PaintingStyle.fill;
 
-    final tagBorderPaint = Paint()
-      ..color = primaryColor.withValues(alpha: 0.8)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.0;
-
-    // Corner reticle paint
-    final cornerPaint = Paint()
-      ..color = primaryColor
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 3.5
-      ..strokeCap = StrokeCap.round;
-
     for (final detection in detections) {
       final rect = detection.boundingBox;
 
-      final scaledRect = Rect.fromLTRB(
-        rect.left * scaleX,
-        rect.top * scaleY,
-        rect.right * scaleX,
-        rect.bottom * scaleY,
-      );
+      // Check if coordinates are normalized (0.0 to 1.0) or pixel-based
+      final bool isNormalized = rect.right <= 1.5 && rect.bottom <= 1.5;
+      final Rect scaledRect = isNormalized
+          ? Rect.fromLTRB(
+              rect.left * size.width,
+              rect.top * size.height,
+              rect.right * size.width,
+              rect.bottom * size.height,
+            )
+          : Rect.fromLTRB(
+              rect.left * scaleX,
+              rect.top * scaleY,
+              rect.right * scaleX,
+              rect.bottom * scaleY,
+            );
+
+      final Color effectiveColor = detection.isHazard
+          ? const Color(0xFFFF1744) // Neon Red for Danger
+          : primaryColor;
+
+      final dynamicBoxPaint = Paint()
+        ..color = effectiveColor
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = detection.isHazard ? 3.0 : 2.0;
+
+      final dynamicGlowPaint = Paint()
+        ..color = effectiveColor.withValues(alpha: 0.4)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = detection.isHazard ? 8.0 : 5.0
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4.0);
+
+      final dynamicCornerPaint = Paint()
+        ..color = effectiveColor
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3.5
+        ..strokeCap = StrokeCap.round;
 
       final rrect = RRect.fromRectAndRadius(scaledRect, const Radius.circular(8));
 
       // Draw subtle glow
-      canvas.drawRRect(rrect, glowPaint);
+      canvas.drawRRect(rrect, dynamicGlowPaint);
       // Draw primary box
-      canvas.drawRRect(rrect, boxPaint);
+      canvas.drawRRect(rrect, dynamicBoxPaint);
 
       // Draw futuristic corner brackets / reticles
       final double cornerLen = (scaledRect.width * 0.15).clamp(10.0, 24.0);
       // Top-Left
-      canvas.drawLine(Offset(scaledRect.left, scaledRect.top + cornerLen), Offset(scaledRect.left, scaledRect.top), cornerPaint);
-      canvas.drawLine(Offset(scaledRect.left, scaledRect.top), Offset(scaledRect.left + cornerLen, scaledRect.top), cornerPaint);
+      canvas.drawLine(Offset(scaledRect.left, scaledRect.top + cornerLen), Offset(scaledRect.left, scaledRect.top), dynamicCornerPaint);
+      canvas.drawLine(Offset(scaledRect.left, scaledRect.top), Offset(scaledRect.left + cornerLen, scaledRect.top), dynamicCornerPaint);
       // Top-Right
-      canvas.drawLine(Offset(scaledRect.right - cornerLen, scaledRect.top), Offset(scaledRect.right, scaledRect.top), cornerPaint);
-      canvas.drawLine(Offset(scaledRect.right, scaledRect.top), Offset(scaledRect.right, scaledRect.top + cornerLen), cornerPaint);
+      canvas.drawLine(Offset(scaledRect.right - cornerLen, scaledRect.top), Offset(scaledRect.right, scaledRect.top), dynamicCornerPaint);
+      canvas.drawLine(Offset(scaledRect.right, scaledRect.top), Offset(scaledRect.right, scaledRect.top + cornerLen), dynamicCornerPaint);
       // Bottom-Left
-      canvas.drawLine(Offset(scaledRect.left, scaledRect.bottom - cornerLen), Offset(scaledRect.left, scaledRect.bottom), cornerPaint);
-      canvas.drawLine(Offset(scaledRect.left, scaledRect.bottom), Offset(scaledRect.left + cornerLen, scaledRect.bottom), cornerPaint);
+      canvas.drawLine(Offset(scaledRect.left, scaledRect.bottom - cornerLen), Offset(scaledRect.left, scaledRect.bottom), dynamicCornerPaint);
+      canvas.drawLine(Offset(scaledRect.left, scaledRect.bottom), Offset(scaledRect.left + cornerLen, scaledRect.bottom), dynamicCornerPaint);
       // Bottom-Right
-      canvas.drawLine(Offset(scaledRect.right - cornerLen, scaledRect.bottom), Offset(scaledRect.right, scaledRect.bottom), cornerPaint);
-      canvas.drawLine(Offset(scaledRect.right, scaledRect.bottom), Offset(scaledRect.right, scaledRect.bottom - cornerLen), cornerPaint);
+      canvas.drawLine(Offset(scaledRect.right - cornerLen, scaledRect.bottom), Offset(scaledRect.right, scaledRect.bottom), dynamicCornerPaint);
+      canvas.drawLine(Offset(scaledRect.right, scaledRect.bottom), Offset(scaledRect.right, scaledRect.bottom - cornerLen), dynamicCornerPaint);
 
-      // Format label text
+      // Format label text with distance and hazard
       final percentage = (detection.confidence * 100).toStringAsFixed(0);
-      final labelText = '${detection.label.toUpperCase()} $percentage%';
+      String labelText = '${detection.label.toUpperCase()} $percentage%';
+      if (detection.distanceM != null) {
+        labelText += ' • ${detection.distanceM!.toStringAsFixed(2)}m';
+      }
+      if (detection.isHazard) {
+        labelText = '⚠️ $labelText [HAZARD]';
+      }
 
       final textSpan = TextSpan(
         text: labelText,
-        style: const TextStyle(
-          color: AppColors.primaryText,
-          fontSize: 12,
+        style: TextStyle(
+          color: detection.isHazard ? const Color(0xFFFF8A80) : AppColors.primaryText,
+          fontSize: 11,
           fontWeight: FontWeight.w700,
           letterSpacing: 0.5,
         ),
@@ -147,11 +158,15 @@ class DetectionBoxPainter extends CustomPainter {
       );
 
       canvas.drawRRect(tagRRect, tagBgPaint);
+      final tagBorderPaint = Paint()
+        ..color = effectiveColor.withValues(alpha: 0.8)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.0;
       canvas.drawRRect(tagRRect, tagBorderPaint);
 
       // Draw dot indicator inside tag
       final dotPaint = Paint()
-        ..color = primaryColor
+        ..color = effectiveColor
         ..style = PaintingStyle.fill;
       canvas.drawCircle(Offset(tagLeft + 8, tagTop + tagHeight / 2), 3, dotPaint);
 

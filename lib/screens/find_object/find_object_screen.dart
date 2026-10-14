@@ -3,10 +3,10 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
+import '../../controllers/detection_controller.dart';
 import '../../core/constants/app_colors.dart';
 import '../../models/search_history.dart';
 import '../../services/database_service.dart';
-import '../../services/speech_service.dart';
 
 class FindObjectScreen extends StatefulWidget {
   const FindObjectScreen({super.key});
@@ -59,7 +59,10 @@ class _FindObjectScreenState extends State<FindObjectScreen> {
     if (cleanTarget.isEmpty) return;
 
     final db = context.read<DatabaseService>();
-    final speechService = context.read<SpeechService>();
+    final detectionCtrl = context.read<DetectionController>();
+
+    // Set active target in controller
+    detectionCtrl.setSearchTarget(cleanTarget);
 
     // Save to SQLite
     final entry = SearchHistory(
@@ -68,9 +71,6 @@ class _FindObjectScreenState extends State<FindObjectScreen> {
       timestamp: DateTime.now(),
     );
     await db.insertSearchHistory(entry);
-
-    // Announce target lock
-    speechService.speak('Target locked on $cleanTarget. Scanning camera feed.');
 
     if (mounted) {
       context.push('/camera_detection');

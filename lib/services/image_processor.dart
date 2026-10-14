@@ -73,4 +73,13 @@ class ImageProcessor {
     }
     return image;
   }
+
+  /// Encodes image to JPEG bytes for backend transmission
+  static List<int>? convertToJpeg(image_lib.Image image) {
+    try {
+      return image_lib.encodeJpg(image, quality: 80);
+    } catch (_) {
+      return null;
+    }
+  }
 }

@@ -46,5 +46,25 @@ void main() {
 
     // Verify Home loaded
     expect(find.text('SmartVision AI Sentinel'), findsOneWidget);
+    // Verify Vision Chatbot present in sidebar and dashboard card
+    expect(find.text('Vision Chatbot'), findsAtLeastNWidgets(1));
+    // Verify OCR & Translate Card
+    expect(find.text('OCR & Translate'), findsAtLeastNWidgets(1));
+  });
+
+  test('DetectionController target lock and hazard logic', () {
+    final camera = CameraService();
+    final tflite = TFLiteService();
+    final speech = SpeechService();
+    final db = DatabaseService();
+    final ctrl = DetectionController(camera, tflite, speech, db);
+
+    // Test target search lock
+    ctrl.setSearchTarget('bottle');
+    expect(ctrl.searchTarget, 'bottle');
+    expect(ctrl.isTargetFound, isFalse);
+
+    // Test hazard tracking
+    expect(ctrl.hasActiveHazard, isFalse);
   });
 }

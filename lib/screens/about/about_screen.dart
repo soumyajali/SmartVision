@@ -19,25 +19,23 @@ class AboutScreen extends StatelessWidget {
             child: Column(
               children: [
                 Container(
-                  width: 88,
-                  height: 88,
+                  width: 90,
+                  height: 90,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    gradient: const LinearGradient(
-                      colors: [AppColors.primaryViolet, AppColors.deepViolet],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
                     boxShadow: [
                       BoxShadow(
-                        color: AppColors.neonAccent.withValues(alpha: 0.35),
-                        blurRadius: 20,
-                        spreadRadius: 2,
+                        color: AppColors.neonAccent.withValues(alpha: 0.4),
+                        blurRadius: 24,
+                        spreadRadius: 3,
                       ),
                     ],
                   ),
-                  child: const Center(
-                    child: Icon(Icons.remove_red_eye_rounded, size: 48, color: Colors.white),
+                  child: ClipOval(
+                    child: Image.asset(
+                      'assets/logo.png',
+                      fit: BoxFit.cover,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 16),
