@@ -25,7 +25,8 @@ from utils import (
   AIAssistant, ReportGenerator, ImageQualityAnalyzer,
   SceneDescriber, VisionChatbot, AdaptiveEngine, 
   LowLightEnhancer, DistanceEstimator, UnknownObjectDetector,
-  scale_bbox, select_best_person_match
+  face_landmarks_to_location, scale_bbox, select_best_person_match,
+  translate_robust
 )
 from utils.recorder import get_video_recorder
 from services.email_service import get_email_service
@@ -2641,76 +2642,14 @@ elif page == "OCR":
           
           if st.button("Translate", type="primary", width="stretch"):
             with st.spinner(f"Translating to {target_lang}..."):
-              google_map = {
-                "Hindi": "hi", "Telugu": "te", "Tamil": "ta", "Kannada": "kn", "Malayalam": "ml", 
-                "Marathi": "mr", "Bengali": "bn", "Gujarati": "gu", "Punjabi": "pa", "Odia": "or", "Urdu": "ur",
-                "Spanish": "es", "French": "fr", "German": "de", "Chinese (simplified)": "zh-CN",
-                "Japanese": "ja", "Russian": "ru", "Arabic": "ar"
-              }
-              mymemory_map = {
-                "Hindi": "hi-IN", "Telugu": "te-IN", "Tamil": "ta-IN", "Kannada": "kn-IN", "Malayalam": "ml-IN", 
-                "Marathi": "mr-IN", "Bengali": "bn-IN", "Gujarati": "gu-IN", "Punjabi": "pa-IN", "Odia": "or-IN", "Urdu": "ur-PK",
-                "Spanish": "es-ES", "French": "fr-FR", "German": "de-DE", "Chinese (simplified)": "zh-CN",
-                "Japanese": "ja-JP", "Russian": "ru-RU", "Arabic": "ar-SA"
-              }
-              import re
-              def chunk_text_for_translation(text, max_chars=350):
-                sentences = re.split(r'(\. |\n+|\? |\! )', text)
-                chunks = []
-                current = ''
-                for part in sentences:
-                  if not part:
-                    continue
-                  if len(current) + len(part) <= max_chars:
-                    current += part
-                  else:
-                    if current.strip():
-                      chunks.append(current.strip())
-                    if len(part) > max_chars:
-                      words = part.split()
-                      sub = ''
-                      for w in words:
-                        if len(sub) + len(w) + 1 <= max_chars:
-                          sub += (' ' + w if sub else w)
-                        else:
-                          if sub:
-                            chunks.append(sub)
-                          sub = w
-                      current = sub
-                    else:
-                      current = part
-                if current.strip():
-                  chunks.append(current.strip())
-                return chunks if chunks else [text]
-
               text_to_translate = st.session_state.get("ocr_text", "").strip()
-              chunks = chunk_text_for_translation(text_to_translate, max_chars=350)
-              translated = None
-              error_msg = None
-
-              # Attempt 1: Google Translator with chunking
-              try:
-                from deep_translator import GoogleTranslator
-                target_code = google_map.get(target_lang, "hi")
-                translator = GoogleTranslator(source='auto', target=target_code)
-                translated_parts = [translator.translate(c) for c in chunks if c.strip()]
-                translated = " ".join(filter(None, translated_parts))
-              except Exception as e_google:
-                # Attempt 2: MyMemory Translator with chunking (handles Google rate limit 429)
-                try:
-                  from deep_translator import MyMemoryTranslator
-                  target_code = mymemory_map.get(target_lang, "hi-IN")
-                  translator = MyMemoryTranslator(source='en-US', target=target_code)
-                  translated_parts = [translator.translate(c) for c in chunks if c.strip()]
-                  translated = " ".join(filter(None, translated_parts))
-                except Exception as e_mymemory:
-                  error_msg = f"Primary service: {e_google}; Fallback service: {e_mymemory}"
+              translated = translate_robust(text_to_translate, target_lang=target_lang)
               
               if translated:
                 st.info(f"**{target_lang} Translation:**")
                 st.write(translated)
               else:
-                st.error(f"Translation failed: {error_msg}")
+                st.error("Translation could not be completed. Please check your network connection.")
         else:
           st.warning("No text could be extracted from this image.")
 
