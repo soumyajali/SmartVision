@@ -168,6 +168,12 @@ async def detect_text(req: ImageRequest):
             raise HTTPException(status_code=400, detail="Invalid image format")
 
         results = ocr_reader.readtext(img, rotation_info=[90, 180, 270])
+        if not results:
+            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) if len(img.shape) == 3 else img
+            clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+            enhanced = clahe.apply(gray)
+            enhanced_bgr = cv2.cvtColor(enhanced, cv2.COLOR_GRAY2BGR)
+            results = ocr_reader.readtext(enhanced_bgr, rotation_info=[90, 180, 270])
         
         text_detections = []
         for (bbox, text, prob) in results:
@@ -275,58 +281,15 @@ async def chatbot_query(req: ChatbotRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-GOOGLE_LANG_MAP = {
-    "Hindi": "hi", "Telugu": "te", "Tamil": "ta", "Kannada": "kn", "Malayalam": "ml", 
-    "Marathi": "mr", "Bengali": "bn", "Gujarati": "gu", "Punjabi": "pa", "Odia": "or", "Urdu": "ur",
-    "Spanish": "es", "French": "fr", "German": "de", "Chinese (simplified)": "zh-CN",
-    "Japanese": "ja", "Russian": "ru", "Arabic": "ar", "English": "en"
-}
-MYMEMORY_LANG_MAP = {
-    "Hindi": "hi-IN", "Telugu": "te-IN", "Tamil": "ta-IN", "Kannada": "kn-IN", "Malayalam": "ml-IN", 
-    "Marathi": "mr-IN", "Bengali": "bn-IN", "Gujarati": "gu-IN", "Punjabi": "pa-IN", "Odia": "or-IN", "Urdu": "ur-PK",
-    "Spanish": "es-ES", "French": "fr-FR", "German": "de-DE", "Chinese (simplified)": "zh-CN",
-    "Japanese": "ja-JP", "Russian": "ru-RU", "Arabic": "ar-SA", "English": "en-US"
-}
+from core_utils import translate_robust
 
 @app.post('/translate')
 async def translate_text(req: TranslateRequest):
     if not req.text or not req.text.strip():
         return {"translated_text": "", "target_lang": req.target_lang}
     
-    text = req.text.strip()
-    target_code = GOOGLE_LANG_MAP.get(req.target_lang, req.target_lang.lower())
-    
-    import re
-    sentences = re.split(r'(\. |\n+|\? |\! )', text)
-    chunks = []
-    current = ''
-    for part in sentences:
-        if not part: continue
-        if len(current) + len(part) <= 350:
-            current += part
-        else:
-            if current.strip(): chunks.append(current.strip())
-            current = part
-    if current.strip(): chunks.append(current.strip())
-    if not chunks: chunks = [text]
-
-    translated = None
-    try:
-        from deep_translator import GoogleTranslator
-        translator = GoogleTranslator(source='auto', target=target_code)
-        translated_parts = [translator.translate(c) for c in chunks if c.strip()]
-        translated = " ".join(filter(None, translated_parts))
-    except Exception as e1:
-        try:
-            from deep_translator import MyMemoryTranslator
-            mymemory_code = MYMEMORY_LANG_MAP.get(req.target_lang, "hi-IN")
-            translator = MyMemoryTranslator(source='en-US', target=mymemory_code)
-            translated_parts = [translator.translate(c) for c in chunks if c.strip()]
-            translated = " ".join(filter(None, translated_parts))
-        except Exception as e2:
-            raise HTTPException(status_code=500, detail=f"Translation error: {e1} / {e2}")
-
-    return {"translated_text": translated or text, "target_lang": req.target_lang}
+    translated = translate_robust(req.text, target_lang=req.target_lang)
+    return {"translated_text": translated or req.text, "target_lang": req.target_lang}
 
 @app.post('/summarize')
 async def summarize_text(req: SummarizeRequest):
