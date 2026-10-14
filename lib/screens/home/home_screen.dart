@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
 import '../../controllers/detection_controller.dart';
@@ -25,12 +26,14 @@ class _HomeScreenState extends State<HomeScreen> {
   String _inputSource = 'Live Camera';
   int _rotationQuarterTurns = 0;
   bool _flipHorizontally = false;
+  Uint8List? _customImageBytes;
   Future<List<DetectionHistory>>? _recentHistoryFuture;
 
   final Map<String, String> _sampleSceneAssets = {
     'Test Scene: Classroom': 'assets/samples/classroom.jpg',
     'Test Scene: Office': 'assets/samples/office.jpg',
     'Test Scene: Safety Hazard': 'assets/samples/danger.png',
+    'Test Scene: Identity Permit': 'assets/samples/document.png',
   };
 
   @override
@@ -61,6 +64,24 @@ class _HomeScreenState extends State<HomeScreen> {
     } catch (_) {}
   }
 
+  Future<void> _pickAndProcessCustomImage() async {
+    try {
+      final picker = ImagePicker();
+      final picked = await picker.pickImage(source: ImageSource.gallery);
+      if (picked != null) {
+        final bytes = await picked.readAsBytes();
+        if (!mounted) return;
+        setState(() {
+          _customImageBytes = bytes;
+          _inputSource = 'Uploaded Image';
+        });
+        final controller = context.read<DetectionController>();
+        await controller.analyzeImageBytes(bytes);
+        _loadRecentHistory();
+      }
+    } catch (_) {}
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDesktop = MediaQuery.of(context).size.width >= 900;
@@ -79,7 +100,11 @@ class _HomeScreenState extends State<HomeScreen> {
           children: [
             // 1. Website-Identical Dashboard Header Bar
             _buildTopHeader(),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
+
+            // Quick Access Navigation Pills
+            _buildQuickAccessPills(context),
+            const SizedBox(height: 14),
 
             // 2. Main Media Stage & Side Stats
             if (isDesktop)
@@ -118,6 +143,63 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Widget _buildQuickAccessPills(BuildContext context) {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          ActionChip(
+            avatar: const Icon(Icons.auto_awesome, size: 14, color: AppColors.neonAccent),
+            label: const Text('Vision Chatbot', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primaryText)),
+            backgroundColor: AppColors.cardBackground,
+            side: const BorderSide(color: AppColors.border),
+            onPressed: () => context.push('/chatbot'),
+          ),
+          const SizedBox(width: 8),
+          ActionChip(
+            avatar: const Icon(Icons.document_scanner_rounded, size: 14, color: Colors.amberAccent),
+            label: const Text('OCR & Translate', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primaryText)),
+            backgroundColor: AppColors.cardBackground,
+            side: const BorderSide(color: AppColors.border),
+            onPressed: () => context.push('/document_screening'),
+          ),
+          const SizedBox(width: 8),
+          ActionChip(
+            avatar: const Icon(Icons.radar_rounded, size: 14, color: AppColors.brightViolet),
+            label: const Text('Target Search', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primaryText)),
+            backgroundColor: AppColors.cardBackground,
+            side: const BorderSide(color: AppColors.border),
+            onPressed: () => context.push('/find_object'),
+          ),
+          const SizedBox(width: 8),
+          ActionChip(
+            avatar: const Icon(Icons.movie_filter_rounded, size: 14, color: Colors.tealAccent),
+            label: const Text('Video Review', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primaryText)),
+            backgroundColor: AppColors.cardBackground,
+            side: const BorderSide(color: AppColors.border),
+            onPressed: () => context.push('/video_review'),
+          ),
+          const SizedBox(width: 8),
+          ActionChip(
+            avatar: const Icon(Icons.face_rounded, size: 14, color: Colors.cyanAccent),
+            label: const Text('Face ID', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primaryText)),
+            backgroundColor: AppColors.cardBackground,
+            side: const BorderSide(color: AppColors.border),
+            onPressed: () => context.push('/face_id'),
+          ),
+          const SizedBox(width: 8),
+          ActionChip(
+            avatar: const Icon(Icons.warning_amber_rounded, size: 14, color: AppColors.error),
+            label: const Text('Threat Alerts', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primaryText)),
+            backgroundColor: AppColors.cardBackground,
+            side: const BorderSide(color: AppColors.border),
+            onPressed: () => context.push('/alerts'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildTopHeader() {
     final detectionCtrl = context.watch<DetectionController>();
 
@@ -146,7 +228,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Live Detection',
+                    'SmartVision AI Sentinel',
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.primaryText),
                   ),
                   Text(
@@ -159,15 +241,17 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
 
           // Telemetry Pills matching website: Status, FPS, Resolution, Input Source
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _buildTelemetryBadge('Status', 'Active', const Color(0xFF10B981)),
-              const SizedBox(width: 10),
-              _buildTelemetryBadge('FPS', detectionCtrl.currentFps.toStringAsFixed(1), AppColors.neonAccent),
-              const SizedBox(width: 10),
-              _buildTelemetryBadge('Resolution', '1280 x 720', AppColors.primaryText),
-              const SizedBox(width: 10),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildTelemetryBadge('Status', 'Active', const Color(0xFF10B981)),
+                const SizedBox(width: 10),
+                _buildTelemetryBadge('FPS', detectionCtrl.currentFps.toStringAsFixed(1), AppColors.neonAccent),
+                const SizedBox(width: 10),
+                _buildTelemetryBadge('Resolution', '1280 x 720', AppColors.primaryText),
+                const SizedBox(width: 10),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
@@ -183,15 +267,22 @@ class _HomeScreenState extends State<HomeScreen> {
                     icon: const Icon(Icons.arrow_drop_down, color: AppColors.neonAccent, size: 18),
                     items: [
                       'Live Camera',
+                      'Upload Image / Gallery',
+                      if (_inputSource == 'Uploaded Image') 'Uploaded Image',
                       'Test Scene: Classroom',
                       'Test Scene: Office',
                       'Test Scene: Safety Hazard',
+                      'Test Scene: Identity Permit',
                     ].map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
                     onChanged: (val) {
                       if (val != null) {
-                        setState(() => _inputSource = val);
-                        if (val != 'Live Camera') {
-                          _processSampleScene(_sampleSceneAssets[val]!);
+                        if (val == 'Upload Image / Gallery') {
+                          _pickAndProcessCustomImage();
+                        } else {
+                          setState(() => _inputSource = val);
+                          if (val != 'Live Camera' && val != 'Uploaded Image') {
+                            _processSampleScene(_sampleSceneAssets[val]!);
+                          }
                         }
                       }
                     },
@@ -199,6 +290,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
             ],
+          ),
           ),
         ],
       ),
@@ -253,9 +345,13 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
 
                 // Bounding Box Overlays
-                DetectionOverlay(
-                  detections: detectionCtrl.currentResults,
-                  screenSize: const Size(640, 360),
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    return DetectionOverlay(
+                      detections: detectionCtrl.currentResults,
+                      screenSize: Size(constraints.maxWidth, constraints.maxHeight),
+                    );
+                  },
                 ),
 
                 // Live Tracking Badge
@@ -265,7 +361,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
-                      color: (isDetecting ? AppColors.neonAccent : Colors.black84).withValues(alpha: 0.85),
+                      color: isDetecting ? AppColors.neonAccent : Colors.black.withValues(alpha: 0.85),
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
@@ -411,6 +507,10 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildMediaFeed(CameraService cameraService) {
+    if (_inputSource == 'Uploaded Image' && _customImageBytes != null) {
+      return Image.memory(_customImageBytes!, fit: BoxFit.cover);
+    }
+
     if (_inputSource != 'Live Camera') {
       final path = _sampleSceneAssets[_inputSource] ?? 'assets/samples/classroom.jpg';
       return Image.asset(path, fit: BoxFit.cover);
@@ -564,12 +664,12 @@ class _HomeScreenState extends State<HomeScreen> {
                 ],
               ),
               SliderTheme(
-                data: SliderThemeData(
+                data: const SliderThemeData(
                   trackHeight: 3,
                   activeTrackColor: AppColors.neonAccent,
                   inactiveTrackColor: AppColors.elevatedSurface,
                   thumbColor: AppColors.neonAccent,
-                  thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                  thumbShape: RoundSliderThumbShape(enabledThumbRadius: 6),
                 ),
                 child: Slider(
                   value: detectionCtrl.settings.minimumConfidence,
@@ -612,11 +712,11 @@ class _HomeScreenState extends State<HomeScreen> {
         final list = (snapshot.data != null && snapshot.data!.isNotEmpty)
             ? snapshot.data!.take(5).toList()
             : [
-                DetectionHistory(objectName: 'Person', confidence: 0.94, timestamp: DateTime.now()),
-                DetectionHistory(objectName: 'Laptop', confidence: 0.92, timestamp: DateTime.now().subtract(const Duration(minutes: 1))),
-                DetectionHistory(objectName: 'Cell phone', confidence: 0.89, timestamp: DateTime.now().subtract(const Duration(minutes: 3))),
-                DetectionHistory(objectName: 'Bottle', confidence: 0.88, timestamp: DateTime.now().subtract(const Duration(minutes: 5))),
-                DetectionHistory(objectName: 'Chair', confidence: 0.86, timestamp: DateTime.now().subtract(const Duration(minutes: 8))),
+                DetectionHistory(objectName: 'Person', confidence: 0.94, timestamp: DateTime.now(), boundingBox: Rect.zero),
+                DetectionHistory(objectName: 'Laptop', confidence: 0.92, timestamp: DateTime.now().subtract(const Duration(minutes: 1)), boundingBox: Rect.zero),
+                DetectionHistory(objectName: 'Cell phone', confidence: 0.89, timestamp: DateTime.now().subtract(const Duration(minutes: 3)), boundingBox: Rect.zero),
+                DetectionHistory(objectName: 'Bottle', confidence: 0.88, timestamp: DateTime.now().subtract(const Duration(minutes: 5)), boundingBox: Rect.zero),
+                DetectionHistory(objectName: 'Chair', confidence: 0.86, timestamp: DateTime.now().subtract(const Duration(minutes: 8)), boundingBox: Rect.zero),
               ];
 
         return SizedBox(
@@ -675,7 +775,7 @@ class _HomeScreenState extends State<HomeScreen> {
       {'title': 'Target Lookup', 'desc': 'Search and track specific objects in scene', 'icon': Icons.radar_rounded, 'route': '/find_object', 'color': AppColors.brightViolet},
       {'title': 'Threat Sentinel', 'desc': 'Hazard alarms for weapons and danger items', 'icon': Icons.security_rounded, 'route': '/alerts', 'color': AppColors.error},
       {'title': 'Biometric Face ID', 'desc': 'FAISS vector identity verification', 'icon': Icons.face_retouching_natural_rounded, 'route': '/face_id', 'color': Colors.cyanAccent},
-      {'title': 'Document OCR', 'desc': 'Text extraction, 18-language translation', 'icon': Icons.document_scanner_rounded, 'route': '/document_screening', 'color': Colors.amberAccent},
+      {'title': 'OCR & Translate', 'desc': 'Text extraction, 18-language translation', 'icon': Icons.document_scanner_rounded, 'route': '/document_screening', 'color': Colors.amberAccent},
       {'title': 'Video Review', 'desc': 'Automated video timeline object search', 'icon': Icons.movie_filter_rounded, 'route': '/video_review', 'color': Colors.tealAccent},
       {'title': 'Telemetry & Research', 'desc': 'mAP, accuracy curves & SQLite logs', 'icon': Icons.analytics_outlined, 'route': '/statistics', 'color': Colors.lightGreenAccent},
       {'title': 'System Settings', 'desc': 'Configure server IP, sirens & voice TTS', 'icon': Icons.tune_rounded, 'route': '/settings', 'color': Colors.deepOrangeAccent},

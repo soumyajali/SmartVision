@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/constants/app_colors.dart';
@@ -83,11 +84,26 @@ class _DocumentScreeningScreenState extends State<DocumentScreeningScreen> with 
           final bytes = await xfile.readAsBytes();
           b64Image = base64Encode(bytes);
         } else {
-          final bytes = await rootBundle.load('assets/samples/classroom.jpg');
-          b64Image = base64Encode(bytes.buffer.asUint8List());
+          final picker = ImagePicker();
+          final picked = await picker.pickImage(source: ImageSource.camera);
+          if (picked == null) {
+            setState(() => _isOcrProcessing = false);
+            return;
+          }
+          final bytes = await picked.readAsBytes();
+          b64Image = base64Encode(bytes);
         }
+      } else if (source == 'Upload') {
+        final picker = ImagePicker();
+        final picked = await picker.pickImage(source: ImageSource.gallery);
+        if (picked == null) {
+          setState(() => _isOcrProcessing = false);
+          return;
+        }
+        final bytes = await picked.readAsBytes();
+        b64Image = base64Encode(bytes);
       } else {
-        final bytes = await rootBundle.load('assets/samples/classroom.jpg');
+        final bytes = await rootBundle.load('assets/samples/document.png');
         b64Image = base64Encode(bytes.buffer.asUint8List());
       }
 
@@ -95,7 +111,7 @@ class _DocumentScreeningScreenState extends State<DocumentScreeningScreen> with 
       final List texts = result['texts'] ?? [];
       String joined = texts.map((t) => t['text'] ?? '').where((s) => s.isNotEmpty).join('\n');
       if (joined.isEmpty) {
-        joined = "SMART VISION AI 2026\nINTELLIGENT MULTI-OBJECT RECOGNITION SYSTEM\nREAL-TIME NEURAL INFERENCE ENGINE\nSTATUS: VERIFIED";
+        joined = "No legible text was found in this document. Please ensure good lighting and text focus.";
       }
 
       if (mounted) {
@@ -108,7 +124,7 @@ class _DocumentScreeningScreenState extends State<DocumentScreeningScreen> with 
       if (mounted) {
         setState(() {
           _isOcrProcessing = false;
-          _extractedText = "SMART VISION AI 2026\nOBJECT DETECTION & MULTIMODAL SENSING\nDOCUMENT EXTRACTED SUCCESSFULLY";
+          _extractedText = "Error during OCR processing: $e";
         });
       }
     }
@@ -232,12 +248,27 @@ class _DocumentScreeningScreenState extends State<DocumentScreeningScreen> with 
                         padding: const EdgeInsets.symmetric(vertical: 12),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                       ),
-                      icon: const Icon(Icons.camera_alt_rounded, size: 18),
-                      label: const Text('Camera Scan'),
+                      icon: const Icon(Icons.camera_alt_rounded, size: 16),
+                      label: const Text('Camera', style: TextStyle(fontSize: 12)),
                       onPressed: _isOcrProcessing ? null : () => _extractTextFromSource('Camera'),
                     ),
                   ),
-                  const SizedBox(width: 10),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.elevatedSurface,
+                        foregroundColor: AppColors.neonAccent,
+                        side: const BorderSide(color: AppColors.neonAccent),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                      icon: const Icon(Icons.file_upload_outlined, size: 16),
+                      label: const Text('Upload', style: TextStyle(fontSize: 12)),
+                      onPressed: _isOcrProcessing ? null : () => _extractTextFromSource('Upload'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
                   Expanded(
                     child: OutlinedButton.icon(
                       style: OutlinedButton.styleFrom(
@@ -246,8 +277,8 @@ class _DocumentScreeningScreenState extends State<DocumentScreeningScreen> with 
                         padding: const EdgeInsets.symmetric(vertical: 12),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                       ),
-                      icon: const Icon(Icons.image_outlined, size: 18),
-                      label: const Text('Sample Document'),
+                      icon: const Icon(Icons.badge_outlined, size: 16),
+                      label: const Text('Sample ID', style: TextStyle(fontSize: 12)),
                       onPressed: _isOcrProcessing ? null : () => _extractTextFromSource('Sample'),
                     ),
                   ),
@@ -323,7 +354,7 @@ class _DocumentScreeningScreenState extends State<DocumentScreeningScreen> with 
                 children: [
                   Expanded(
                     child: DropdownButtonFormField<String>(
-                      value: _selectedLanguage,
+                      initialValue: _selectedLanguage,
                       dropdownColor: AppColors.elevatedSurface,
                       style: const TextStyle(color: AppColors.primaryText, fontSize: 13, fontWeight: FontWeight.bold),
                       decoration: InputDecoration(
@@ -477,7 +508,7 @@ class _DocumentScreeningScreenState extends State<DocumentScreeningScreen> with 
               color: AppColors.cardBackground,
               borderRadius: BorderRadius.circular(16),
               border: Border.all(
-                color: _screeningResult!.isValid ? const Color(0xFF10B981) : AppColors.error,
+                color: _screeningResult!.isPass ? const Color(0xFF10B981) : AppColors.error,
                 width: 1.5,
               ),
             ),
@@ -487,25 +518,25 @@ class _DocumentScreeningScreenState extends State<DocumentScreeningScreen> with 
                 Row(
                   children: [
                     Icon(
-                      _screeningResult!.isValid ? Icons.check_circle_rounded : Icons.warning_amber_rounded,
-                      color: _screeningResult!.isValid ? const Color(0xFF10B981) : AppColors.error,
+                      _screeningResult!.isPass ? Icons.check_circle_rounded : Icons.warning_amber_rounded,
+                      color: _screeningResult!.isPass ? const Color(0xFF10B981) : AppColors.error,
                       size: 24,
                     ),
                     const SizedBox(width: 10),
                     Text(
-                      _screeningResult!.isValid ? 'VERIFIED VALID DOCUMENT' : 'DOCUMENT FLAGGED',
+                      _screeningResult!.isPass ? 'VERIFIED VALID DOCUMENT' : 'DOCUMENT FLAGGED',
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 15,
-                        color: _screeningResult!.isValid ? const Color(0xFF10B981) : AppColors.error,
+                        color: _screeningResult!.isPass ? const Color(0xFF10B981) : AppColors.error,
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 10),
-                Text('Type: ${_screeningResult!.documentType}', style: const TextStyle(color: AppColors.primaryText, fontSize: 13, fontWeight: FontWeight.bold)),
+                Text('Checksum: ${_screeningResult!.mrzDetail}', style: const TextStyle(color: AppColors.primaryText, fontSize: 13, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 4),
-                Text('Score: ${(_screeningResult!.confidenceScore * 100).toInt()}% Confidence', style: const TextStyle(color: AppColors.secondaryText, fontSize: 12)),
+                Text('Biometrics: ${_screeningResult!.faceMatchDetail}', style: const TextStyle(color: AppColors.secondaryText, fontSize: 12)),
               ],
             ),
           ),

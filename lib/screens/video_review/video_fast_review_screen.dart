@@ -113,7 +113,7 @@ class _VideoFastReviewScreenState extends State<VideoFastReviewScreen> {
                 const Text('Search Target Category', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.primaryText)),
                 const SizedBox(height: 8),
                 DropdownButtonFormField<String>(
-                  value: _selectedTarget,
+                  initialValue: _selectedTarget,
                   dropdownColor: AppColors.elevatedSurface,
                   style: const TextStyle(color: AppColors.primaryText, fontSize: 13, fontWeight: FontWeight.bold),
                   decoration: InputDecoration(
@@ -138,7 +138,7 @@ class _VideoFastReviewScreenState extends State<VideoFastReviewScreen> {
                   ],
                 ),
                 SliderTheme(
-                  data: SliderThemeData(
+                  data: const SliderThemeData(
                     trackHeight: 3,
                     activeTrackColor: AppColors.neonAccent,
                     thumbColor: AppColors.neonAccent,

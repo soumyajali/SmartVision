@@ -2509,15 +2509,19 @@ elif page == "OCR":
       from PIL import ImageOps
       img = Image.open(file)
       img = ImageOps.exif_transpose(img)
+      if img.mode != 'RGB':
+        img = img.convert('RGB')
       img_array = np.array(img)
   elif input_type == "Upload Video":
-    video_file = st.file_uploader("Upload Video for OCR", type=["mp4", "mov", "avi"])
+    video_file = st.file_uploader("Upload Video for OCR", type=["mp4", "mov", "avi", "mkv", "webm"])
   else:
     snap = st.camera_input("Take a picture for OCR")
     if snap:
       from PIL import ImageOps
       img = Image.open(snap)
       img = ImageOps.exif_transpose(img)
+      if img.mode != 'RGB':
+        img = img.convert('RGB')
       img_array = np.array(img)
       
   if img_array is not None or video_file is not None:
@@ -2525,13 +2529,13 @@ elif page == "OCR":
     with rot_c1:
       rotation_mode = st.selectbox(
         "Rotate Media / Orientation",
-        ["Auto-Detect & Rotate", "0° (Upright)", "90° Clockwise", "180° Inverted", "270° Counter-Clockwise"],
+        ["0° (Upright)", "Auto-Detect & Rotate", "90° Clockwise", "180° Inverted", "270° Counter-Clockwise"],
         index=0,
         key="ocr_rotation_mode",
-        help="Automatically detects orientation or manually rotates 90°/180°/270° for sideways or upside-down images and videos."
+        help="Choose manual rotation (90°/180°/270°) or Auto-Detect to scan text at all angles."
       )
     with rot_c2:
-      flip_h = st.checkbox("Flip Image Horizontally", value=True if input_type == "Live Webcam" else False, key="ocr_flip_h")
+      flip_h = st.checkbox("Flip Image Horizontally (Mirror)", value=False, key="ocr_flip_h", help="Only check if your webcam produces backward/mirrored text.")
 
     if img_array is not None:
       import cv2
@@ -2558,13 +2562,21 @@ elif page == "OCR":
       st.markdown("<div class='card-box'><b> Extracted Text</b></div>", unsafe_allow_html=True)
       
       if st.button("Extract Text", width="stretch"):
-        with st.spinner("Extracting text locally with auto-orientation..."):
+        with st.spinner("Extracting text locally using neural EasyOCR..."):
+          effective_rot_info = [90, 180, 270] if rotation_mode == "Auto-Detect & Rotate" else []
+
           if video_file:
             import tempfile
+            import os
             import cv2
             import math
             import time
-            tfile = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
+
+            suffix = os.path.splitext(video_file.name)[1] if hasattr(video_file, "name") and video_file.name else ".mp4"
+            if not suffix:
+              suffix = ".mp4"
+
+            tfile = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
             video_file.seek(0)
             tfile.write(video_file.read())
             tfile.close()
@@ -2575,10 +2587,12 @@ elif page == "OCR":
               fps = 30.0
             total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
             frame_interval = max(1, int(fps * 1.0)) # sample 1 frame per second
+            if total_frames > 0 and (total_frames / frame_interval) < 3:
+              frame_interval = max(1, int(fps * 0.5))
 
             frame_count = 0
             timeline_results = []
-            seen_texts = set()
+            seen_lines = set()
             progress_bar = st.progress(0)
             status_text = st.empty()
 
@@ -2593,7 +2607,6 @@ elif page == "OCR":
                     if total_frames > 0:
                         progress_bar.progress(min(1.0, frame_count / total_frames))
 
-                    # Apply rotation and flip transformations to video frame
                     if rotation_mode == "90° Clockwise":
                         frame = cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
                     elif rotation_mode == "180° Inverted":
@@ -2603,16 +2616,25 @@ elif page == "OCR":
                     if flip_h:
                         frame = cv2.flip(frame, 1)
 
-                    frame_text = ocr_reader.extract_text_simple(frame, min_confidence=0.3, rotation_info=[90, 180, 270])
-                    clean_text = frame_text.strip()
-                    if clean_text:
-                        norm_text = " ".join(clean_text.lower().split())
-                        if norm_text not in seen_texts:
-                            seen_texts.add(norm_text)
-                            timeline_results.append({
-                                "time": time_str,
-                                "text": clean_text
-                            })
+                    h, w = frame.shape[:2]
+                    if max(h, w) > 1280:
+                      scale = 1280.0 / max(h, w)
+                      frame = cv2.resize(frame, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
+
+                    frame_text = ocr_reader.extract_text_simple(frame, min_confidence=0.20, rotation_info=effective_rot_info)
+                    lines_in_frame = [l.strip() for l in frame_text.splitlines() if len(l.strip()) > 1]
+                    new_unique_lines = []
+                    for line in lines_in_frame:
+                      norm = line.lower().strip()
+                      if norm not in seen_lines:
+                        seen_lines.add(norm)
+                        new_unique_lines.append(line)
+
+                    if new_unique_lines:
+                      timeline_results.append({
+                        "time": time_str,
+                        "text": "\n".join(new_unique_lines)
+                      })
                 frame_count += 1
             cap.release()
             progress_bar.progress(1.0)
@@ -2630,7 +2652,14 @@ elif page == "OCR":
             else:
                 text = ""
           else:
-            text = ocr_reader.extract_text_simple(cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR), rotation_info=[90, 180, 270])
+            bgr_img = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
+            text = ocr_reader.extract_text_simple(bgr_img, min_confidence=0.20, rotation_info=effective_rot_info)
+            if not text.strip():
+              gray = cv2.cvtColor(bgr_img, cv2.COLOR_BGR2GRAY)
+              clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+              enhanced = clahe.apply(gray)
+              enhanced_bgr = cv2.cvtColor(enhanced, cv2.COLOR_GRAY2BGR)
+              text = ocr_reader.extract_text_simple(enhanced_bgr, min_confidence=0.20, rotation_info=effective_rot_info)
 
           st.session_state["ocr_text"] = text
       

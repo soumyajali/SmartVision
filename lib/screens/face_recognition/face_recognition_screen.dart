@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../../core/constants/app_colors.dart';
 import '../../services/camera_service.dart';
@@ -28,19 +29,28 @@ class _FaceRecognitionScreenState extends State<FaceRecognitionScreen> {
   bool _isVerified = true;
   bool _isScanning = false;
 
-  Future<void> _enrollNewFace(String name, String role) async {
+  Future<void> _enrollNewFace(String name, String role, [Uint8List? directBytes]) async {
     final cameraService = context.read<CameraService>();
     final speechService = context.read<SpeechService>();
 
     String b64Image = "";
     try {
-      if (cameraService.controller != null && cameraService.isInitialized) {
+      if (directBytes != null) {
+        b64Image = base64Encode(directBytes);
+      } else if (cameraService.controller != null && cameraService.isInitialized) {
         final xfile = await cameraService.controller!.takePicture();
         final bytes = await xfile.readAsBytes();
         b64Image = base64Encode(bytes);
       } else {
-        final bytes = await rootBundle.load('assets/samples/classroom.jpg');
-        b64Image = base64Encode(bytes.buffer.asUint8List());
+        final picker = ImagePicker();
+        final picked = await picker.pickImage(source: ImageSource.gallery);
+        if (picked != null) {
+          final bytes = await picked.readAsBytes();
+          b64Image = base64Encode(bytes);
+        } else {
+          final bytes = await rootBundle.load('assets/samples/classroom.jpg');
+          b64Image = base64Encode(bytes.buffer.asUint8List());
+        }
       }
 
       await _apiService.registerFace(base64Image: b64Image, name: name);
@@ -124,8 +134,15 @@ class _FaceRecognitionScreenState extends State<FaceRecognitionScreen> {
         final bytes = await xfile.readAsBytes();
         b64Image = base64Encode(bytes);
       } else {
-        final bytes = await rootBundle.load('assets/samples/classroom.jpg');
-        b64Image = base64Encode(bytes.buffer.asUint8List());
+        final picker = ImagePicker();
+        final picked = await picker.pickImage(source: ImageSource.gallery);
+        if (picked != null) {
+          final bytes = await picked.readAsBytes();
+          b64Image = base64Encode(bytes);
+        } else {
+          final bytes = await rootBundle.load('assets/samples/classroom.jpg');
+          b64Image = base64Encode(bytes.buffer.asUint8List());
+        }
       }
 
       final recs = await _apiService.recognizeFace(base64Image: b64Image);
@@ -269,7 +286,7 @@ class _FaceRecognitionScreenState extends State<FaceRecognitionScreen> {
                   ],
                 ),
                 SliderTheme(
-                  data: SliderThemeData(
+                  data: const SliderThemeData(
                     trackHeight: 3,
                     activeTrackColor: AppColors.neonAccent,
                     thumbColor: AppColors.neonAccent,

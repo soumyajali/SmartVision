@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 
@@ -23,6 +24,11 @@ class _CameraDetectionScreenState extends State<CameraDetectionScreen> with Widg
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        context.read<CameraService>().initialize();
+      }
+    });
   }
 
   @override
@@ -235,6 +241,23 @@ class _CameraDetectionScreenState extends State<CameraDetectionScreen> with Widg
                     icon: Icons.flip_camera_ios_rounded,
                     tooltip: 'Switch Camera',
                     onPressed: cameraService.switchCamera,
+                  ),
+                  const SizedBox(width: 8),
+                  ControlButton(
+                    icon: Icons.photo_library_rounded,
+                    tooltip: 'Analyze Image from Gallery',
+                    onPressed: () async {
+                      try {
+                        final picker = ImagePicker();
+                        final picked = await picker.pickImage(source: ImageSource.gallery);
+                        if (picked != null) {
+                          final bytes = await picked.readAsBytes();
+                          if (context.mounted) {
+                            await context.read<DetectionController>().analyzeImageBytes(bytes);
+                          }
+                        }
+                      } catch (_) {}
+                    },
                   ),
                 ],
               ),

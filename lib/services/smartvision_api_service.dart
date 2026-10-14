@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:developer';
 import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import '../models/detection_result.dart';
 import 'distance_estimator.dart';
@@ -122,11 +123,14 @@ class SmartVisionApiService extends ChangeNotifier {
             dist = est.distanceM;
           }
 
+          final isHazard = {'knife', 'scissors', 'gun', 'fire'}.contains(label.toLowerCase());
+
           return DetectionResult(
-            rect: Rect.fromLTRB(left, top, right, bottom),
+            boundingBox: Rect.fromLTRB(left, top, right, bottom),
             label: label,
             confidence: conf,
             distanceM: dist,
+            isHazard: isHazard,
           );
         }).where((r) => r.confidence >= minConfidence).toList();
       }
@@ -155,7 +159,7 @@ class SmartVisionApiService extends ChangeNotifier {
         bottom: 0.90,
       );
       results.add(DetectionResult(
-        rect: const Rect.fromLTRB(0.20, 0.15, 0.80, 0.90),
+        boundingBox: const Rect.fromLTRB(0.20, 0.15, 0.80, 0.90),
         label: 'person',
         confidence: 0.92,
         distanceM: distEstPerson.distanceM,
@@ -171,7 +175,7 @@ class SmartVisionApiService extends ChangeNotifier {
         bottom: 0.78,
       );
       results.add(DetectionResult(
-        rect: const Rect.fromLTRB(0.55, 0.45, 0.85, 0.78),
+        boundingBox: const Rect.fromLTRB(0.55, 0.45, 0.85, 0.78),
         label: objType,
         confidence: 0.87,
         distanceM: distEstObj.distanceM,

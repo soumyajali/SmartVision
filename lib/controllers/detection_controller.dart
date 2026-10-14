@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:developer';
 
-import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
 
 import '../models/detection_history.dart';
@@ -19,6 +18,8 @@ class DetectionController extends ChangeNotifier {
   final SpeechService _speechService;
   final DatabaseService _databaseService;
   final SmartVisionApiService _apiService = SmartVisionApiService();
+
+  TFLiteService get tfliteService => _tfliteService;
 
   bool _isDetecting = false;
   bool _isProcessingFrame = false;
@@ -231,6 +232,7 @@ class DetectionController extends ChangeNotifier {
               objectName: result.label,
               confidence: result.confidence,
               timestamp: now,
+              boundingBox: result.boundingBox,
             ),
           );
         } catch (e) {
