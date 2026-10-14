@@ -23,6 +23,7 @@ dependencies:
   intl: ^0.19.0
   fl_chart: ^0.66.0
   http: ^1.2.0
+  image_picker: ^1.2.4
 
 dev_dependencies:
   flutter_test:
@@ -35,3 +36,4 @@ flutter:
     - assets/models/labels.txt
     - assets/models/yolov8n.tflite
     - assets/
+    - assets/samples/

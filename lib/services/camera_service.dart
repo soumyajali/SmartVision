@@ -30,6 +30,8 @@ class CameraService extends ChangeNotifier {
     await checkPermission();
     if (_permissionStatus == CameraPermissionStatus.granted) {
       await _initCamera();
+    } else if (_permissionStatus == CameraPermissionStatus.undetermined) {
+      await requestPermission();
     }
   }
 

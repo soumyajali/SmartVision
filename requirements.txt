@@ -15,3 +15,5 @@ mediapipe
 faiss-cpu
 shapely
 lapx
+setuptools<81
+plotly

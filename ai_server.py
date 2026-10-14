@@ -46,11 +46,19 @@ if os.path.exists('yolov8s-world.pt'):
     except Exception as e:
         print(f"Notice: Open-vocabulary YOLO-World model could not be loaded: {e}")
 
-# EasyOCR
-ocr_reader = easyocr.Reader(['en'], gpu=False) # Switch to GPU if available
+# EasyOCR - do not force remote downloads in offline environments.
+ocr_reader = None
+try:
+    ocr_reader = easyocr.Reader(['en'], gpu=False, download_enabled=False)
+except Exception as exc:
+    print(f"Warning: EasyOCR model unavailable offline; OCR endpoints will be disabled: {exc}")
 
 # Face Recognition Service & FAISS Vector Index (PPT Slides 10 & 13)
-face_service = FaceService()
+try:
+    face_service = FaceService()
+except Exception as exc:
+    print(f"Warning: Face recognition unavailable offline; using degraded mode: {exc}")
+    face_service = None
 faiss_store = FAISSStore(embedding_dim=128)
 
 print("Models ready!")
@@ -69,6 +77,19 @@ class ChatbotRequest(BaseModel):
     gemini_key: Optional[str] = ""
     openai_key: Optional[str] = ""
     ocr_text: Optional[str] = ""
+
+class TranslateRequest(BaseModel):
+    text: str
+    target_lang: str = "Hindi"
+
+class SummarizeRequest(BaseModel):
+    text: str
+    max_sentences: Optional[int] = 3
+
+class VideoReviewRequest(BaseModel):
+    video_base64: str
+    target_object: Optional[str] = "person"
+    confidence_threshold: Optional[float] = 0.25
 
 def decode_image(base64_str: str) -> np.ndarray:
     try:
@@ -139,6 +160,8 @@ async def detect_objects(req: ImageRequest):
 
 @app.post('/ocr')
 async def detect_text(req: ImageRequest):
+    if ocr_reader is None:
+        return {'texts': [], 'message': 'OCR is unavailable because the model could not be loaded offline.'}
     try:
         img = decode_image(req.image)
         if img is None:
@@ -163,6 +186,11 @@ async def detect_text(req: ImageRequest):
 
 @app.post('/face/register')
 async def register_face(req: FaceRegisterRequest, name: Optional[str] = Query(None)):
+    if face_service is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Face recognition is unavailable because the required model download was blocked in offline mode.",
+        )
     try:
         person_name = req.name or name
         if not person_name:
@@ -190,6 +218,8 @@ async def register_face(req: FaceRegisterRequest, name: Optional[str] = Query(No
 
 @app.post('/face/recognize')
 async def recognize_face(req: ImageRequest):
+    if face_service is None:
+        return {'recognitions': []}
     try:
         img = decode_image(req.image)
         if img is None:
@@ -198,9 +228,13 @@ async def recognize_face(req: ImageRequest):
         name, conf, bbox = face_service.recognize_face_details(img)
         recognitions = []
         if name:
-            is_unrec = "Unknown" in name or "unknown" in name
-            clean_name = "Unknown" if is_unrec else name
-            conf_val = round(max(0.0, 1.0 - min(1.0, float(conf or 50.0) / 100.0)), 2)
+            is_unrec = name.lower().startswith("unknown") or name == "Not Registered"
+            clean_name = "Not Registered" if is_unrec else name
+            conf_val = (
+                round(max(0.0, min(1.0, float(conf or 0.0))), 2)
+                if clean_name != "Not Registered"
+                else 0.0
+            )
             recognitions.append({
                 "name": clean_name,
                 "confidence": conf_val,
@@ -238,6 +272,141 @@ async def chatbot_query(req: ChatbotRequest):
             "provider": assistant.provider,
             "status": "success"
         }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+GOOGLE_LANG_MAP = {
+    "Hindi": "hi", "Telugu": "te", "Tamil": "ta", "Kannada": "kn", "Malayalam": "ml", 
+    "Marathi": "mr", "Bengali": "bn", "Gujarati": "gu", "Punjabi": "pa", "Odia": "or", "Urdu": "ur",
+    "Spanish": "es", "French": "fr", "German": "de", "Chinese (simplified)": "zh-CN",
+    "Japanese": "ja", "Russian": "ru", "Arabic": "ar", "English": "en"
+}
+MYMEMORY_LANG_MAP = {
+    "Hindi": "hi-IN", "Telugu": "te-IN", "Tamil": "ta-IN", "Kannada": "kn-IN", "Malayalam": "ml-IN", 
+    "Marathi": "mr-IN", "Bengali": "bn-IN", "Gujarati": "gu-IN", "Punjabi": "pa-IN", "Odia": "or-IN", "Urdu": "ur-PK",
+    "Spanish": "es-ES", "French": "fr-FR", "German": "de-DE", "Chinese (simplified)": "zh-CN",
+    "Japanese": "ja-JP", "Russian": "ru-RU", "Arabic": "ar-SA", "English": "en-US"
+}
+
+@app.post('/translate')
+async def translate_text(req: TranslateRequest):
+    if not req.text or not req.text.strip():
+        return {"translated_text": "", "target_lang": req.target_lang}
+    
+    text = req.text.strip()
+    target_code = GOOGLE_LANG_MAP.get(req.target_lang, req.target_lang.lower())
+    
+    import re
+    sentences = re.split(r'(\. |\n+|\? |\! )', text)
+    chunks = []
+    current = ''
+    for part in sentences:
+        if not part: continue
+        if len(current) + len(part) <= 350:
+            current += part
+        else:
+            if current.strip(): chunks.append(current.strip())
+            current = part
+    if current.strip(): chunks.append(current.strip())
+    if not chunks: chunks = [text]
+
+    translated = None
+    try:
+        from deep_translator import GoogleTranslator
+        translator = GoogleTranslator(source='auto', target=target_code)
+        translated_parts = [translator.translate(c) for c in chunks if c.strip()]
+        translated = " ".join(filter(None, translated_parts))
+    except Exception as e1:
+        try:
+            from deep_translator import MyMemoryTranslator
+            mymemory_code = MYMEMORY_LANG_MAP.get(req.target_lang, "hi-IN")
+            translator = MyMemoryTranslator(source='en-US', target=mymemory_code)
+            translated_parts = [translator.translate(c) for c in chunks if c.strip()]
+            translated = " ".join(filter(None, translated_parts))
+        except Exception as e2:
+            raise HTTPException(status_code=500, detail=f"Translation error: {e1} / {e2}")
+
+    return {"translated_text": translated or text, "target_lang": req.target_lang}
+
+@app.post('/summarize')
+async def summarize_text(req: SummarizeRequest):
+    if not req.text or not req.text.strip():
+        return {"summary": "", "sentence_count": 0}
+    
+    text = req.text.strip()
+    import re
+    sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+', text) if len(s.strip()) > 10]
+    if len(sentences) <= (req.max_sentences or 3):
+        return {"summary": text, "sentence_count": len(sentences)}
+
+    words = re.findall(r'\b[a-zA-Z]{3,}\b', text.lower())
+    freq = {}
+    for w in words:
+        freq[w] = freq.get(w, 0) + 1
+
+    scored = []
+    for idx, s in enumerate(sentences):
+        s_words = re.findall(r'\b[a-zA-Z]{3,}\b', s.lower())
+        score = sum(freq.get(w, 0) for w in s_words) / max(1, len(s_words))
+        if idx == 0: score *= 1.3
+        if idx == len(sentences) - 1: score *= 1.2
+        scored.append((score, idx, s))
+
+    scored.sort(reverse=True)
+    top_sentences = sorted(scored[:(req.max_sentences or 3)], key=lambda x: x[1])
+    summary = " ".join([s[2] for s in top_sentences])
+    return {"summary": summary, "sentence_count": len(top_sentences)}
+
+@app.post('/video/review')
+async def review_video(req: VideoReviewRequest):
+    try:
+        import tempfile
+        video_bytes = base64.b64decode(req.video_base64)
+        with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as tf:
+            tf.write(video_bytes)
+            tf_path = tf.name
+
+        cap = cv2.VideoCapture(tf_path)
+        fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+        frame_interval = max(1, int(fps * 1.0)) # 1 frame per second
+
+        timeline = []
+        target = (req.target_object or "").lower().strip()
+        conf_thresh = req.confidence_threshold or 0.25
+
+        frame_idx = 0
+        while cap.isOpened():
+            ret, frame = cap.read()
+            if not ret: break
+            if frame_idx % frame_interval == 0:
+                sec = frame_idx / fps
+                time_str = f"{int(sec//60):02d}:{int(sec%60):02d}"
+                res = yolo_model.predict(frame, conf=conf_thresh, verbose=False)
+                frame_matches = []
+                for r in res:
+                    for box in r.boxes:
+                        label = yolo_model.names[int(box.cls[0])]
+                        conf = float(box.conf[0])
+                        if not target or target in label.lower():
+                            x1, y1, x2, y2 = box.xyxyn[0].tolist()
+                            frame_matches.append({
+                                "label": label,
+                                "confidence": conf,
+                                "rect": {"left": x1, "top": y1, "right": x2, "bottom": y2}
+                            })
+                if frame_matches:
+                    timeline.append({
+                        "timestamp": time_str,
+                        "seconds": round(sec, 2),
+                        "detections": frame_matches
+                    })
+            frame_idx += 1
+
+        cap.release()
+        try: os.unlink(tf_path)
+        except: pass
+
+        return {"target": target, "total_events": len(timeline), "timeline": timeline}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

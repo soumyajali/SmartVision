@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../controllers/detection_controller.dart';
 import '../../core/constants/app_colors.dart';
 import '../../services/speech_service.dart';
 
@@ -51,13 +52,17 @@ class _DangerAlertScreenState extends State<DangerAlertScreen> with SingleTicker
 
   @override
   Widget build(BuildContext context) {
+    final detectionCtrl = context.watch<DetectionController>();
+    final isThreatActive = detectionCtrl.hasActiveHazard || _threatDetected;
+    final threatName = detectionCtrl.activeHazardLabel?.toUpperCase() ?? _detectedThreat;
+
     return Scaffold(
       backgroundColor: AppColors.primaryBackground,
       appBar: AppBar(
         title: const Text('Threat & Hazard Sentinel'),
         actions: [
           IconButton(
-            icon: Icon(_threatDetected ? Icons.security_rounded : Icons.shield_outlined, color: AppColors.neonAccent),
+            icon: Icon(isThreatActive ? Icons.security_rounded : Icons.shield_outlined, color: AppColors.neonAccent),
             tooltip: 'Toggle Threat Status',
             onPressed: () {
               setState(() => _threatDetected = !_threatDetected);
@@ -69,7 +74,7 @@ class _DangerAlertScreenState extends State<DangerAlertScreen> with SingleTicker
         padding: const EdgeInsets.all(16),
         children: [
           // Threat Banner with pulsing animation
-          if (_threatDetected)
+          if (isThreatActive)
             AnimatedBuilder(
               animation: _pulseController,
               builder: (context, child) {
@@ -119,7 +124,7 @@ class _DangerAlertScreenState extends State<DangerAlertScreen> with SingleTicker
                                 ),
                                 const SizedBox(height: 2),
                                 Text(
-                                  'Dangerous Object: $_detectedThreat (${(_threatConfidence * 100).toInt()}% confidence)',
+                                  'Dangerous Object: $threatName (${(_threatConfidence * 100).toInt()}% confidence)',
                                   style: const TextStyle(color: AppColors.primaryText, fontSize: 13),
                                 ),
                               ],

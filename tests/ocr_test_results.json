@@ -1,7 +1,7 @@
 {
   "engine_load": {
     "status": "PASS",
-    "time_sec": 2.11
+    "time_sec": 1.72
   },
   "image_ocr_baseline": {
     "status": "PASS",
@@ -17,7 +17,7 @@
   },
   "degradation": {
     "dark_cer": 3.9,
-    "blur_cer": 100.0,
+    "blur_cer": 97.4,
     "noisy_cer": 3.9
   },
   "video_ocr": {
