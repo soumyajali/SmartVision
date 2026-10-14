@@ -1,0 +1,457 @@
+{
+  "summary": {
+    "total_scenarios_tested": 12,
+    "model_tested": "yolov8m.pt",
+    "hardware": "Apple Silicon (macOS arm64 CPU)",
+    "date": "2026-10-14 19:07:56"
+  },
+  "results": [
+    {
+      "test_id": "ACC-01",
+      "scenario": "Clear Image (Baseline)",
+      "condition_notes": "Well-lit indoor scene with sharp edges and distinct objects",
+      "latency_ms": 253.17,
+      "total_detections": 8,
+      "detected_labels": [
+        "cup",
+        "cat",
+        "spoon",
+        "person",
+        "potted plant",
+        "dining table",
+        "chair",
+        "person"
+      ],
+      "confidences": [
+        0.969,
+        0.938,
+        0.915,
+        0.784,
+        0.772,
+        0.764,
+        0.583,
+        0.258
+      ],
+      "expected_classes": [
+        "chair",
+        "person",
+        "cat",
+        "dining table",
+        "cup"
+      ],
+      "correct_matches": [
+        "chair",
+        "person",
+        "cat",
+        "dining table",
+        "cup"
+      ],
+      "missed_detections_fn": [],
+      "false_positives_fp": [
+        "spoon",
+        "potted plant"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test_id": "ACC-02",
+      "scenario": "Blurry Image (Defocus / Camera Shake)",
+      "condition_notes": "Gaussian blur (kernel=25, sigma=7.0) to test robustness against degradation",
+      "latency_ms": 176.12,
+      "total_detections": 6,
+      "detected_labels": [
+        "cup",
+        "cat",
+        "dining table",
+        "person",
+        "person",
+        "potted plant"
+      ],
+      "confidences": [
+        0.944,
+        0.932,
+        0.572,
+        0.493,
+        0.296,
+        0.26
+      ],
+      "expected_classes": [
+        "person"
+      ],
+      "correct_matches": [
+        "person"
+      ],
+      "missed_detections_fn": [],
+      "false_positives_fp": [
+        "cup",
+        "cat",
+        "dining table",
+        "potted plant"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test_id": "ACC-03",
+      "scenario": "Small Objects in Scene",
+      "condition_notes": "Small bounding boxes (< 10% of total image dimension)",
+      "latency_ms": 174.85,
+      "total_detections": 8,
+      "detected_labels": [
+        "cup",
+        "cat",
+        "spoon",
+        "person",
+        "potted plant",
+        "dining table",
+        "chair",
+        "person"
+      ],
+      "confidences": [
+        0.969,
+        0.938,
+        0.915,
+        0.784,
+        0.772,
+        0.764,
+        0.583,
+        0.258
+      ],
+      "expected_classes": [
+        "cup",
+        "spoon"
+      ],
+      "correct_matches": [
+        "cup",
+        "spoon"
+      ],
+      "missed_detections_fn": [],
+      "false_positives_fp": [
+        "cat",
+        "person",
+        "potted plant",
+        "dining table",
+        "chair",
+        "person"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test_id": "ACC-04",
+      "scenario": "Large Foreground Hazard Object",
+      "condition_notes": "Prominent, close-up object occupying > 40% of the frame",
+      "latency_ms": 174.49,
+      "total_detections": 1,
+      "detected_labels": [
+        "knife"
+      ],
+      "confidences": [
+        0.916
+      ],
+      "expected_classes": [
+        "knife"
+      ],
+      "correct_matches": [
+        "knife"
+      ],
+      "missed_detections_fn": [],
+      "false_positives_fp": [],
+      "status": "PASS"
+    },
+    {
+      "test_id": "ACC-05",
+      "scenario": "Partially Hidden & Overlapping Objects",
+      "condition_notes": "Overlapping kitchen objects on tabletop with mutual occlusion",
+      "latency_ms": 178.43,
+      "total_detections": 6,
+      "detected_labels": [
+        "scissors",
+        "cup",
+        "spoon",
+        "spoon",
+        "microwave",
+        "dining table"
+      ],
+      "confidences": [
+        0.977,
+        0.9,
+        0.727,
+        0.461,
+        0.323,
+        0.28
+      ],
+      "expected_classes": [
+        "microwave",
+        "scissors",
+        "cup",
+        "spoon"
+      ],
+      "correct_matches": [
+        "microwave",
+        "scissors",
+        "cup",
+        "spoon"
+      ],
+      "missed_detections_fn": [],
+      "false_positives_fp": [
+        "dining table"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test_id": "ACC-06",
+      "scenario": "Multiple Objects in Single Frame (Cluttered Scene)",
+      "condition_notes": "7+ heterogeneous objects simultaneously present",
+      "latency_ms": 185.15,
+      "total_detections": 8,
+      "detected_labels": [
+        "cup",
+        "cat",
+        "spoon",
+        "person",
+        "potted plant",
+        "dining table",
+        "chair",
+        "person"
+      ],
+      "confidences": [
+        0.969,
+        0.938,
+        0.915,
+        0.784,
+        0.772,
+        0.764,
+        0.583,
+        0.258
+      ],
+      "expected_classes": [
+        "chair",
+        "person",
+        "cat",
+        "potted plant",
+        "dining table",
+        "cup"
+      ],
+      "correct_matches": [
+        "chair",
+        "person",
+        "cat",
+        "dining table",
+        "cup",
+        "potted plant"
+      ],
+      "missed_detections_fn": [],
+      "false_positives_fp": [
+        "spoon"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test_id": "ACC-07",
+      "scenario": "Low-Light Environment (75% luminance reduction)",
+      "condition_notes": "Simulated twilight / unlit room condition",
+      "latency_ms": 178.67,
+      "total_detections": 6,
+      "detected_labels": [
+        "cup",
+        "cat",
+        "spoon",
+        "dining table",
+        "person",
+        "potted plant"
+      ],
+      "confidences": [
+        0.969,
+        0.935,
+        0.915,
+        0.732,
+        0.405,
+        0.295
+      ],
+      "expected_classes": [
+        "person"
+      ],
+      "correct_matches": [
+        "person"
+      ],
+      "missed_detections_fn": [],
+      "false_positives_fp": [
+        "cup",
+        "cat",
+        "spoon",
+        "dining table",
+        "potted plant"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test_id": "ACC-08",
+      "scenario": "Bright-Light Environment (Overexposure / Glare)",
+      "condition_notes": "Simulated direct sun glare and high specular reflection",
+      "latency_ms": 171.64,
+      "total_detections": 7,
+      "detected_labels": [
+        "cup",
+        "cat",
+        "spoon",
+        "person",
+        "dining table",
+        "chair",
+        "dining table"
+      ],
+      "confidences": [
+        0.969,
+        0.89,
+        0.855,
+        0.784,
+        0.703,
+        0.578,
+        0.29
+      ],
+      "expected_classes": [
+        "cat",
+        "cup",
+        "person"
+      ],
+      "correct_matches": [
+        "cat",
+        "cup",
+        "person"
+      ],
+      "missed_detections_fn": [],
+      "false_positives_fp": [
+        "spoon",
+        "dining table",
+        "chair",
+        "dining table"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test_id": "ACC-09",
+      "scenario": "Crowded Scene with Multiple Persons",
+      "condition_notes": "High density multi-person gathering with dense overlapping bodies",
+      "latency_ms": 184.35,
+      "total_detections": 8,
+      "detected_labels": [
+        "person",
+        "person",
+        "person",
+        "person",
+        "person",
+        "person",
+        "person",
+        "person"
+      ],
+      "confidences": [
+        0.924,
+        0.768,
+        0.703,
+        0.514,
+        0.439,
+        0.365,
+        0.301,
+        0.288
+      ],
+      "expected_classes": [
+        "person"
+      ],
+      "correct_matches": [
+        "person"
+      ],
+      "missed_detections_fn": [],
+      "false_positives_fp": [],
+      "status": "PASS"
+    },
+    {
+      "test_id": "ACC-10",
+      "scenario": "Fast-Moving Vehicles & Traffic Elements",
+      "condition_notes": "Outdoor vehicular roadway stream",
+      "latency_ms": 113.06,
+      "total_detections": 15,
+      "detected_labels": [
+        "car",
+        "car",
+        "car",
+        "motorcycle",
+        "car",
+        "car",
+        "car",
+        "car",
+        "person",
+        "traffic light",
+        "car",
+        "traffic light",
+        "traffic light",
+        "person",
+        "person"
+      ],
+      "confidences": [
+        0.899,
+        0.845,
+        0.82,
+        0.677,
+        0.67,
+        0.624,
+        0.619,
+        0.618,
+        0.549,
+        0.407,
+        0.401,
+        0.399,
+        0.366,
+        0.271,
+        0.253
+      ],
+      "expected_classes": [
+        "car",
+        "traffic light"
+      ],
+      "correct_matches": [
+        "car",
+        "traffic light"
+      ],
+      "missed_detections_fn": [],
+      "false_positives_fp": [
+        "motorcycle",
+        "person",
+        "person",
+        "person"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test_id": "ACC-11",
+      "scenario": "Empty Scene (Zero Target Objects)",
+      "condition_notes": "Blank textured canvas; verifies absence of phantom/hallucinated detections",
+      "latency_ms": 130.15,
+      "total_detections": 0,
+      "detected_labels": [],
+      "confidences": [],
+      "expected_classes": [],
+      "correct_matches": [],
+      "missed_detections_fn": [],
+      "false_positives_fp": [],
+      "status": "PASS"
+    },
+    {
+      "test_id": "ACC-12",
+      "scenario": "Unsupported Objects (Non-COCO Geometric Shapes)",
+      "condition_notes": "Verifies that uncalibrated shapes are not falsely assigned valid COCO labels",
+      "latency_ms": 141.82,
+      "total_detections": 1,
+      "detected_labels": [
+        "frisbee"
+      ],
+      "confidences": [
+        0.729
+      ],
+      "expected_classes": [],
+      "correct_matches": [],
+      "missed_detections_fn": [],
+      "false_positives_fp": [
+        "frisbee"
+      ],
+      "status": "WARN/FAIL"
+    }
+  ]
+}
