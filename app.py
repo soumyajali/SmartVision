@@ -993,13 +993,32 @@ if page in ["Dashboard", "Home"]:
     if input_type == "Upload Image":
       file = st.file_uploader("Upload Image", type=["jpg","jpeg","png"], label_visibility="collapsed")
       if file:
-        data = np.frombuffer(file.read(), np.uint8)
-        img_cv = cv2.imdecode(data, cv2.IMREAD_COLOR)
+        from PIL import Image, ImageOps
+        pil = Image.open(file)
+        pil = ImageOps.exif_transpose(pil)
+        img_cv = cv2.cvtColor(np.array(pil), cv2.COLOR_RGB2BGR)
     else:
       snap = st.camera_input("Live Feed", label_visibility="collapsed")
       if snap:
+        from PIL import Image, ImageOps
         pil = Image.open(snap)
+        pil = ImageOps.exif_transpose(pil)
         img_cv = cv2.cvtColor(np.array(pil), cv2.COLOR_RGB2BGR)
+
+    if img_cv is not None:
+      rot_col, flip_col = st.columns([2, 1])
+      with rot_col:
+        od_rot = st.selectbox("Media Rotation", ["0° (Upright)", "90° Clockwise", "180° Inverted", "270° Counter-Clockwise"], index=0, key="od_rot_select")
+      with flip_col:
+        od_flip = st.checkbox("Flip Horizontally", value=False, key="od_flip_check")
+      if od_rot == "90° Clockwise":
+        img_cv = cv2.rotate(img_cv, cv2.ROTATE_90_CLOCKWISE)
+      elif od_rot == "180° Inverted":
+        img_cv = cv2.rotate(img_cv, cv2.ROTATE_180)
+      elif od_rot == "270° Counter-Clockwise":
+        img_cv = cv2.rotate(img_cv, cv2.ROTATE_90_COUNTERCLOCKWISE)
+      if od_flip:
+        img_cv = cv2.flip(img_cv, 1)
         
     # Button Row
     btn_c1, btn_c2, btn_c3, btn_c4, btn_c5 = st.columns([1.5, 1.5, 1, 1, 1])
@@ -1272,6 +1291,7 @@ elif page == "Video Fast Review":
 
     sample_rate = st.slider("Frames per second to analyze", 1, 5, 1, help="Lower is faster but might miss very brief appearances.")
     confidence = st.slider("Detection Confidence", 0.1, 1.0, 0.4, 0.05)
+    vfr_rot = st.selectbox("Video Orientation", ["0° (Original)", "90° Clockwise", "180° Inverted", "270° Counter-Clockwise"], index=0, key="vfr_rot_select", help="Rotate sideways or upside-down video frames.")
 
     st.markdown("</div>", unsafe_allow_html=True)
 
@@ -1328,6 +1348,13 @@ elif page == "Video Fast Review":
           ret, frame = cap.read()
           if not ret:
             break
+
+          if vfr_rot == "90° Clockwise":
+            frame = cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
+          elif vfr_rot == "180° Inverted":
+            frame = cv2.rotate(frame, cv2.ROTATE_180)
+          elif vfr_rot == "270° Counter-Clockwise":
+            frame = cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
 
           if current_frame % frame_skip == 0:
             timestamp_sec = current_frame / fps
@@ -2287,22 +2314,43 @@ elif page == "OCR":
   if input_type == "Upload Image":
     file = st.file_uploader("Upload Image for OCR", type=["jpg", "jpeg", "png"])
     if file:
+      from PIL import ImageOps
       img = Image.open(file)
+      img = ImageOps.exif_transpose(img)
       img_array = np.array(img)
   elif input_type == "Upload Video":
     video_file = st.file_uploader("Upload Video for OCR", type=["mp4", "mov", "avi"])
   else:
     snap = st.camera_input("Take a picture for OCR")
     if snap:
+      from PIL import ImageOps
       img = Image.open(snap)
+      img = ImageOps.exif_transpose(img)
       img_array = np.array(img)
       
   if img_array is not None or video_file is not None:
-    
-    flip_h = st.checkbox("Flip Image Horizontally (Keep checked if text looks backwards)", value=True if input_type == "Live Webcam" else False)
-    if flip_h and img_array is not None:
+    rot_c1, rot_c2 = st.columns([2, 1])
+    with rot_c1:
+      rotation_mode = st.selectbox(
+        "Rotate Media / Orientation",
+        ["Auto-Detect & Rotate", "0° (Upright)", "90° Clockwise", "180° Inverted", "270° Counter-Clockwise"],
+        index=0,
+        key="ocr_rotation_mode",
+        help="Automatically detects orientation or manually rotates 90°/180°/270° for sideways or upside-down images and videos."
+      )
+    with rot_c2:
+      flip_h = st.checkbox("Flip Image Horizontally", value=True if input_type == "Live Webcam" else False, key="ocr_flip_h")
+
+    if img_array is not None:
       import cv2
-      img_array = cv2.flip(img_array, 1)
+      if rotation_mode == "90° Clockwise":
+        img_array = cv2.rotate(img_array, cv2.ROTATE_90_CLOCKWISE)
+      elif rotation_mode == "180° Inverted":
+        img_array = cv2.rotate(img_array, cv2.ROTATE_180)
+      elif rotation_mode == "270° Counter-Clockwise":
+        img_array = cv2.rotate(img_array, cv2.ROTATE_90_COUNTERCLOCKWISE)
+      if flip_h:
+        img_array = cv2.flip(img_array, 1)
       img = Image.fromarray(img_array)
 
     col1, col2 = st.columns(2)
@@ -2318,7 +2366,7 @@ elif page == "OCR":
       st.markdown("<div class='card-box'><b> Extracted Text</b></div>", unsafe_allow_html=True)
       
       if st.button("Extract Text", width="stretch"):
-        with st.spinner("Extracting text locally..."):
+        with st.spinner("Extracting text locally with auto-orientation..."):
           if video_file:
             import tempfile
             import cv2
@@ -2353,7 +2401,17 @@ elif page == "OCR":
                     if total_frames > 0:
                         progress_bar.progress(min(1.0, frame_count / total_frames))
 
-                    frame_text = ocr_reader.extract_text_simple(frame, min_confidence=0.3)
+                    # Apply rotation and flip transformations to video frame
+                    if rotation_mode == "90° Clockwise":
+                        frame = cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
+                    elif rotation_mode == "180° Inverted":
+                        frame = cv2.rotate(frame, cv2.ROTATE_180)
+                    elif rotation_mode == "270° Counter-Clockwise":
+                        frame = cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
+                    if flip_h:
+                        frame = cv2.flip(frame, 1)
+
+                    frame_text = ocr_reader.extract_text_simple(frame, min_confidence=0.3, rotation_info=[90, 180, 270])
                     clean_text = frame_text.strip()
                     if clean_text:
                         norm_text = " ".join(clean_text.lower().split())
@@ -2380,7 +2438,7 @@ elif page == "OCR":
             else:
                 text = ""
           else:
-            text = ocr_reader.extract_text_simple(cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR))
+            text = ocr_reader.extract_text_simple(cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR), rotation_info=[90, 180, 270])
 
           st.session_state["ocr_text"] = text
       

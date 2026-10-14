@@ -125,13 +125,15 @@ class OCRReader:
             print(f"Warning: Could not initialize OCR reader: {e}")
             self.reader = None
     
-    def extract_text(self, image: np.ndarray, min_confidence: float = 0.25) -> List[Dict[str, any]]:
+    def extract_text(self, image: np.ndarray, min_confidence: float = 0.25, rotation_info: list = [90, 180, 270]) -> List[Dict[str, any]]:
         """
         Extract text from an image, sorted in natural reading order (top-to-bottom, left-to-right).
+        Automatically handles any orientation (0°, 90°, 180°, 270°) using rotation_info.
         
         Args:
             image: Input image as numpy array (BGR format from OpenCV)
             min_confidence: Minimum confidence threshold to exclude noise
+            rotation_info: List of rotation angles to check for auto-orientation
             
         Returns:
             List of dictionaries containing text, bounding box, and confidence
@@ -146,7 +148,7 @@ class OCRReader:
             else:
                 image_rgb = image
             
-            results = self.reader.readtext(image_rgb)
+            results = self.reader.readtext(image_rgb, rotation_info=rotation_info)
             
             extracted = []
             for (bbox, text, confidence) in results:
@@ -192,11 +194,12 @@ class OCRReader:
             print(f"Error during OCR: {e}")
             return []
     
-    def extract_text_simple(self, image: np.ndarray, min_confidence: float = 0.25) -> str:
+    def extract_text_simple(self, image: np.ndarray, min_confidence: float = 0.25, rotation_info: list = [90, 180, 270]) -> str:
         """
         Extract text from an image formatted cleanly with line breaks.
+        Supports multi-angle rotation awareness (0°, 90°, 180°, 270°).
         """
-        results = self.extract_text(image, min_confidence=min_confidence)
+        results = self.extract_text(image, min_confidence=min_confidence, rotation_info=rotation_info)
         if not results:
             return ""
         
