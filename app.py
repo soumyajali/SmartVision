@@ -738,8 +738,8 @@ NAVIGATION_PAGES = [
 PRIMARY_NAVIGATION_PAGES = [
   "Dashboard",
   "Video Fast Review",
-  "OCR",
   "Face Registration",
+  "OCR",
   "Object Detection",
   "Drowsiness Monitor",
 ]
@@ -757,8 +757,16 @@ SECONDARY_NAVIGATION_PAGES = [
 ]
 
 NAVIGATION_LABELS = {
+  "Dashboard": "📊 Dashboard",
   "Video Fast Review": "⏩ Fast Video Review",
   "Face Registration": "👤 Face Recognition",
+  "OCR": "🔎 OCR",
+  "Object Detection": "🎯 Object Detection",
+  "Research Evaluation": "🧪 Research Evaluation",
+  "AutoML & Dataset Pipeline": "🧰 AutoML & Dataset Pipeline",
+  "History": "🕘 History",
+  "Settings": "⚙️ Settings",
+  "Drowsiness Monitor": "😴 Drowsiness Monitor",
   "Vision Chatbot": "💬 Vision Chatbot",
   "Voice Assistant": "🎙️ Voice Assistant",
 }
@@ -879,17 +887,13 @@ with st.container(key="feature-navigation"):
     args=("feature_navigation_page",),
   )
 
-for group_name, widget_key, group_pages in (
-  ("More", "more_navigation_page", SECONDARY_NAVIGATION_PAGES),
-  ("AI Tools", "ai_tools_navigation_page", AI_TOOL_NAVIGATION_PAGES),
+for group_name, widget_key, group_pages, container_key in (
+  ("Workspace", "more_navigation_page", SECONDARY_NAVIGATION_PAGES, "secondary-feature-navigation"),
+  ("Help", "ai_tools_navigation_page", AI_TOOL_NAVIGATION_PAGES, "ai-tools-feature-navigation"),
 ):
   st.sidebar.markdown(
     f"<div class='nav-section'>{escape(group_name)}</div>",
     unsafe_allow_html=True,
-  )
-  container_key = (
-    "secondary-feature-navigation" if group_name == "More"
-    else "ai-tools-feature-navigation"
   )
   with st.sidebar.container(key=container_key):
     st.radio(
