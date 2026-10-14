@@ -17,11 +17,11 @@ Traditional surveillance and vision recognition systems depend on heavy, costly 
 
 - **Multi-Class Object Detection:** Powered by state-of-the-art **YOLOv8** architectures (`yolov8n`, `yolov8s-world`, `yolov8m`).
 - **Hazard & Dangerous Object Alerting:** Real-time detection of knives, scissors, firearms, and hazardous materials with visual warning banners and automated siren alarms.
-- **Biometric Face Recognition:** MediaPipe Face Landmarker, OpenCV Haar Cascades, and FAISS vector embeddings for registered face identification.
+- **Biometric Face Recognition:** OpenCV YuNet face detection and SFace embeddings for registered identities, with conservative rejection of weak or ambiguous matches.
 - **Optical Character Recognition (OCR):** Embedded EasyOCR engine for document screening and text reading.
 - **Voice Assistant & Audio Guidance:** Hands-free speech alerts, spoken questions about the current detections, and voice commands for dashboard navigation and settings.
 - **Interactive Web Dashboard:** Rich Streamlit interface featuring 3D visualizations, live analytics, and detection histories.
-- **Cross-Platform Mobile App:** Flutter-based Android mobile application with live camera screening and on-device processing.
+- **Android Mobile App:** Flutter WebView client that opens the same website implementation, including its feature flows and siren controls.
 
 ---
 
@@ -32,7 +32,7 @@ Traditional surveillance and vision recognition systems depend on heavy, costly 
 | 🔍 **Real-Time Object Detection** | Instant bounding-box localization with confidence scores using YOLOv8. |
 | 🚨 **Dangerous Object Alert System** | Flags weapons, fire, and hazardous objects with loud siren audio and screen warnings. |
 | 🔎 **Object Search ("Find My Item")** | Target-specific tracker alerting users via voice when a specific item appears in view. |
-| 👤 **Face Verification & Recognition** | Recognizes registered identities and flags unknown individuals. |
+| 👤 **Face Verification & Recognition** | Uses aligned face embeddings to identify registered people across changes in lighting, camera angle, scene, and clothing; only close, unambiguous matches receive a registered name. Unmatched or ambiguous faces are marked **Not Registered**. Face Registration lets you manage saved images for each identity. |
 | 📄 **Document Screening & OCR** | Extracts text and scanned information from live camera feed. |
 | 🗣️ **Voice Assistant (TTS)** | Context-aware audio feedback (avoids repeated spamming, speaks on fresh detections). |
 | 🎙️ **Voice Questions & Commands** | Ask about detected objects in the Vision Chatbot or use spoken commands to navigate dashboard pages and toggle voice announcements or object tracking. Chatbot and voice-input answers are spoken in the browser using its built-in speech synthesis. Voice input transcription uses Google's online recognition service; an internet connection is required and recordings are sent to Google for transcription. |
@@ -85,6 +85,8 @@ SmartVision/
 - Flutter SDK (for building the Android app)
 - Android Studio with Android SDK (for mobile deployment)
 
+On first startup, face recognition downloads the OpenCV Zoo YuNet and SFace model files (about 37 MB total) into the local application cache and verifies their SHA-256 hashes. An internet connection is required for this one-time setup; registered face images and recognition remain local and are not uploaded.
+
 ### 2. Setup Python Environment
 
 Clone the repository and install dependencies:
@@ -97,8 +99,6 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-On Windows, install Microsoft C++ Build Tools with the **Desktop development with C++** workload before installing dependencies; `face-recognition` needs to build its `dlib` dependency.
-
 ### 3. Launch Streamlit Web Dashboard
 
 ```bash
@@ -110,7 +110,7 @@ Open **Voice Assistant** in the dashboard navigation to record a question or com
 
 The **Vision Chatbot** page includes a conversation history panel and a **New chat** button. Conversations are kept in the current Streamlit session and can be selected again from the panel.
 
-In **Video Fast Review**, reference-image person matching scans sampled video frames for faces independently of person-box detections, using face recognition, MediaPipe face landmarks, and mirrored-view checks to improve matching across frontal and profile views. Person matches use face embeddings only; clothing and body pose are not used. **Strict**, **Balanced**, and **Tolerant** modes control the face-distance threshold, with higher recall increasing the chance of false matches. Increase **Person detection resolution** to improve recall for distant people. A single reference image cannot train a new identity model or guarantee recognition at every angle.
+In **Video Fast Review**, reference-image person matching uses the app's YuNet/SFace face recognizer to compare faces directly in sampled video frames; it does not depend on person detection, clothing, or body shape. **Strict**, **Balanced**, and **Tolerant** modes set the minimum face-similarity threshold, with higher recall increasing the chance of false matches. Increase **Face detection resolution** to improve recall for distant faces. A single reference image cannot train a new identity model or guarantee recognition at every angle.
 
 ### 4. Launch FastAPI Server (for Mobile App)
 
@@ -122,7 +122,10 @@ uvicorn ai_server:app --host 0.0.0.0 --port 8000 --reload
 
 ## 📱 Running the Android Mobile App
 
-The mobile client is located in `app/`:
+The mobile client in `app/` opens the same responsive Smart Vision website in a
+WebView so its detection, OCR, face registration, Fast Review, chatbot, alerts,
+file uploads, and siren controls use the same implementation as the desktop
+site. The website must be running and reachable from the phone.
 
 1. **Navigate to the Flutter directory:**
    ```bash
@@ -138,6 +141,20 @@ The mobile client is located in `app/`:
    ```bash
    flutter run
    ```
+
+Before connecting a physical phone, start Streamlit from the repository root so
+it listens on the network:
+
+```bash
+streamlit run app.py --server.address 0.0.0.0 --server.port 8501
+```
+
+The Android emulator uses `http://10.0.2.2:8501` by default. For a physical
+phone, open the app's connection settings and enter
+`http://<computer-LAN-IP>:8501`; keep the phone and computer on the same Wi-Fi
+network and allow the port through the computer's firewall. The app requests
+camera and microphone permissions when the website uses those features, and
+configures Android WebView to permit siren audio playback.
 
 4. **Build release APK:**
    ```bash

@@ -15,5 +15,5 @@ mediapipe
 faiss-cpu
 shapely
 lapx
-face-recognition
 setuptools<81
+plotly

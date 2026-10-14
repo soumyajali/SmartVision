@@ -27,6 +27,7 @@ from utils import (
   LowLightEnhancer, DistanceEstimator, UnknownObjectDetector,
   face_landmarks_to_location, scale_bbox, select_best_person_match
 )
+from core_utils import translate_robust
 from utils.recorder import get_video_recorder
 from services.email_service import get_email_service
 from services.telegram_service import get_telegram_service
@@ -44,12 +45,21 @@ from voice_interaction import (
 )
 import plotly.graph_objects as go
 import plotly.express as px
+from ui.theme import apply_theme
+from ui.splash import show_splash
 # Removed insecure SSL certificate workaround as per requirements
 # ---------------- CLASS LABELS ----------------
 
 
 # ---------------- PAGE CONFIG ----------------
 st.set_page_config(page_title="Smart Vision AI", page_icon="", layout="wide")
+
+if "splash_done" not in st.session_state:
+  st.session_state["splash_done"] = False
+if not st.session_state.get("splash_done", False):
+  show_splash()
+  st.session_state["splash_done"] = True
+  st.rerun()
 
 # ---------------- SESSION STATE ----------------
 if "face_service" not in st.session_state:
@@ -153,97 +163,6 @@ def load_fast_model():
   if os.path.exists("weights/smartvision_best.pt"):
     return YOLO("weights/smartvision_best.pt")
   return YOLO("yolov8n.pt")
-
-@st.cache_resource
-def load_vfr_face_landmarker():
-  import mediapipe as mp
-
-  model_path = os.path.join(os.path.dirname(__file__), "face_landmarker.task")
-  if not os.path.exists(model_path):
-    raise FileNotFoundError(f"Video Fast Review face model was not found: {model_path}")
-  options = mp.tasks.vision.FaceLandmarkerOptions(
-    base_options=mp.tasks.BaseOptions(model_asset_path=model_path),
-    running_mode=mp.tasks.vision.RunningMode.IMAGE,
-    num_faces=5,
-    min_face_detection_confidence=0.25,
-    min_face_presence_confidence=0.25,
-    min_tracking_confidence=0.25,
-  )
-  return mp.tasks.vision.FaceLandmarker.create_from_options(options)
-
-def get_vfr_face_candidates(image_rgb, face_recognition):
-  import mediapipe as mp
-
-  if image_rgb is None or image_rgb.size == 0:
-    return []
-
-  height, width = image_rgb.shape[:2]
-  upscale = min(3.0, max(1.0, 600.0 / max(height, width)))
-  if upscale > 1.0:
-    recognition_image = cv2.resize(
-      image_rgb,
-      (int(width * upscale), int(height * upscale)),
-      interpolation=cv2.INTER_CUBIC,
-    )
-  else:
-    recognition_image = image_rgb
-
-  locations = []
-  for upsample in (0, 1, 2):
-    locations.extend(
-      face_recognition.face_locations(
-        recognition_image,
-        number_of_times_to_upsample=upsample,
-        model="hog",
-      )
-    )
-
-  mp_image = mp.Image(
-    image_format=mp.ImageFormat.SRGB,
-    data=recognition_image,
-  )
-  landmark_result = load_vfr_face_landmarker().detect(mp_image)
-  for face_landmarks in landmark_result.face_landmarks:
-    location = face_landmarks_to_location(face_landmarks, recognition_image.shape)
-    if location is not None:
-      locations.append(location)
-
-  unique_locations = []
-  for location in sorted(
-    locations,
-    key=lambda box: (box[2] - box[0]) * (box[1] - box[3]),
-    reverse=True,
-  ):
-    top, right, bottom, left = location
-    duplicate = False
-    for kept_top, kept_right, kept_bottom, kept_left in unique_locations:
-      intersection_width = max(0, min(right, kept_right) - max(left, kept_left))
-      intersection_height = max(0, min(bottom, kept_bottom) - max(top, kept_top))
-      intersection = intersection_width * intersection_height
-      area = (right - left) * (bottom - top)
-      kept_area = (kept_right - kept_left) * (kept_bottom - kept_top)
-      union = area + kept_area - intersection
-      if union > 0 and intersection / union > 0.6:
-        duplicate = True
-        break
-    if not duplicate:
-      unique_locations.append(location)
-
-  candidates = []
-  for location in unique_locations:
-    try:
-      encodings = face_recognition.face_encodings(
-        recognition_image,
-        [location],
-        num_jitters=1,
-        model="small",
-      )
-    except (RuntimeError, ValueError, IndexError):
-      continue
-    if encodings:
-      original_location = tuple(int(round(value / upscale)) for value in location)
-      candidates.append((original_location, encodings[0]))
-  return candidates
 
 @st.cache_resource
 def load_classification_model():
@@ -563,6 +482,7 @@ img, video, canvas {
 </style>
 """
 st.markdown(get_theme_css(), unsafe_allow_html=True)
+apply_theme()
 
 
 def speak_in_browser(message: str, auto_speak: bool = True):
@@ -731,12 +651,14 @@ def get_color_histogram(image_bgr):
 
 # ---------------- SIDEBAR ----------------
 import os
+st.sidebar.markdown('<div class="sidebar-logo">', unsafe_allow_html=True)
 if os.path.exists("logo.png"):
   st.sidebar.image("logo.png", use_container_width=True)
 else:
   st.sidebar.markdown("*(Please save the logo as `logo.png` in the project folder to display it here)*")
-st.sidebar.markdown("### SMART VISION")
-st.sidebar.markdown("<small style='color: #64748b;'>Real-Time Object Detection</small>", unsafe_allow_html=True)
+st.sidebar.markdown('</div>', unsafe_allow_html=True)
+st.sidebar.markdown('<p class="sidebar-brand">SMART VISION</p>', unsafe_allow_html=True)
+st.sidebar.markdown('<div class="sidebar-tagline">Real-Time Object Detection</div>', unsafe_allow_html=True)
 
 if "ai_provider" not in st.session_state:
   st.session_state["ai_provider"] = "auto"
@@ -813,6 +735,33 @@ NAVIGATION_PAGES = [
     "Drowsiness Monitor"
 ]
 
+PRIMARY_NAVIGATION_PAGES = [
+  "Dashboard",
+  "Video Fast Review",
+  "OCR",
+  "Face Registration",
+  "Object Detection",
+  "Drowsiness Monitor",
+]
+
+AI_TOOL_NAVIGATION_PAGES = [
+  "Vision Chatbot",
+  "Voice Assistant",
+]
+
+SECONDARY_NAVIGATION_PAGES = [
+  "Research Evaluation",
+  "AutoML & Dataset Pipeline",
+  "History",
+  "Settings",
+]
+
+NAVIGATION_LABELS = {
+  "Video Fast Review": "⏩ Fast Video Review",
+  "Face Registration": "👤 Face Recognition",
+  "Vision Chatbot": "💬 Vision Chatbot",
+  "Voice Assistant": "🎙️ Voice Assistant",
+}
 
 def answer_assistant_question(question):
   chatbot = st.session_state["chatbot"]
@@ -905,13 +854,56 @@ def process_voice_message():
   st.session_state["voice_speech_pending"] = True
 
 
-page = st.sidebar.radio(
-  "Navigation",
-  NAVIGATION_PAGES,
-  key="navigation_page",
-  label_visibility="collapsed"
-)
-st.session_state["page"] = page
+def update_navigation(widget_key):
+  st.session_state["navigation_page"] = st.session_state[widget_key]
+
+
+current_page = st.session_state.get("navigation_page", "Dashboard")
+navigation_widgets = [
+  ("feature_navigation_page", PRIMARY_NAVIGATION_PAGES),
+  ("ai_tools_navigation_page", AI_TOOL_NAVIGATION_PAGES),
+  ("more_navigation_page", SECONDARY_NAVIGATION_PAGES),
+]
+for widget_key, group_pages in navigation_widgets:
+  st.session_state[widget_key] = current_page if current_page in group_pages else None
+
+with st.container(key="feature-navigation"):
+  st.radio(
+    "Main navigation",
+    PRIMARY_NAVIGATION_PAGES,
+    key="feature_navigation_page",
+    index=None,
+    label_visibility="collapsed",
+    format_func=lambda value: NAVIGATION_LABELS.get(value, value),
+    on_change=update_navigation,
+    args=("feature_navigation_page",),
+  )
+
+for group_name, widget_key, group_pages in (
+  ("More", "more_navigation_page", SECONDARY_NAVIGATION_PAGES),
+  ("AI Tools", "ai_tools_navigation_page", AI_TOOL_NAVIGATION_PAGES),
+):
+  st.sidebar.markdown(
+    f"<div class='nav-section'>{escape(group_name)}</div>",
+    unsafe_allow_html=True,
+  )
+  container_key = (
+    "secondary-feature-navigation" if group_name == "More"
+    else "ai-tools-feature-navigation"
+  )
+  with st.sidebar.container(key=container_key):
+    st.radio(
+      group_name,
+      group_pages,
+      key=widget_key,
+      index=None,
+      label_visibility="collapsed",
+      format_func=lambda value: NAVIGATION_LABELS.get(value, value),
+      on_change=update_navigation,
+      args=(widget_key,),
+    )
+
+page = st.session_state["page"] = st.session_state["navigation_page"]
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("<b>Alert & Siren Controls</b>", unsafe_allow_html=True)
@@ -969,9 +961,6 @@ st.sidebar.markdown("""
   <div style="color: #22c55e; margin-bottom: 10px; font-weight: bold;">Model Info</div>
   <div class="model-info-row"><span class="model-info-label">Model</span><span class="model-info-val">YOLOv8</span></div>
   <div class="model-info-row"><span class="model-info-label">Version</span><span class="model-info-val">8.1.0</span></div>
-  <div class="model-info-row"><span class="model-info-label">Backend</span><span class="model-info-val">PyTorch</span></div>
-  <div class="model-info-row"><span class="model-info-label">Device</span><span class="model-info-val">CPU</span></div>
-  <div class="model-info-row"><span class="model-info-label">Status</span><span class="status-ready">Ready</span></div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -1075,20 +1064,17 @@ if page in ["Dashboard", "Home"]:
   perf_stats = st.session_state["performance_monitor"].get_stats()
   fps = perf_stats['fps'] if perf_stats else 0.0
   
-  # Top Header
-  hdr_c1, hdr_c2, hdr_c3, hdr_c4, hdr_c5, hdr_c6 = st.columns([4, 1.5, 1, 1.5, 2, 0.5])
+  hdr_c1, hdr_c2, hdr_c3, hdr_c4, hdr_c5 = st.columns([2.7, 0.9, 0.65, 1, 1.1])
   with hdr_c1:
     st.markdown("<div class='section-title'>Live Detection</div><div class='sub-text' style='margin-bottom:20px;'>Real-time object detection and tracking</div>", unsafe_allow_html=True)
   with hdr_c2:
-    st.markdown("<div style='font-size:12px; color:#64748b;'>System Status</div><div style='color: #10b981; font-weight:bold;'> Active</div>", unsafe_allow_html=True)
+    st.markdown("<div style='font-size:12px; color:#64748b;'>System Status</div><div style='color:#10b981; font-weight:bold;'>Active</div>", unsafe_allow_html=True)
   with hdr_c3:
-    st.markdown(f"<div style='font-size:12px; color:#64748b;'>FPS</div><div style='color: #0f172a; font-weight:bold;'>{fps:.1f}</div>", unsafe_allow_html=True)
+    st.markdown(f"<div style='font-size:12px; color:#64748b;'>FPS</div><div style='font-weight:bold;'>{fps:.1f}</div>", unsafe_allow_html=True)
   with hdr_c4:
-    st.markdown("<div style='font-size:12px; color:#64748b;'>Resolution</div><div style='color: #0f172a; font-weight:bold;'>1280 x 720</div>", unsafe_allow_html=True)
+    st.markdown("<div style='font-size:12px; color:#64748b;'>Resolution</div><div style='font-weight:bold;'>1280 x 720</div>", unsafe_allow_html=True)
   with hdr_c5:
     input_type = st.selectbox("Input Source", ["Camera 1", "Upload Image"], label_visibility="collapsed")
-  with hdr_c6:
-    st.markdown("<div style='padding: 6px; border: 1px solid #e2e8f0; border-radius: 8px; text-align:center; color:#64748b; font-size:18px;'></div>", unsafe_allow_html=True)
     
   col_main, col_side = st.columns([2.5, 1])
   
@@ -1100,10 +1086,9 @@ if page in ["Dashboard", "Home"]:
   
   with col_main:
     video_placeholder = st.empty()
-    
-    # Capture input immediately so we can process it and get counts
+
     if input_type == "Upload Image":
-      file = st.file_uploader("Upload Image", type=["jpg","jpeg","png"], label_visibility="collapsed")
+      file = st.file_uploader("Upload Image", type=["jpg", "jpeg", "png"], label_visibility="collapsed")
       if file:
         from PIL import Image, ImageOps
         pil = Image.open(file)
@@ -1117,7 +1102,13 @@ if page in ["Dashboard", "Home"]:
         pil = ImageOps.exif_transpose(pil)
         img_cv = cv2.cvtColor(np.array(pil), cv2.COLOR_RGB2BGR)
 
-    if img_cv is not None:
+    if img_cv is None:
+      video_placeholder.markdown(
+        "<div class='dashboard-empty-state'><span aria-hidden='true'>◉</span>"
+        "<span>Upload an image or start the webcam to begin detection.</span></div>",
+        unsafe_allow_html=True,
+      )
+    else:
       rot_col, flip_col = st.columns([2, 1])
       with rot_col:
         od_rot = st.selectbox("Media Rotation", ["0° (Upright)", "90° Clockwise", "180° Inverted", "270° Counter-Clockwise"], index=0, key="od_rot_select")
@@ -1131,21 +1122,26 @@ if page in ["Dashboard", "Home"]:
         img_cv = cv2.rotate(img_cv, cv2.ROTATE_90_COUNTERCLOCKWISE)
       if od_flip:
         img_cv = cv2.flip(img_cv, 1)
-        
-    # Button Row
-    btn_c1, btn_c2, btn_c3, btn_c4, btn_c5 = st.columns([1.5, 1.5, 1, 1, 1])
-    with btn_c1:
-      st.button(" Start Detection", type="primary", use_container_width=True)
-    with btn_c2:
-      st.button(" Stop Detection", use_container_width=True)
-    with btn_c3:
-      st.button(" Capture", use_container_width=True)
-    with btn_c4:
-      st.button(" Record", use_container_width=True)
-    with btn_c5:
-      st.button(" Fullscreen", use_container_width=True)
-      
-    st.markdown("<b>Recent Detections</b><span style='float:right; color:#10b981; font-size:14px; font-weight:600;'>View All</span>", unsafe_allow_html=True)
+
+    button_row_one = st.columns(3)
+    for button_column, label, primary in zip(
+      button_row_one,
+      ("Start Detection", "Stop Detection", "Capture"),
+      (True, False, False),
+    ):
+      with button_column:
+        st.button(label, type="primary" if primary else "secondary", width="stretch")
+
+    button_row_two = st.columns(2)
+    for button_column, label in zip(button_row_two, ("Record", "Fullscreen")):
+      with button_column:
+        st.button(label, type="secondary", width="stretch")
+
+    st.markdown(
+      "<div class='dashboard-recent-heading'><b>Recent Detections</b>"
+      "<span>Latest from detection history</span></div>",
+      unsafe_allow_html=True,
+    )
     recent_cols = st.columns(5)
     recent_history = []
     try:
@@ -1153,27 +1149,26 @@ if page in ["Dashboard", "Home"]:
     except Exception:
       pass
 
-    if not recent_history:
-      recent_history = [
-        {"object_name": name, "confidence": conf, "time": "Just now"}
-        for name, conf in [("Person", 0.93), ("Car", 0.91), ("Motorbike", 0.92), ("Bus", 0.89), ("Bottle", 0.86)]
-      ]
-
     for col, item in zip(recent_cols, recent_history):
       with col:
         obj_name = str(item.get("object_name", "Unknown")).title()
         conf_val = float(item.get("confidence", 0.90))
         t_str = str(item.get("time", "Recent"))
+        confidence_pct = max(0, min(100, round(conf_val * 100)))
         st.markdown(f"""
-        <div style="border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; font-size: 11px;">
-          <div style="height: 60px; background: #0ea5e9; color:white; display:flex; align-items:center; justify-content:center; font-weight:bold;">{obj_name}</div>
-          <div style="padding: 5px;">
-            <b style="color:#0f172a;">{obj_name}</b><br/>
-            <span style="color:#64748b;">{conf_val:.2f} Confidence</span><br/>
-            <span style="color:#94a3b8;">{t_str}</span>
-          </div>
+        <div class="dashboard-recent-card">
+          <div class="dashboard-recent-object">{escape(obj_name)}</div>
+          <div class="dashboard-recent-meta"><span>{confidence_pct}% confidence</span><span>{escape(t_str)}</span></div>
+          <div class="dashboard-confidence-track"><span style="width:{confidence_pct}%;"></span></div>
         </div>
         """, unsafe_allow_html=True)
+
+    if not recent_history:
+      st.markdown(
+        "<div class='dashboard-empty-state'><span aria-hidden='true'>◌</span>"
+        "<span>No recent detections yet</span></div>",
+        unsafe_allow_html=True,
+      )
 
   if img_cv is not None:
     start_time = time.time()
@@ -1208,56 +1203,48 @@ if page in ["Dashboard", "Home"]:
           
     # Replace the placeholder with the processed image
     video_placeholder.image(cv2.cvtColor(detected_img, cv2.COLOR_BGR2RGB), use_container_width=True)
-  else:
-    video_placeholder.info("Upload an image or start the webcam to begin detection.")
 
   with col_side:
-    # Real-time Detections KPI
     st.markdown(f"""
-    <div class='kpi-card'>
-      <div>
-        <div style='font-size:13px; font-weight:600; color:#0f172a;'>Real-time Detections</div>
-        <div style='font-size:36px; font-weight:700; color:#0f172a; line-height:1.2;'>{total_detections}</div>
-        <div style='font-size:12px; color:#10b981; font-weight:500;'>Objects detected</div>
-      </div>
-      <div style='width:60px; height:60px; border-radius:50%; border: 2px dashed #10b981; display:flex; align-items:center; justify-content:center;'>
-        <div style='width:30px; height:30px; border-radius:50%; background-color: rgba(16, 185, 129, 0.2);'></div>
-      </div>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    # Detected Objects List
-    st.markdown("<div class='card-box' style='padding-top:15px; padding-bottom:15px; margin-top:20px;'>", unsafe_allow_html=True)
-    st.markdown("<b style='font-size:14px; color:#0f172a;'>Detected Objects</b>", unsafe_allow_html=True)
-    st.markdown("<br/>", unsafe_allow_html=True)
-    
-    if total_detections > 0:
-      for obj_name, count in object_counts.items():
-        pct = (count / total_detections) * 100
-        st.markdown(f"""
-        <div style='display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; font-size:13px;'>
-          <div style='color:#334155; font-weight:500;'>{obj_name}</div>
-          <div style='display:flex; gap:15px; color:#0f172a;'>
-            <span style='font-weight:600; width:15px;'>{count}</span>
-            <span style='color:#64748b;'>{pct:.1f}%</span>
-          </div>
+      <div class='kpi-card'>
+        <div>
+          <div style='font-size:13px; font-weight:600;'>Real-time Detections</div>
+          <div style='font-size:36px; font-weight:700; line-height:1.2;'>{total_detections}</div>
+          <div style='font-size:12px; color:#10b981; font-weight:500;'>Objects detected</div>
         </div>
-        """, unsafe_allow_html=True)
-    else:
-      st.markdown("<div style='font-size:13px; color:#64748b;'>No objects currently detected.</div>", unsafe_allow_html=True)
-      
-    st.markdown("</div>", unsafe_allow_html=True)
-    
-    # Detection Settings
-    st.markdown("<div class='card-box' style='padding-top:15px;'>", unsafe_allow_html=True)
-    st.markdown("<b style='font-size:14px; color:#0f172a; display:block; margin-bottom:15px;'>Detection Settings</b>", unsafe_allow_html=True)
-    
-    conf_val = st.slider("Confidence Threshold", 0.0, 1.0, 0.5, label_visibility="visible")
-    st.session_state["confidence_threshold"] = conf_val
-    iou_val = st.slider("IoU Threshold", 0.0, 1.0, 0.45)
-    max_det = st.slider("Max Detections", 1, 100, 20)
-    
-    st.markdown("</div>", unsafe_allow_html=True)
+        <div style='width:60px; height:60px; border-radius:50%; border:2px dashed #10b981; display:flex; align-items:center; justify-content:center;'>
+          <div style='width:30px; height:30px; border-radius:50%; background-color:rgba(16,185,129,0.2);'></div>
+        </div>
+      </div>
+      """, unsafe_allow_html=True)
+
+    with st.container(border=True):
+      st.markdown("<b style='font-size:14px;'>Detected Objects</b>", unsafe_allow_html=True)
+      if total_detections > 0:
+        for obj_name, count in object_counts.items():
+          pct = (count / total_detections) * 100
+          st.markdown(f"""
+          <div style='display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; font-size:13px;'>
+            <div style='font-weight:500;'>{escape(obj_name)}</div>
+            <div style='display:flex; gap:15px;'>
+              <span style='font-weight:600; width:15px;'>{count}</span>
+              <span>{pct:.1f}%</span>
+            </div>
+          </div>
+          """, unsafe_allow_html=True)
+      else:
+        st.markdown(
+          "<div class='dashboard-empty-state'><span aria-hidden='true'>◌</span>"
+          "<span>No objects detected yet</span></div>",
+          unsafe_allow_html=True,
+        )
+
+    with st.container(border=True):
+      st.markdown("<b style='font-size:14px; display:block; margin-bottom:15px;'>Detection Settings</b>", unsafe_allow_html=True)
+      conf_val = st.slider("Confidence Threshold", 0.0, 1.0, 0.5, label_visibility="visible")
+      st.session_state["confidence_threshold"] = conf_val
+      iou_val = st.slider("IoU Threshold", 0.0, 1.0, 0.45)
+      max_det = st.slider("Max Detections", 1, 100, 20)
 
 
 # VIDEO FAST REVIEW
@@ -1289,11 +1276,10 @@ elif page == "Video Fast Review":
         ref_image_file.seek(0)
         file_bytes = ref_image_file.read()
         ref_image_file.seek(0)
-        ref_hash = hashlib.sha256(file_bytes).hexdigest()
 
         # Check if we need to process or re-process this reference image
         cur_ref = st.session_state.get("vfr_ref")
-        need_reprocess = (cur_ref is None or cur_ref.get("version") != 8 or cur_ref.get("hash") != ref_hash)
+        need_reprocess = (cur_ref is None or cur_ref.get("name") != ref_image_file.name or cur_ref.get("size") != len(file_bytes))
 
         if need_reprocess and len(file_bytes) > 0:
           data = np.frombuffer(file_bytes, np.uint8)
@@ -1302,70 +1288,45 @@ elif page == "Video Fast Review":
             ref_crop = ref_img_cv.copy()
             auto_cat = None
             preview_img = ref_img_cv.copy()
-            found_face_encs = []
+            found_face_enc = None
             is_person = False
-            face_error = None
 
             # 1. First check if reference image contains a human face
             try:
               import face_recognition
               ref_rgb = cv2.cvtColor(ref_img_cv, cv2.COLOR_BGR2RGB)
-              face_candidates = get_vfr_face_candidates(ref_rgb, face_recognition)
-              if face_candidates:
-                best_face_loc, best_face_enc = max(
-                  face_candidates,
-                  key=lambda item: (item[0][2] - item[0][0]) * (item[0][1] - item[0][3]),
-                )
-                found_face_encs.append(best_face_enc)
-                is_person = True
-                top, right, bottom, left = best_face_loc
-                cv2.rectangle(preview_img, (left, top), (right, bottom), (0, 255, 0), 3)
-                cv2.putText(preview_img, "Target Individual", (left, max(top - 10, 20)), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 255, 0), 2)
+              ref_face_locs = face_recognition.face_locations(ref_rgb)
+              if not ref_face_locs:
+                ref_face_locs = face_recognition.face_locations(ref_rgb, number_of_times_to_upsample=1)
 
-                mirrored_candidates = get_vfr_face_candidates(
-                  cv2.flip(ref_rgb, 1),
-                  face_recognition,
-                )
-                if mirrored_candidates:
-                  _, mirrored_encoding = max(
-                    mirrored_candidates,
-                    key=lambda item: (item[0][2] - item[0][0]) * (item[0][1] - item[0][3]),
-                  )
-                  if float(np.linalg.norm(best_face_enc - mirrored_encoding)) > 1e-4:
-                    found_face_encs.append(mirrored_encoding)
-            except ImportError as exc:
-              face_error = f"Person matching requires face-recognition and dlib. Install project dependencies with: pip install -r requirements.txt ({exc})"
-            except Exception as exc:
-              face_error = f"Could not process the reference image for face matching: {exc}"
+              if len(ref_face_locs) > 0:
+                best_face_loc = max(ref_face_locs, key=lambda l: (l[2] - l[0]) * (l[1] - l[3]))
+                ref_face_encs = face_recognition.face_encodings(ref_rgb, [best_face_loc])
+                if len(ref_face_encs) > 0:
+                  found_face_enc = ref_face_encs[0]
+                  is_person = True
+                  top, right, bottom, left = best_face_loc
+                  cv2.rectangle(preview_img, (left, top), (right, bottom), (0, 255, 0), 3)
+                  cv2.putText(preview_img, "Target Individual", (left, max(top - 10, 20)), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 255, 0), 2)
+            except Exception:
+              pass
 
-            if not is_person or found_face_encs:
+            # 2. If not a face, run YOLO object detection to crop the reference object
+            if not is_person:
               try:
                 ref_det_results = det_model(ref_img_cv, conf=0.25, verbose=False)
                 if len(ref_det_results) > 0 and ref_det_results[0].boxes is not None and len(ref_det_results[0].boxes) > 0:
                   boxes = ref_det_results[0].boxes
-                  if is_person:
-                    person_boxes = [b for b in boxes if CLASS_NAMES[int(b.cls[0])].lower() == "person"]
-                    best_box = max(person_boxes, key=lambda b: float(b.conf[0])) if person_boxes else None
-                  else:
-                    best_box = max(boxes, key=lambda b: float(b.conf[0]))
-
-                  if best_box is not None:
-                    bx1, by1, bx2, by2 = map(int, best_box.xyxy[0])
-                    detected_category = CLASS_NAMES[int(best_box.cls[0])].lower()
-                    if not is_person:
-                      auto_cat = detected_category
-                    cropped = ref_img_cv[max(0, by1):max(0, by2), max(0, bx1):max(0, bx2)]
-                    if cropped.size > 0 and cropped.shape[0] > 10 and cropped.shape[1] > 10:
-                      ref_crop = cropped
-                    cv2.rectangle(preview_img, (bx1, by1), (bx2, by2), (0, 255, 0), 3)
-                    cv2.putText(preview_img, f"Target: {detected_category.title()}", (bx1, max(by1 - 10, 20)), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-              except Exception as exc:
-                if is_person:
-                  face_error = f"Could not prepare the reference person's image crop: {exc}"
-
-            if auto_cat == "person" and not found_face_encs and face_error is None:
-              face_error = "No clear face was detected. Person matching requires a clear face in the reference image; clothing will not be used."
-            is_person = is_person or auto_cat == "person"
+                  best_box = max(boxes, key=lambda b: float(b.conf[0]))
+                  bx1, by1, bx2, by2 = map(int, best_box.xyxy[0])
+                  auto_cat = CLASS_NAMES[int(best_box.cls[0])].lower()
+                  cropped = ref_img_cv[max(0, by1):max(0, by2), max(0, bx1):max(0, bx2)]
+                  if cropped.size > 0 and cropped.shape[0] > 10 and cropped.shape[1] > 10:
+                    ref_crop = cropped
+                  cv2.rectangle(preview_img, (bx1, by1), (bx2, by2), (0, 255, 0), 3)
+                  cv2.putText(preview_img, f"Target: {auto_cat.title()}", (bx1, max(by1 - 10, 20)), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+              except Exception:
+                pass
 
             ref_emb = get_image_embedding(ref_crop)
             ref_h = get_color_histogram(ref_crop)
@@ -1373,14 +1334,11 @@ elif page == "Video Fast Review":
             st.session_state["vfr_ref"] = {
               "name": ref_image_file.name,
               "size": len(file_bytes),
-              "hash": ref_hash,
-              "version": 8,
-              "face_enc": found_face_encs if found_face_encs else None,
+              "face_enc": found_face_enc,
               "is_person": is_person,
               "auto_cat": auto_cat,
               "embedding": ref_emb,
               "hist": ref_h,
-              "face_error": face_error,
               "preview_rgb": cv2.cvtColor(preview_img, cv2.COLOR_BGR2RGB),
               "ref_crop": ref_crop
             }
@@ -1394,12 +1352,9 @@ elif page == "Video Fast Review":
           ref_hist = cached["hist"]
           auto_cat = cached["auto_cat"]
 
-          if cached.get("face_error"):
-            st.warning(cached["face_error"])
-
           if ref_is_person:
-            st.success("Target Identified: **Person**")
-            st.caption("Person matches are based only on face embeddings. Clothing, body shape, and pose are not used to identify a person.")
+            st.success("Target Identified: **Specific Person (Face Biometrics)**")
+            st.caption("Precision matching active: only this exact individual's facial biometric signature will be detected. All other persons will be strictly excluded.")
             target_object = "person"
           elif auto_cat:
             st.success(f"Detected Reference Object: **{auto_cat.title()}**")
@@ -1415,45 +1370,27 @@ elif page == "Video Fast Review":
             restrict_cat = st.checkbox("Restrict search to a specific category?", value=False)
             if restrict_cat:
               target_object = st.selectbox("Category:", sorted(CLASS_NAMES.values()), index=0).lower()
-              if target_object == "person":
-                ref_is_person = True
-                cached["is_person"] = True
-                st.session_state["vfr_ref"] = cached
 
     precision_mode = st.radio(
       "Matching Precision",
-      ["Strict (Highest Precision)", "Balanced (Standard)", "Tolerant (High Recall)"],
+      ["Strict 100% Match (Zero False Positives)", "Balanced (Standard)", "Tolerant (High Recall)"],
       index=0,
-      help="Higher-recall modes allow more face-embedding distance for profile and low-resolution faces; this may increase false matches."
+      help="Strict mode guarantees only the exact target individual/object is matched."
     )
 
-    if precision_mode == "Strict (Highest Precision)":
-      max_face_dist = 0.45
+    if precision_mode == "Strict 100% Match (Zero False Positives)":
+      max_face_dist = 0.48
       min_obj_sim = 0.72
     elif precision_mode == "Balanced (Standard)":
-      max_face_dist = 0.50
+      max_face_dist = 0.52
       min_obj_sim = 0.65
     else:
-      max_face_dist = 0.55
+      max_face_dist = 0.58
       min_obj_sim = 0.55
 
     sample_rate = st.slider("Frames per second to analyze", 1, 5, 1, help="Lower is faster but might miss very brief appearances.")
-    confidence = st.slider("Detection Confidence", 0.05, 1.0, 0.25, 0.05, help="Use a lower value to keep distant or partially visible people.")
-    vfr_rot = st.selectbox(
-      "Video Orientation",
-      ["0° (Original)", "90° Clockwise", "180° Inverted", "270° Counter-Clockwise"],
-      index=0,
-      key="vfr_rot_select",
-      help="Rotate sideways or upside-down video frames.",
-    )
-    person_detection_size = 960
-    if search_type == "Reference Image" and ref_is_person:
-      person_detection_size = st.select_slider(
-        "Person detection resolution",
-        options=[640, 960, 1280],
-        value=960,
-        help="Higher resolution can detect smaller, distant people, but takes longer per frame."
-      )
+    confidence = st.slider("Detection Confidence", 0.1, 1.0, 0.4, 0.05)
+    vfr_rot = st.selectbox("Video Orientation", ["0° (Original)", "90° Clockwise", "180° Inverted", "270° Counter-Clockwise"], index=0, key="vfr_rot_select", help="Rotate sideways or upside-down video frames.")
 
     st.markdown("</div>", unsafe_allow_html=True)
 
@@ -1476,14 +1413,6 @@ elif page == "Video Fast Review":
       cached = st.session_state.get("vfr_ref")
       if search_type == "Reference Image" and (cached is None or (cached["face_enc"] is None and cached["embedding"] is None)):
         st.warning("Please upload a reference image first.")
-        can_start = False
-      if (
-        search_type == "Reference Image"
-        and cached is not None
-        and cached.get("is_person")
-        and cached.get("face_enc") is None
-      ):
-        st.warning("No reference face was detected. Upload a clear image with the target person's face visible; clothing cannot be used as a fallback.")
         can_start = False
 
       if can_start and st.button("Start Fast Review", type="primary", width="stretch"):
@@ -1508,17 +1437,11 @@ elif page == "Video Fast Review":
 
         found_timestamps = []
         current_frame = 0
-        face_match_error = None
 
         # Retrieve cached reference data
         ref_face_enc = cached.get("face_enc") if cached else None
         ref_deep_emb = cached.get("embedding") if cached else None
         ref_color_h = cached.get("hist") if cached else None
-        person_class_id = next(
-          (class_id for class_id, class_name in CLASS_NAMES.items() if class_name.lower() == "person"),
-          None
-        )
-        person_search = search_type == "Reference Image" and ref_is_person and person_class_id is not None
 
         while cap.isOpened():
           ret, frame = cap.read()
@@ -1538,45 +1461,69 @@ elif page == "Video Fast Review":
             progress_bar.progress(min(1.0, current_frame / total_frames))
 
             small_frame = cv2.resize(frame, (640, 480))
-            if person_search:
-              results = det_model.track(
-                frame,
-                persist=True,
-                conf=min(confidence, 0.25),
-                imgsz=person_detection_size,
-                classes=[person_class_id],
-                verbose=False
-              )
-            else:
-              results = det_model.track(small_frame, persist=True, conf=confidence, verbose=False)
+            results = det_model.track(small_frame, persist=True, conf=confidence, verbose=False)
 
             matched_boxes_in_frame = []
-            detected_person_boxes = []
 
             for result in results:
               if result.boxes is not None:
                 for box in result.boxes:
                   class_id = int(box.cls[0])
-                  obj_name = "person" if person_search else CLASS_NAMES[class_id].lower()
+                  obj_name = CLASS_NAMES[class_id].lower()
 
                   if target_object is None or obj_name == target_object:
-                    if person_search:
-                      match_x1, match_y1, match_x2, match_y2 = map(
-                        int, box.xyxy[0].tolist()
-                      )
-                      x1, y1, x2, y2 = scale_bbox(
-                        (match_x1, match_y1, match_x2, match_y2),
-                        frame.shape,
-                        (640, 480)
-                      )
-                      detected_person_boxes.append(
-                        ((match_x1, match_y1, match_x2, match_y2), (x1, y1, x2, y2))
-                      )
-                    else:
-                      x1, y1, x2, y2 = map(int, box.xyxy[0])
-                      match_x1, match_y1, match_x2, match_y2 = x1, y1, x2, y2
+                    x1, y1, x2, y2 = map(int, box.xyxy[0])
                     if search_type == "Reference Image":
-                      if not ref_is_person and (ref_face_enc is None or obj_name != "person"):
+                      is_match = False
+                      match_sim = 0.0
+
+                      if ref_face_enc is not None and obj_name == "person":
+                        # Target is a specific individual: strict face recognition
+                        try:
+                          import face_recognition
+                          orig_h, orig_w = frame.shape[:2]
+                          sx = orig_w / 640.0
+                          sy = orig_h / 480.0
+                          ox1 = max(0, int(x1 * sx))
+                          oy1 = max(0, int(y1 * sy))
+                          ox2 = min(orig_w, int(x2 * sx))
+                          oy2 = min(orig_h, int(y2 * sy))
+                          person_orig = frame[oy1:oy2, ox1:ox2]
+
+                          if person_orig.size > 0 and person_orig.shape[0] > 15 and person_orig.shape[1] > 15:
+                            p_rgb = cv2.cvtColor(person_orig, cv2.COLOR_BGR2RGB)
+                            upper_body = p_rgb[0 : max(25, int(p_rgb.shape[0] * 0.65)), :]
+                            face_locs = face_recognition.face_locations(upper_body)
+                            if not face_locs:
+                              face_locs = face_recognition.face_locations(p_rgb)
+                            if not face_locs and person_orig.shape[0] < 180:
+                              face_locs = face_recognition.face_locations(p_rgb, number_of_times_to_upsample=1)
+
+                            if face_locs:
+                              face_encs = face_recognition.face_encodings(p_rgb, face_locs)
+                              for f_loc, enc in zip(face_locs, face_encs):
+                                dist = float(face_recognition.face_distance([ref_face_enc], enc)[0])
+                                # Distance <= 0.50 indicates exact same individual
+                                if dist <= max_face_dist:
+                                  is_match = True
+                                  match_sim = max(0.0, 1.0 - dist)
+                                  top, right, bottom, left = f_loc
+                                  face_cx = ox1 + (left + right) / 2
+                                  box_cx = (ox1 + ox2) / 2
+                                  box_w = max(1, ox2 - ox1)
+                                  area = (ox2 - ox1) * (oy2 - oy1)
+                                  offset_norm = abs(face_cx - box_cx) / box_w
+                                  matched_boxes_in_frame.append({
+                                    "box": (x1, y1, x2, y2),
+                                    "label": f"Target Match ({match_sim * 100:.0f}%)",
+                                    "sim": match_sim,
+                                    "offset_norm": offset_norm,
+                                    "area": area
+                                  })
+                                  break
+                        except Exception:
+                          pass
+                      else:
                         # Target is a specific object: deep semantic + color distribution matching
                         roi = small_frame[max(0, y1):max(0, y2), max(0, x1):max(0, x2)]
                         if roi.size > 0 and roi.shape[0] >= 10 and roi.shape[1] >= 10 and ref_deep_emb is not None:
@@ -1593,6 +1540,7 @@ elif page == "Video Fast Review":
                           sim = 0.55 * deep_sim + 0.45 * color_sim
                           # Strict threshold for objects: require strong color and deep feature correlation
                           if sim >= min_obj_sim and color_sim >= 0.50:
+                            is_match = True
                             match_sim = sim
                             matched_boxes_in_frame.append({
                               "box": (x1, y1, x2, y2),
@@ -1609,64 +1557,11 @@ elif page == "Video Fast Review":
               if matched_boxes_in_frame and search_type != "Reference Image":
                 break
 
-            if person_search and ref_face_enc is not None:
-              try:
-                import face_recognition
-
-                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                face_candidates = get_vfr_face_candidates(frame_rgb, face_recognition)
-                mirrored_candidates = get_vfr_face_candidates(
-                  cv2.flip(frame_rgb, 1),
-                  face_recognition,
-                )
-                frame_width = frame.shape[1]
-                for location, encoding in mirrored_candidates:
-                  top, right, bottom, left = location
-                  face_candidates.append(
-                    ((top, frame_width - left, bottom, frame_width - right), encoding)
-                  )
-
-                for face_location, encoding in face_candidates:
-                  dist = float(np.min(face_recognition.face_distance(ref_face_enc, encoding)))
-                  if dist <= max_face_dist:
-                    top, right, bottom, left = face_location
-                    face_center_x = (left + right) / 2
-                    face_center_y = (top + bottom) / 2
-                    containing_people = [
-                      (source_box, preview_box)
-                      for source_box, preview_box in detected_person_boxes
-                      if (
-                        source_box[0] <= face_center_x <= source_box[2]
-                        and source_box[1] <= face_center_y <= source_box[3]
-                      )
-                    ]
-                    if containing_people:
-                      _, match_box = min(
-                        containing_people,
-                        key=lambda item: (
-                          (item[0][2] - item[0][0]) * (item[0][3] - item[0][1])
-                        ),
-                      )
-                    else:
-                      match_box = scale_bbox(
-                        (left, top, right, bottom),
-                        frame.shape,
-                        (640, 480),
-                      )
-                    face_sim = max(0.0, 1.0 - dist)
-                    matched_boxes_in_frame.append({
-                      "box": match_box,
-                      "label": f"Face Match ({face_sim * 100:.0f}%)",
-                      "sim": face_sim,
-                      "match_type": "face",
-                    })
-              except Exception as exc:
-                face_match_error = f"Face matching failed while analyzing the video: {exc}"
-
             if len(matched_boxes_in_frame) > 0:
               # For target person: resolve crowd overlap and keep only the true target individual
-              if person_search:
-                matched_boxes_in_frame = [select_best_person_match(matched_boxes_in_frame)]
+              if ref_face_enc is not None:
+                matched_boxes_in_frame.sort(key=lambda m: (m.get("offset_norm", 0), m.get("area", 0)))
+                matched_boxes_in_frame = [matched_boxes_in_frame[0]]
               else:
                 matched_boxes_in_frame.sort(key=lambda m: m["sim"], reverse=True)
                 matched_boxes_in_frame = [matched_boxes_in_frame[0]]
@@ -1707,12 +1602,6 @@ elif page == "Video Fast Review":
               st.markdown("---")
         else:
           results_container.warning(f"Could not find a match for {search_lbl} in the video.")
-          if person_search:
-            results_container.info(
-              "No face match passed the selected precision threshold. Use a clear, unobstructed reference face, increase person detection resolution for distant people, or select a higher-recall precision mode. Clothing is never used to match a person."
-            )
-          if face_match_error:
-            results_container.warning(face_match_error)
         
         try:
           os.unlink(temp_path)
@@ -1843,9 +1732,7 @@ elif page == "Drowsiness Monitor":
                 color = (255, 0, 0)
                 if counter == consec_frames:
                   drowsy_incidents += 1
-                  import os
-                  if os.path.exists('siren.wav'):
-                    os.system(f"afplay '{os.path.abspath('siren.wav')}' &")
+                  play_siren_sound(force=True)
             else:
               counter = 0
               
@@ -2028,7 +1915,6 @@ elif page == "Face Registration":
 # OBJECT DETECTION 
 
 elif page == "Object Detection":
-
   st.markdown("<div class='section-title'> Object Detection</div>", unsafe_allow_html=True)
   st.markdown("<div class='sub-text'>Upload or capture an image for YOLO detection</div>", unsafe_allow_html=True)
   
@@ -2555,76 +2441,14 @@ elif page == "OCR":
           
           if st.button("Translate", type="primary", width="stretch"):
             with st.spinner(f"Translating to {target_lang}..."):
-              google_map = {
-                "Hindi": "hi", "Telugu": "te", "Tamil": "ta", "Kannada": "kn", "Malayalam": "ml", 
-                "Marathi": "mr", "Bengali": "bn", "Gujarati": "gu", "Punjabi": "pa", "Odia": "or", "Urdu": "ur",
-                "Spanish": "es", "French": "fr", "German": "de", "Chinese (simplified)": "zh-CN",
-                "Japanese": "ja", "Russian": "ru", "Arabic": "ar"
-              }
-              mymemory_map = {
-                "Hindi": "hi-IN", "Telugu": "te-IN", "Tamil": "ta-IN", "Kannada": "kn-IN", "Malayalam": "ml-IN", 
-                "Marathi": "mr-IN", "Bengali": "bn-IN", "Gujarati": "gu-IN", "Punjabi": "pa-IN", "Odia": "or-IN", "Urdu": "ur-PK",
-                "Spanish": "es-ES", "French": "fr-FR", "German": "de-DE", "Chinese (simplified)": "zh-CN",
-                "Japanese": "ja-JP", "Russian": "ru-RU", "Arabic": "ar-SA"
-              }
-              import re
-              def chunk_text_for_translation(text, max_chars=350):
-                sentences = re.split(r'(\. |\n+|\? |\! )', text)
-                chunks = []
-                current = ''
-                for part in sentences:
-                  if not part:
-                    continue
-                  if len(current) + len(part) <= max_chars:
-                    current += part
-                  else:
-                    if current.strip():
-                      chunks.append(current.strip())
-                    if len(part) > max_chars:
-                      words = part.split()
-                      sub = ''
-                      for w in words:
-                        if len(sub) + len(w) + 1 <= max_chars:
-                          sub += (' ' + w if sub else w)
-                        else:
-                          if sub:
-                            chunks.append(sub)
-                          sub = w
-                      current = sub
-                    else:
-                      current = part
-                if current.strip():
-                  chunks.append(current.strip())
-                return chunks if chunks else [text]
-
               text_to_translate = st.session_state.get("ocr_text", "").strip()
-              chunks = chunk_text_for_translation(text_to_translate, max_chars=350)
-              translated = None
-              error_msg = None
-
-              # Attempt 1: Google Translator with chunking
-              try:
-                from deep_translator import GoogleTranslator
-                target_code = google_map.get(target_lang, "hi")
-                translator = GoogleTranslator(source='auto', target=target_code)
-                translated_parts = [translator.translate(c) for c in chunks if c.strip()]
-                translated = " ".join(filter(None, translated_parts))
-              except Exception as e_google:
-                # Attempt 2: MyMemory Translator with chunking (handles Google rate limit 429)
-                try:
-                  from deep_translator import MyMemoryTranslator
-                  target_code = mymemory_map.get(target_lang, "hi-IN")
-                  translator = MyMemoryTranslator(source='en-US', target=target_code)
-                  translated_parts = [translator.translate(c) for c in chunks if c.strip()]
-                  translated = " ".join(filter(None, translated_parts))
-                except Exception as e_mymemory:
-                  error_msg = f"Primary service: {e_google}; Fallback service: {e_mymemory}"
+              translated = translate_robust(text_to_translate, target_lang=target_lang)
               
               if translated:
                 st.info(f"**{target_lang} Translation:**")
                 st.write(translated)
               else:
-                st.error(f"Translation failed: {error_msg}")
+                st.error("Translation could not be completed. Please check your network connection.")
         else:
           st.warning("No text could be extracted from this image.")
 

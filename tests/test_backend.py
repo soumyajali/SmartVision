@@ -80,7 +80,7 @@ def test_face_register_and_recognize():
     assert unrec_res.status_code == 200
     unreg_data = unrec_res.json()
     assert len(unreg_data["recognitions"]) > 0
-    assert unreg_data["recognitions"][0].get("name") in ["Unknown", "unknown"]
+    assert unreg_data["recognitions"][0].get("name") == "Not Registered"
 
 def test_chatbot_query():
     """Requirement: POST /chatbot/query answers 'what do you see' and 'how many people' consistently with detection result"""

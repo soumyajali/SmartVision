@@ -3,14 +3,14 @@
     "total_scenarios_tested": 12,
     "model_tested": "yolov8m.pt",
     "hardware": "Apple Silicon (macOS arm64 CPU)",
-    "date": "2026-10-14 19:07:56"
+    "date": "2026-10-14 21:36:42"
   },
   "results": [
     {
       "test_id": "ACC-01",
       "scenario": "Clear Image (Baseline)",
       "condition_notes": "Well-lit indoor scene with sharp edges and distinct objects",
-      "latency_ms": 253.17,
+      "latency_ms": 214.11,
       "total_detections": 8,
       "detected_labels": [
         "cup",
@@ -33,18 +33,18 @@
         0.258
       ],
       "expected_classes": [
-        "chair",
-        "person",
-        "cat",
         "dining table",
-        "cup"
+        "cup",
+        "chair",
+        "cat",
+        "person"
       ],
       "correct_matches": [
-        "chair",
-        "person",
-        "cat",
         "dining table",
-        "cup"
+        "cup",
+        "chair",
+        "cat",
+        "person"
       ],
       "missed_detections_fn": [],
       "false_positives_fp": [
@@ -57,7 +57,7 @@
       "test_id": "ACC-02",
       "scenario": "Blurry Image (Defocus / Camera Shake)",
       "condition_notes": "Gaussian blur (kernel=25, sigma=7.0) to test robustness against degradation",
-      "latency_ms": 176.12,
+      "latency_ms": 153.52,
       "total_detections": 6,
       "detected_labels": [
         "cup",
@@ -94,7 +94,7 @@
       "test_id": "ACC-03",
       "scenario": "Small Objects in Scene",
       "condition_notes": "Small bounding boxes (< 10% of total image dimension)",
-      "latency_ms": 174.85,
+      "latency_ms": 154.49,
       "total_detections": 8,
       "detected_labels": [
         "cup",
@@ -139,7 +139,7 @@
       "test_id": "ACC-04",
       "scenario": "Large Foreground Hazard Object",
       "condition_notes": "Prominent, close-up object occupying > 40% of the frame",
-      "latency_ms": 174.49,
+      "latency_ms": 152.78,
       "total_detections": 1,
       "detected_labels": [
         "knife"
@@ -161,7 +161,7 @@
       "test_id": "ACC-05",
       "scenario": "Partially Hidden & Overlapping Objects",
       "condition_notes": "Overlapping kitchen objects on tabletop with mutual occlusion",
-      "latency_ms": 178.43,
+      "latency_ms": 152.85,
       "total_detections": 6,
       "detected_labels": [
         "scissors",
@@ -180,15 +180,15 @@
         0.28
       ],
       "expected_classes": [
-        "microwave",
-        "scissors",
+        "spoon",
         "cup",
-        "spoon"
+        "microwave",
+        "scissors"
       ],
       "correct_matches": [
-        "microwave",
         "scissors",
         "cup",
+        "microwave",
         "spoon"
       ],
       "missed_detections_fn": [],
@@ -201,7 +201,7 @@
       "test_id": "ACC-06",
       "scenario": "Multiple Objects in Single Frame (Cluttered Scene)",
       "condition_notes": "7+ heterogeneous objects simultaneously present",
-      "latency_ms": 185.15,
+      "latency_ms": 155.68,
       "total_detections": 8,
       "detected_labels": [
         "cup",
@@ -224,20 +224,20 @@
         0.258
       ],
       "expected_classes": [
-        "chair",
-        "person",
-        "cat",
         "potted plant",
         "dining table",
-        "cup"
+        "cup",
+        "chair",
+        "cat",
+        "person"
       ],
       "correct_matches": [
-        "chair",
-        "person",
-        "cat",
+        "potted plant",
         "dining table",
         "cup",
-        "potted plant"
+        "chair",
+        "cat",
+        "person"
       ],
       "missed_detections_fn": [],
       "false_positives_fp": [
@@ -249,7 +249,7 @@
       "test_id": "ACC-07",
       "scenario": "Low-Light Environment (75% luminance reduction)",
       "condition_notes": "Simulated twilight / unlit room condition",
-      "latency_ms": 178.67,
+      "latency_ms": 150.66,
       "total_detections": 6,
       "detected_labels": [
         "cup",
@@ -287,7 +287,7 @@
       "test_id": "ACC-08",
       "scenario": "Bright-Light Environment (Overexposure / Glare)",
       "condition_notes": "Simulated direct sun glare and high specular reflection",
-      "latency_ms": 171.64,
+      "latency_ms": 154.71,
       "total_detections": 7,
       "detected_labels": [
         "cup",
@@ -330,7 +330,7 @@
       "test_id": "ACC-09",
       "scenario": "Crowded Scene with Multiple Persons",
       "condition_notes": "High density multi-person gathering with dense overlapping bodies",
-      "latency_ms": 184.35,
+      "latency_ms": 141.16,
       "total_detections": 8,
       "detected_labels": [
         "person",
@@ -366,7 +366,7 @@
       "test_id": "ACC-10",
       "scenario": "Fast-Moving Vehicles & Traffic Elements",
       "condition_notes": "Outdoor vehicular roadway stream",
-      "latency_ms": 113.06,
+      "latency_ms": 93.51,
       "total_detections": 15,
       "detected_labels": [
         "car",
@@ -423,7 +423,7 @@
       "test_id": "ACC-11",
       "scenario": "Empty Scene (Zero Target Objects)",
       "condition_notes": "Blank textured canvas; verifies absence of phantom/hallucinated detections",
-      "latency_ms": 130.15,
+      "latency_ms": 112.34,
       "total_detections": 0,
       "detected_labels": [],
       "confidences": [],
@@ -437,7 +437,7 @@
       "test_id": "ACC-12",
       "scenario": "Unsupported Objects (Non-COCO Geometric Shapes)",
       "condition_notes": "Verifies that uncalibrated shapes are not falsely assigned valid COCO labels",
-      "latency_ms": 141.82,
+      "latency_ms": 113.43,
       "total_detections": 1,
       "detected_labels": [
         "frisbee"
