@@ -1606,9 +1606,7 @@ elif page == "Drowsiness Monitor":
                 color = (255, 0, 0)
                 if counter == consec_frames:
                   drowsy_incidents += 1
-                  import os
-                  if os.path.exists('siren.wav'):
-                    os.system(f"afplay '{os.path.abspath('siren.wav')}' &")
+                  play_siren_sound(force=True)
             else:
               counter = 0
               
