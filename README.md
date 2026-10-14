@@ -21,7 +21,7 @@ Traditional surveillance and vision recognition systems depend on heavy, costly 
 - **Optical Character Recognition (OCR):** Embedded EasyOCR engine for document screening and text reading.
 - **Voice Assistant & Audio Guidance:** Hands-free speech alerts, spoken questions about the current detections, and voice commands for dashboard navigation and settings.
 - **Interactive Web Dashboard:** Rich Streamlit interface featuring 3D visualizations, live analytics, and detection histories.
-- **Cross-Platform Mobile App:** Flutter-based Android mobile application with live camera screening and on-device processing.
+- **Android Mobile App:** Flutter WebView client that opens the same website implementation, including its feature flows and siren controls.
 
 ---
 
@@ -122,7 +122,10 @@ uvicorn ai_server:app --host 0.0.0.0 --port 8000 --reload
 
 ## 📱 Running the Android Mobile App
 
-The mobile client is located in `app/`:
+The mobile client in `app/` opens the same responsive Smart Vision website in a
+WebView so its detection, OCR, face registration, Fast Review, chatbot, alerts,
+file uploads, and siren controls use the same implementation as the desktop
+site. The website must be running and reachable from the phone.
 
 1. **Navigate to the Flutter directory:**
    ```bash
@@ -138,6 +141,20 @@ The mobile client is located in `app/`:
    ```bash
    flutter run
    ```
+
+Before connecting a physical phone, start Streamlit from the repository root so
+it listens on the network:
+
+```bash
+streamlit run app.py --server.address 0.0.0.0 --server.port 8501
+```
+
+The Android emulator uses `http://10.0.2.2:8501` by default. For a physical
+phone, open the app's connection settings and enter
+`http://<computer-LAN-IP>:8501`; keep the phone and computer on the same Wi-Fi
+network and allow the port through the computer's firewall. The app requests
+camera and microphone permissions when the website uses those features, and
+configures Android WebView to permit siren audio playback.
 
 4. **Build release APK:**
    ```bash
