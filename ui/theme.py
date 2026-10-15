@@ -198,7 +198,8 @@ def apply_theme():
           color: var(--text) !important;
           caret-color: var(--primary);
           background: transparent !important;
-          font-size: var(--font-size-label) !important;
+          font-size: 16px !important;
+          line-height: 1.5 !important;
         }
 
         .stBottom [data-testid="stChatInput"] textarea::placeholder {
@@ -217,6 +218,8 @@ def apply_theme():
         .stMain [data-testid="stChatMessage"] [data-testid="stMarkdownContainer"] p,
         .stMain [data-testid="stChatMessage"] [data-testid="stMarkdownContainer"] li {
           color: var(--text) !important;
+          font-size: 16px !important;
+          line-height: 1.65 !important;
         }
 
         .stApp [style*="font-size:11px"],
@@ -264,21 +267,23 @@ def apply_theme():
           background: rgba(18, 26, 61, 0.82);
         }
 
+        [class*="st-key-feature_navigation_page"] {
+          width: 100% !important;
+          max-width: none !important;
+        }
+
         [class*="st-key-feature-navigation"] [data-testid="stRadioGroup"] {
-          display: flex;
-          flex-flow: row nowrap !important;
-          gap: 0.4rem;
-          overflow-x: auto;
+          display: grid;
+          grid-template-columns: repeat(6, minmax(0, 1fr));
+          gap: 0.55rem;
           width: 100%;
-          padding: 0.15rem 0.1rem 0.35rem;
-          scrollbar-width: thin;
-          align-items: stretch;
+          padding: 0.15rem 0.1rem 0.1rem;
         }
 
         [class*="st-key-feature-navigation"] [data-testid="stRadioOption"] {
-          flex: 1 1 0;
           min-width: 0;
-          height: 72px;
+          min-height: 54px;
+          height: auto;
           box-sizing: border-box;
           display: flex;
           align-items: center;
@@ -286,26 +291,33 @@ def apply_theme():
           border: 1px solid transparent;
           border-radius: 10px;
           background: rgba(11, 18, 48, 0.62);
-          padding: 0.4rem 0.35rem;
+          padding: 0.5rem;
           color: var(--text) !important;
           font-size: 13px !important;
         }
 
-        [class*="st-key-feature-navigation"] [data-testid="stRadioOption"] > div > div {
+        [class*="st-key-feature-navigation"] [data-testid="stRadioOption"] > div {
           display: flex;
           align-items: center;
           justify-content: center;
           width: 100%;
+          min-width: 0;
           gap: 0;
         }
 
-        [class*="st-key-feature-navigation"] [data-testid="stRadioOption"] > div > div > div:first-child {
+        [class*="st-key-feature-navigation"] [data-testid="stRadioOption"] > div > div:first-child {
           display: none !important;
+        }
+
+        [class*="st-key-feature-navigation"] [data-testid="stRadioOption"] [data-testid="stMarkdownContainer"] {
+          flex: 1;
+          min-width: 0;
         }
 
         [class*="st-key-feature-navigation"] [data-testid="stRadioOption"] p {
           color: var(--text) !important;
           white-space: normal;
+          overflow-wrap: normal;
           text-align: center;
           margin: 0 !important;
         }
@@ -326,11 +338,17 @@ def apply_theme():
           display: flex;
           flex-direction: column;
           gap: 0.35rem;
+          width: 100%;
         }
 
         [class*="st-key-secondary-feature-navigation"] [data-testid="stRadioOption"],
         [class*="st-key-ai-tools-feature-navigation"] [data-testid="stRadioOption"] {
           width: 100%;
+          min-width: 0;
+          min-height: 42px;
+          box-sizing: border-box;
+          display: flex;
+          align-items: center;
           border: 1px solid transparent;
           border-radius: 10px;
           background: rgba(15, 22, 46, 0.4);
@@ -339,22 +357,32 @@ def apply_theme():
           font-size: 14px !important;
         }
 
-        [class*="st-key-secondary-feature-navigation"] [data-testid="stRadioOption"] > div > div,
-        [class*="st-key-ai-tools-feature-navigation"] [data-testid="stRadioOption"] > div > div {
+        [class*="st-key-secondary-feature-navigation"] [data-testid="stRadioOption"] > div,
+        [class*="st-key-ai-tools-feature-navigation"] [data-testid="stRadioOption"] > div {
           display: flex;
           align-items: center;
+          width: 100%;
+          min-width: 0;
+          justify-content: flex-start;
           gap: 0;
         }
 
-        [class*="st-key-secondary-feature-navigation"] [data-testid="stRadioOption"] > div > div > div:first-child,
-        [class*="st-key-ai-tools-feature-navigation"] [data-testid="stRadioOption"] > div > div > div:first-child {
+        [class*="st-key-secondary-feature-navigation"] [data-testid="stRadioOption"] > div > div:first-child,
+        [class*="st-key-ai-tools-feature-navigation"] [data-testid="stRadioOption"] > div > div:first-child {
           display: none !important;
+        }
+
+        [class*="st-key-secondary-feature-navigation"] [data-testid="stRadioOption"] [data-testid="stMarkdownContainer"],
+        [class*="st-key-ai-tools-feature-navigation"] [data-testid="stRadioOption"] [data-testid="stMarkdownContainer"] {
+          flex: 1;
+          min-width: 0;
         }
 
         [class*="st-key-secondary-feature-navigation"] [data-testid="stRadioOption"] p,
         [class*="st-key-ai-tools-feature-navigation"] [data-testid="stRadioOption"] p {
           color: var(--text) !important;
           white-space: normal;
+          overflow-wrap: normal;
           margin: 0 !important;
         }
 
@@ -453,35 +481,34 @@ def apply_theme():
         [data-testid="stSidebar"] [data-testid="stRadioOption"] {
           min-height: 42px;
           box-sizing: border-box;
+          display: flex;
+          width: 100%;
+          min-width: 0;
           font-size: 14px !important;
           line-height: 1.4 !important;
         }
 
-        [data-testid="stSidebar"] [data-testid="stRadioOption"] > div > div {
+        [data-testid="stSidebar"] [data-testid="stRadioOption"] > div {
           width: 100%;
+          min-width: 0;
           display: flex;
           align-items: center;
           justify-content: flex-start;
           gap: 0;
         }
 
-        [data-testid="stSidebar"] [data-testid="stRadioOption"] > div {
-          width: 100%;
-          justify-content: flex-start;
-          gap: 0 !important;
-        }
-
-        [data-testid="stSidebar"] [data-testid="stRadioOption"] > div > div > div:first-child {
+        [data-testid="stSidebar"] [data-testid="stRadioOption"] > div > div:first-child {
           display: none !important;
         }
 
         [data-testid="stSidebar"] [data-testid="stRadioOption"] [data-testid="stMarkdownContainer"] {
-          width: 100%;
+          flex: 1;
+          min-width: 0;
           text-align: left !important;
         }
 
         [data-testid="stSidebar"] [data-testid="stRadioOption"] p {
-          width: 100%;
+          width: auto;
           margin: 0 !important;
           color: var(--text) !important;
           text-align: left !important;
@@ -1123,6 +1150,13 @@ def apply_theme():
           [class*="st-key-feature-navigation"] [data-testid="stRadioOption"] {
             padding: 0.35rem 0.2rem;
             font-size: 13px !important;
+          }
+        }
+
+        @media (max-width: 1100px) {
+          [class*="st-key-feature-navigation"] [data-testid="stRadioGroup"] {
+            grid-template-columns: repeat(6, minmax(120px, 1fr));
+            overflow-x: auto;
           }
         }
         </style>

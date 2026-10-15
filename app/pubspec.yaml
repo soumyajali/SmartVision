@@ -27,5 +27,9 @@ dependencies:
   shared_preferences: ^2.5.0
   google_fonts: ^9.0.0
 
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
 flutter:
   uses-material-design: true

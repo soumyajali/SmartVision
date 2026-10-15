@@ -311,15 +311,22 @@ div[data-testid="stMetricLabel"] {
 
 /* Chat Input Container Fixes */
 div[data-testid="stChatInput"] {
-  background-color: #FFFFFF !important;
-  border: 1px solid #E2E8F0 !important;
+  background-color: #121A3D !important;
+  border: 1px solid rgba(56, 189, 248, 0.4) !important;
   border-radius: 16px !important;
   padding: 4px !important;
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05) !important;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.24) !important;
 }
 div[data-testid="stChatInput"] textarea {
-  color: #172033 !important;
+  color: #E6EEFF !important;
   background-color: transparent !important;
+  caret-color: #38BDF8 !important;
+  font-size: 16px !important;
+  line-height: 1.5 !important;
+}
+div[data-testid="stChatInput"] textarea::placeholder {
+  color: #B8C7E5 !important;
+  opacity: 1 !important;
 }
 div[data-testid="stChatInput"] button {
   background-color: #10B981 !important;
@@ -336,17 +343,24 @@ div[data-testid="stChatInput"] button:hover {
   padding-bottom: 24px !important;
 }
 div[data-testid="stBottom"] {
-  background-color: #F7F9FC !important;
+  background-color: #0B1230 !important;
 }
 
 /* Chat Bubbles */
 div[data-testid="stChatMessage"] {
-  background-color: #FFFFFF !important;
-  border: 1px solid #E2E8F0 !important;
+  background-color: #121A3D !important;
+  border: 1px solid rgba(56, 189, 248, 0.25) !important;
   border-radius: 16px !important;
   padding: 16px !important;
   margin-bottom: 12px !important;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.02) !important;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18) !important;
+}
+div[data-testid="stChatMessage"] [data-testid="stMarkdownContainer"],
+div[data-testid="stChatMessage"] [data-testid="stMarkdownContainer"] p,
+div[data-testid="stChatMessage"] [data-testid="stMarkdownContainer"] li {
+  color: #E6EEFF !important;
+  font-size: 16px !important;
+  line-height: 1.65 !important;
 }
 
 .assistant-hero {

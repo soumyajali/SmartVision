@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -353,18 +354,23 @@ class _SmartVisionWebsiteScreenState extends State<SmartVisionWebsiteScreen> {
     }
   }
 
-  Future<bool> _handleBackNavigation() async {
+  Future<void> _handleBackNavigation() async {
     if (await _webViewController.canGoBack()) {
       await _webViewController.goBack();
-      return false;
+      return;
     }
-    return true;
+    await SystemNavigator.pop();
   }
 
   @override
   Widget build(BuildContext context) {
-    return WillPopScope(
-      onWillPop: _handleBackNavigation,
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) {
+          unawaited(_handleBackNavigation());
+        }
+      },
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Smart Vision'),
