@@ -1,0 +1,16 @@
+const supportedTranslationLanguages = <String>[
+  'Hindi',
+  'Kannada',
+  'Telugu',
+  'Tamil',
+  'Marathi',
+  'Bengali',
+  'Gujarati',
+  'Spanish',
+  'French',
+  'German',
+  'Chinese (simplified)',
+  'Japanese',
+  'Russian',
+  'Arabic',
+];

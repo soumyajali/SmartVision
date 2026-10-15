@@ -1,4 +1,5 @@
 import 'dart:developer';
+import 'dart:convert';
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 
@@ -22,8 +23,16 @@ class DatabaseService {
 
     return await openDatabase(
       path,
-      version: 1,
+      version: 3,
       onCreate: _createTables,
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          await _createAnalysisHistoryTable(db);
+        }
+        if (oldVersion < 3) {
+          await _createAppSettingsTable(db);
+        }
+      },
     );
   }
 
@@ -59,7 +68,30 @@ class DatabaseService {
         date TEXT
       )
     ''');
+    await _createAnalysisHistoryTable(db);
+    await _createAppSettingsTable(db);
     log('SQLite tables created successfully.');
+  }
+
+  Future<void> _createAnalysisHistoryTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE analysis_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        analysis_type TEXT NOT NULL,
+        summary TEXT NOT NULL,
+        details_json TEXT NOT NULL,
+        timestamp TEXT NOT NULL
+      )
+    ''');
+  }
+
+  Future<void> _createAppSettingsTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE app_settings (
+        setting_key TEXT PRIMARY KEY,
+        setting_value TEXT NOT NULL
+      )
+    ''');
   }
 
   // --- Detection History ---
@@ -85,7 +117,8 @@ class DatabaseService {
         'detections',
         orderBy: 'timestamp DESC',
       );
-      return List.generate(maps.length, (i) => DetectionHistory.fromMap(maps[i]));
+      return List.generate(
+          maps.length, (i) => DetectionHistory.fromMap(maps[i]));
     } catch (e) {
       log('Error fetching detection history: $e');
       return [];
@@ -109,9 +142,61 @@ class DatabaseService {
     try {
       final db = await database;
       await db.delete('detections');
+      await db.delete('analysis_history');
     } catch (e) {
       log('Error clearing history: $e');
     }
+  }
+
+  Future<void> insertAnalysisHistory({
+    required String analysisType,
+    required String summary,
+    required Map<String, dynamic> details,
+  }) async {
+    final db = await database;
+    await db.insert('analysis_history', {
+      'analysis_type': analysisType,
+      'summary': summary,
+      'details_json': jsonEncode(details),
+      'timestamp': DateTime.now().toIso8601String(),
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> getAnalysisHistory({
+    int limit = 50,
+  }) async {
+    final db = await database;
+    final rows = await db.query(
+      'analysis_history',
+      orderBy: 'timestamp DESC',
+      limit: limit,
+    );
+    return rows.map((row) {
+      final item = Map<String, dynamic>.from(row);
+      item['details'] = jsonDecode(item.remove('details_json') as String);
+      return item;
+    }).toList();
+  }
+
+  Future<String?> getAppSetting(String key) async {
+    final db = await database;
+    final rows = await db.query(
+      'app_settings',
+      columns: ['setting_value'],
+      where: 'setting_key = ?',
+      whereArgs: [key],
+      limit: 1,
+    );
+    return rows.isEmpty ? null : rows.first['setting_value'] as String?;
+  }
+
+  Future<void> setAppSetting(String key, String value) async {
+    final db = await database;
+    await db.insert(
+      'app_settings',
+      {'setting_key': key, 'setting_value': value},
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
   }
 
   Future<List<DetectionHistory>> searchDetection(String query) async {
@@ -123,7 +208,8 @@ class DatabaseService {
         whereArgs: ['%$query%'],
         orderBy: 'timestamp DESC',
       );
-      return List.generate(maps.length, (i) => DetectionHistory.fromMap(maps[i]));
+      return List.generate(
+          maps.length, (i) => DetectionHistory.fromMap(maps[i]));
     } catch (e) {
       log('Error searching detection: $e');
       return [];
@@ -161,7 +247,7 @@ class DatabaseService {
     try {
       final db = await database;
       final date = timestamp.toIso8601String().split('T').first; // YYYY-MM-DD
-      
+
       final List<Map<String, dynamic>> existing = await db.query(
         'statistics',
         where: 'object_name = ? AND date = ?',

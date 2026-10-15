@@ -8,22 +8,18 @@ import '../models/detection_result.dart';
 import '../models/detection_settings.dart';
 import '../services/camera_service.dart';
 import '../services/database_service.dart';
-import '../services/smartvision_api_service.dart';
+import '../services/on_device_ai_service.dart';
 import '../services/speech_service.dart';
-import '../services/tflite_service.dart';
 
 class DetectionController extends ChangeNotifier {
   final CameraService _cameraService;
-  final TFLiteService _tfliteService;
   final SpeechService _speechService;
   final DatabaseService _databaseService;
-  final SmartVisionApiService _apiService = SmartVisionApiService();
-
-  TFLiteService get tfliteService => _tfliteService;
+  final OnDeviceAiService _aiService = OnDeviceAiService.instance;
 
   bool _isDetecting = false;
   bool _isProcessingFrame = false;
-  double _currentFps = 24.5;
+  String? _lastAnalysisError;
 
   // Search mode & Target tracking
   String? _searchTarget;
@@ -39,7 +35,7 @@ class DetectionController extends ChangeNotifier {
 
   bool get isDetecting => _isDetecting;
   bool get isProcessingFrame => _isProcessingFrame;
-  double get currentFps => _currentFps;
+  String? get lastAnalysisError => _lastAnalysisError;
   List<DetectionResult> get currentResults => _currentResults;
   Map<String, int> get objectCounts => Map.unmodifiable(_objectCounts);
   int get totalDetectionsCount => _totalDetectionsCount;
@@ -56,12 +52,11 @@ class DetectionController extends ChangeNotifier {
   final Map<String, DateTime> _lastSavedObjects = {};
   final Duration databaseSaveCooldown = const Duration(seconds: 8);
 
-  DetectionSettings _settings = DetectionSettings();
+  DetectionSettings _settings = const DetectionSettings();
   DetectionSettings get settings => _settings;
 
   DetectionController(
     this._cameraService,
-    this._tfliteService,
     this._speechService,
     this._databaseService,
   ) {
@@ -69,7 +64,9 @@ class DetectionController extends ChangeNotifier {
   }
 
   void _onCameraStateChanged() {
-    if (_cameraService.isInitialized && _cameraService.controller != null && _isDetecting) {
+    if (_cameraService.isInitialized &&
+        _cameraService.controller != null &&
+        _isDetecting) {
       _startDetectionLoop();
     }
   }
@@ -111,15 +108,19 @@ class DetectionController extends ChangeNotifier {
 
   void _startDetectionLoop() async {
     while (_isDetecting) {
-      if (!_isProcessingFrame && _cameraService.isInitialized && _cameraService.controller != null) {
+      if (!_isProcessingFrame &&
+          _cameraService.isInitialized &&
+          _cameraService.controller != null) {
         _isProcessingFrame = true;
         try {
           final xfile = await _cameraService.controller!.takePicture();
           final bytes = await xfile.readAsBytes();
-          final b64 = base64Encode(bytes);
-          await analyzeImageBase64(b64);
+          await analyzeImageBytes(bytes);
         } catch (e) {
           log('Frame capture error: $e');
+          _lastAnalysisError = e.toString();
+          _isDetecting = false;
+          notifyListeners();
         } finally {
           _isProcessingFrame = false;
         }
@@ -128,17 +129,23 @@ class DetectionController extends ChangeNotifier {
     }
   }
 
-  /// Analyze base64 image via real YOLOv8 backend API
+  /// Analyze a base64 image with the bundled on-device YOLOv8 model.
   Future<List<DetectionResult>> analyzeImageBase64(String base64Image) async {
+    return analyzeImageBytes(base64Decode(base64Image));
+  }
+
+  /// Analyze raw bytes from a camera capture or selected image.
+  Future<List<DetectionResult>> analyzeImageBytes(Uint8List bytes) async {
     _isProcessingFrame = true;
     notifyListeners();
 
     try {
-      final results = await _apiService.detectObjects(
-        base64Image: base64Image,
-        minConfidence: _settings.minimumConfidence,
+      final results = await _aiService.detectObjects(
+        bytes,
+        settings: _settings,
       );
 
+      _lastAnalysisError = null;
       _currentResults = results;
       _updateCountsAndMetrics(results);
       _checkTargetAndHazards(results);
@@ -146,16 +153,18 @@ class DetectionController extends ChangeNotifier {
       _saveResultsToDatabase(results);
 
       return results;
+    } catch (error) {
+      _lastAnalysisError = error.toString();
+      _currentResults = [];
+      _objectCounts.clear();
+      _totalDetectionsCount = 0;
+      _hasActiveHazard = false;
+      _activeHazardLabel = null;
+      rethrow;
     } finally {
       _isProcessingFrame = false;
       notifyListeners();
     }
-  }
-
-  /// Analyze raw bytes (from camera capture or file picker)
-  Future<List<DetectionResult>> analyzeImageBytes(Uint8List bytes) async {
-    final b64 = base64Encode(bytes);
-    return analyzeImageBase64(b64);
   }
 
   void _updateCountsAndMetrics(List<DetectionResult> results) {
@@ -165,17 +174,20 @@ class DetectionController extends ChangeNotifier {
       _objectCounts[label] = (_objectCounts[label] ?? 0) + 1;
     }
     _totalDetectionsCount = results.length;
-    _currentFps = results.isEmpty ? 22.0 : 26.8;
+    // Detection is request/response based; do not present fabricated FPS.
   }
 
   void _checkTargetAndHazards(List<DetectionResult> results) {
     // 1. Target check
     if (_searchTarget != null && _searchTarget!.isNotEmpty) {
-      final match = results.where((r) => r.label.toLowerCase().contains(_searchTarget!)).firstOrNull;
+      final match = results
+          .where((r) => r.label.toLowerCase().contains(_searchTarget!))
+          .firstOrNull;
       if (match != null) {
         if (!_isTargetFound) {
           _isTargetFound = true;
-          _speechService.speak('Target found! $_searchTarget detected in scene');
+          _speechService
+              .speak('Target found! $_searchTarget detected in scene');
         }
       } else {
         _isTargetFound = false;
@@ -189,7 +201,8 @@ class DetectionController extends ChangeNotifier {
       _activeHazardLabel = hazard.label;
       final now = DateTime.now();
       final lastAnnounced = _lastAnnouncedObjects['HAZARD_${hazard.label}'];
-      if (lastAnnounced == null || now.difference(lastAnnounced) > const Duration(seconds: 3)) {
+      if (lastAnnounced == null ||
+          now.difference(lastAnnounced) > const Duration(seconds: 3)) {
         _lastAnnouncedObjects['HAZARD_${hazard.label}'] = now;
         _speechService.speak('Caution! Hazard detected: ${hazard.label}');
       }
@@ -209,7 +222,9 @@ class DetectionController extends ChangeNotifier {
 
       if (lastTime == null || now.difference(lastTime) > announcementCooldown) {
         _lastAnnouncedObjects[label] = now;
-        final distStr = result.distanceM != null ? ', ${result.distanceM!.toStringAsFixed(1)} meters away' : '';
+        final distStr = result.distanceM != null
+            ? ', ${result.distanceM!.toStringAsFixed(1)} meters away'
+            : '';
         _speechService.speak('${result.label}$distStr');
         break; // Announce one prominent object at a time to prevent overlapping speech
       }

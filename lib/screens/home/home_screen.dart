@@ -9,9 +9,9 @@ import '../../controllers/detection_controller.dart';
 import '../../controllers/statistics_controller.dart';
 import '../../core/constants/app_colors.dart';
 import '../../models/detection_history.dart';
-import '../../models/detection_settings.dart';
 import '../../services/camera_service.dart';
 import '../../services/database_service.dart';
+import '../../services/on_device_ai_service.dart';
 import '../../widgets/camera_preview_widget.dart';
 import '../../widgets/detection_overlay.dart';
 
@@ -61,7 +61,12 @@ class _HomeScreenState extends State<HomeScreen> {
       final b64 = base64Encode(u8list);
       await controller.analyzeImageBase64(b64);
       _loadRecentHistory();
-    } catch (_) {}
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Image analysis failed: $error')),
+      );
+    }
   }
 
   Future<void> _pickAndProcessCustomImage() async {
@@ -79,7 +84,12 @@ class _HomeScreenState extends State<HomeScreen> {
         await controller.analyzeImageBytes(bytes);
         _loadRecentHistory();
       }
-    } catch (_) {}
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not analyze the selected image: $error')),
+      );
+    }
   }
 
   @override
@@ -132,7 +142,8 @@ class _HomeScreenState extends State<HomeScreen> {
             const SizedBox(height: 24),
 
             // 4. Quick Access AI Modules Grid
-            _buildSectionHeader('AI Vision Modules', 'All smart neural tools & pipelines'),
+            _buildSectionHeader(
+                'AI Vision Modules', 'All smart neural tools & pipelines'),
             const SizedBox(height: 12),
             _buildModuleGrid(context),
 
@@ -149,48 +160,78 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Row(
         children: [
           ActionChip(
-            avatar: const Icon(Icons.auto_awesome, size: 14, color: AppColors.neonAccent),
-            label: const Text('Vision Chatbot', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primaryText)),
+            avatar: const Icon(Icons.auto_awesome,
+                size: 14, color: AppColors.neonAccent),
+            label: const Text('Vision Chatbot',
+                style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.primaryText)),
             backgroundColor: AppColors.cardBackground,
             side: const BorderSide(color: AppColors.border),
             onPressed: () => context.push('/chatbot'),
           ),
           const SizedBox(width: 8),
           ActionChip(
-            avatar: const Icon(Icons.document_scanner_rounded, size: 14, color: Colors.amberAccent),
-            label: const Text('OCR & Translate', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primaryText)),
+            avatar: const Icon(Icons.document_scanner_rounded,
+                size: 14, color: Colors.amberAccent),
+            label: const Text('OCR & Translate',
+                style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.primaryText)),
             backgroundColor: AppColors.cardBackground,
             side: const BorderSide(color: AppColors.border),
             onPressed: () => context.push('/document_screening'),
           ),
           const SizedBox(width: 8),
           ActionChip(
-            avatar: const Icon(Icons.radar_rounded, size: 14, color: AppColors.brightViolet),
-            label: const Text('Target Search', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primaryText)),
+            avatar: const Icon(Icons.radar_rounded,
+                size: 14, color: AppColors.brightViolet),
+            label: const Text('Target Search',
+                style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.primaryText)),
             backgroundColor: AppColors.cardBackground,
             side: const BorderSide(color: AppColors.border),
             onPressed: () => context.push('/find_object'),
           ),
           const SizedBox(width: 8),
           ActionChip(
-            avatar: const Icon(Icons.movie_filter_rounded, size: 14, color: Colors.tealAccent),
-            label: const Text('Video Review', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primaryText)),
+            avatar: const Icon(Icons.movie_filter_rounded,
+                size: 14, color: Colors.tealAccent),
+            label: const Text('Video Review',
+                style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.primaryText)),
             backgroundColor: AppColors.cardBackground,
             side: const BorderSide(color: AppColors.border),
             onPressed: () => context.push('/video_review'),
           ),
           const SizedBox(width: 8),
           ActionChip(
-            avatar: const Icon(Icons.face_rounded, size: 14, color: Colors.cyanAccent),
-            label: const Text('Face ID', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primaryText)),
+            avatar: const Icon(Icons.face_rounded,
+                size: 14, color: Colors.cyanAccent),
+            label: const Text('Face ID',
+                style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.primaryText)),
             backgroundColor: AppColors.cardBackground,
             side: const BorderSide(color: AppColors.border),
             onPressed: () => context.push('/face_id'),
           ),
           const SizedBox(width: 8),
           ActionChip(
-            avatar: const Icon(Icons.warning_amber_rounded, size: 14, color: AppColors.error),
-            label: const Text('Threat Alerts', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primaryText)),
+            avatar: const Icon(Icons.warning_amber_rounded,
+                size: 14, color: AppColors.error),
+            label: const Text('Threat Alerts',
+                style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.primaryText)),
             backgroundColor: AppColors.cardBackground,
             side: const BorderSide(color: AppColors.border),
             onPressed: () => context.push('/alerts'),
@@ -202,6 +243,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildTopHeader() {
     final detectionCtrl = context.watch<DetectionController>();
+    final aiService = context.watch<OnDeviceAiService>();
+    final cameraController = context.watch<CameraService>().controller;
+    final previewSize = cameraController?.value.previewSize;
+    final resolution = previewSize == null
+        ? 'Unavailable'
+        : '${previewSize.width.round()} x ${previewSize.height.round()}';
 
     return Container(
       padding: const EdgeInsets.all(14),
@@ -221,7 +268,8 @@ class _HomeScreenState extends State<HomeScreen> {
             children: [
               ClipRRect(
                 borderRadius: BorderRadius.circular(8),
-                child: Image.asset('assets/logo.png', width: 36, height: 36, fit: BoxFit.cover),
+                child: Image.asset('assets/logo.png',
+                    width: 36, height: 36, fit: BoxFit.cover),
               ),
               const SizedBox(width: 12),
               const Column(
@@ -229,68 +277,96 @@ class _HomeScreenState extends State<HomeScreen> {
                 children: [
                   Text(
                     'SmartVision AI Sentinel',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.primaryText),
+                    style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.primaryText),
                   ),
                   Text(
                     'Real-time object detection and tracking',
-                    style: TextStyle(fontSize: 11, color: AppColors.secondaryText),
+                    style:
+                        TextStyle(fontSize: 11, color: AppColors.secondaryText),
                   ),
                 ],
               ),
             ],
           ),
 
-          // Telemetry Pills matching website: Status, FPS, Resolution, Input Source
+          // Show only telemetry the client can observe accurately.
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                _buildTelemetryBadge('Status', 'Active', const Color(0xFF10B981)),
+                _buildTelemetryBadge(
+                    'Status',
+                    detectionCtrl.isDetecting ? 'Scanning' : 'Standby',
+                    detectionCtrl.isDetecting
+                        ? AppColors.success
+                        : AppColors.warning),
                 const SizedBox(width: 10),
-                _buildTelemetryBadge('FPS', detectionCtrl.currentFps.toStringAsFixed(1), AppColors.neonAccent),
+                _buildTelemetryBadge(
+                    'On-device AI',
+                    aiService.isModelLoaded
+                        ? 'Ready'
+                        : aiService.isLoading
+                            ? 'Loading'
+                            : 'Unavailable',
+                    aiService.isModelLoaded
+                        ? AppColors.success
+                        : AppColors.warning),
                 const SizedBox(width: 10),
-                _buildTelemetryBadge('Resolution', '1280 x 720', AppColors.primaryText),
+                _buildTelemetryBadge(
+                    'Resolution', resolution, AppColors.primaryText),
                 const SizedBox(width: 10),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: AppColors.elevatedSurface,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppColors.border),
-                ),
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<String>(
-                    value: _inputSource,
-                    dropdownColor: AppColors.cardBackground,
-                    style: const TextStyle(color: AppColors.primaryText, fontSize: 12, fontWeight: FontWeight.bold),
-                    icon: const Icon(Icons.arrow_drop_down, color: AppColors.neonAccent, size: 18),
-                    items: [
-                      'Live Camera',
-                      'Upload Image / Gallery',
-                      if (_inputSource == 'Uploaded Image') 'Uploaded Image',
-                      'Test Scene: Classroom',
-                      'Test Scene: Office',
-                      'Test Scene: Safety Hazard',
-                      'Test Scene: Identity Permit',
-                    ].map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
-                    onChanged: (val) {
-                      if (val != null) {
-                        if (val == 'Upload Image / Gallery') {
-                          _pickAndProcessCustomImage();
-                        } else {
-                          setState(() => _inputSource = val);
-                          if (val != 'Live Camera' && val != 'Uploaded Image') {
-                            _processSampleScene(_sampleSceneAssets[val]!);
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppColors.elevatedSurface,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: _inputSource,
+                      dropdownColor: AppColors.cardBackground,
+                      style: const TextStyle(
+                          color: AppColors.primaryText,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold),
+                      icon: const Icon(Icons.arrow_drop_down,
+                          color: AppColors.neonAccent, size: 18),
+                      items: [
+                        'Live Camera',
+                        'Upload Image / Gallery',
+                        if (_inputSource == 'Uploaded Image') 'Uploaded Image',
+                        'Test Scene: Classroom',
+                        'Test Scene: Office',
+                        'Test Scene: Safety Hazard',
+                        'Test Scene: Identity Permit',
+                      ]
+                          .map(
+                              (s) => DropdownMenuItem(value: s, child: Text(s)))
+                          .toList(),
+                      onChanged: (val) {
+                        if (val != null) {
+                          if (val == 'Upload Image / Gallery') {
+                            _pickAndProcessCustomImage();
+                          } else {
+                            setState(() => _inputSource = val);
+                            if (val != 'Live Camera' &&
+                                val != 'Uploaded Image') {
+                              _processSampleScene(_sampleSceneAssets[val]!);
+                            }
                           }
                         }
-                      }
-                    },
+                      },
+                    ),
                   ),
                 ),
-              ),
-            ],
-          ),
+              ],
+            ),
           ),
         ],
       ),
@@ -309,8 +385,13 @@ class _HomeScreenState extends State<HomeScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(label, style: const TextStyle(fontSize: 10, color: AppColors.mutedText)),
-          Text(value, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: valueColor)),
+          Text(label,
+              style: const TextStyle(fontSize: 10, color: AppColors.mutedText)),
+          Text(value,
+              style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: valueColor)),
         ],
       ),
     );
@@ -349,7 +430,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   builder: (context, constraints) {
                     return DetectionOverlay(
                       detections: detectionCtrl.currentResults,
-                      screenSize: Size(constraints.maxWidth, constraints.maxHeight),
+                      screenSize:
+                          Size(constraints.maxWidth, constraints.maxHeight),
                     );
                   },
                 ),
@@ -359,9 +441,12 @@ class _HomeScreenState extends State<HomeScreen> {
                   top: 10,
                   left: 10,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
-                      color: isDetecting ? AppColors.neonAccent : Colors.black.withValues(alpha: 0.85),
+                      color: isDetecting
+                          ? AppColors.neonAccent
+                          : Colors.black.withValues(alpha: 0.85),
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
@@ -391,35 +476,49 @@ class _HomeScreenState extends State<HomeScreen> {
                     Row(
                       children: [
                         IconButton(
-                          icon: const Icon(Icons.rotate_right_rounded, size: 20, color: AppColors.primaryText),
+                          icon: const Icon(Icons.rotate_right_rounded,
+                              size: 20, color: AppColors.primaryText),
                           tooltip: 'Rotate 90° Clockwise',
                           onPressed: () {
-                            setState(() => _rotationQuarterTurns = (_rotationQuarterTurns + 1) % 4);
+                            setState(() => _rotationQuarterTurns =
+                                (_rotationQuarterTurns + 1) % 4);
                           },
                         ),
                         Text(
                           '${_rotationQuarterTurns * 90}°',
-                          style: const TextStyle(fontSize: 11, color: AppColors.secondaryText, fontWeight: FontWeight.bold),
+                          style: const TextStyle(
+                              fontSize: 11,
+                              color: AppColors.secondaryText,
+                              fontWeight: FontWeight.bold),
                         ),
                         const SizedBox(width: 8),
                         IconButton(
                           icon: Icon(
-                            _flipHorizontally ? Icons.flip_rounded : Icons.flip_rounded,
+                            _flipHorizontally
+                                ? Icons.flip_rounded
+                                : Icons.flip_rounded,
                             size: 20,
-                            color: _flipHorizontally ? AppColors.neonAccent : AppColors.secondaryText,
+                            color: _flipHorizontally
+                                ? AppColors.neonAccent
+                                : AppColors.secondaryText,
                           ),
                           tooltip: 'Flip Horizontally',
                           onPressed: () {
-                            setState(() => _flipHorizontally = !_flipHorizontally);
+                            setState(
+                                () => _flipHorizontally = !_flipHorizontally);
                           },
                         ),
                       ],
                     ),
                     if (_inputSource != 'Live Camera')
                       TextButton.icon(
-                        icon: const Icon(Icons.refresh, size: 16, color: AppColors.neonAccent),
-                        label: const Text('Re-run Inference', style: TextStyle(fontSize: 11, color: AppColors.neonAccent)),
-                        onPressed: () => _processSampleScene(_sampleSceneAssets[_inputSource]!),
+                        icon: const Icon(Icons.refresh,
+                            size: 16, color: AppColors.neonAccent),
+                        label: const Text('Re-run Inference',
+                            style: TextStyle(
+                                fontSize: 11, color: AppColors.neonAccent)),
+                        onPressed: () => _processSampleScene(
+                            _sampleSceneAssets[_inputSource]!),
                       ),
                   ],
                 ),
@@ -433,21 +532,30 @@ class _HomeScreenState extends State<HomeScreen> {
                       flex: 3,
                       child: ElevatedButton.icon(
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: isDetecting ? AppColors.error : AppColors.primaryViolet,
+                          backgroundColor: isDetecting
+                              ? AppColors.error
+                              : AppColors.primaryViolet,
                           foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10)),
                         ),
-                        icon: Icon(isDetecting ? Icons.stop_rounded : Icons.play_arrow_rounded, size: 20),
+                        icon: Icon(
+                            isDetecting
+                                ? Icons.stop_rounded
+                                : Icons.play_arrow_rounded,
+                            size: 20),
                         label: Text(
                           isDetecting ? 'Stop Detection' : 'Start Detection',
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                          style: const TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 13),
                         ),
                         onPressed: () {
                           if (_inputSource == 'Live Camera') {
                             detectionCtrl.toggleDetection();
                           } else {
-                            _processSampleScene(_sampleSceneAssets[_inputSource]!);
+                            _processSampleScene(
+                                _sampleSceneAssets[_inputSource]!);
                           }
                         },
                       ),
@@ -460,32 +568,41 @@ class _HomeScreenState extends State<HomeScreen> {
                           foregroundColor: AppColors.primaryText,
                           side: const BorderSide(color: AppColors.border),
                           padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10)),
                         ),
                         icon: const Icon(Icons.camera_alt_outlined, size: 18),
-                        label: const Text('Capture', style: TextStyle(fontSize: 12)),
+                        label: const Text('Capture',
+                            style: TextStyle(fontSize: 12)),
                         onPressed: () async {
-                          if (_inputSource == 'Live Camera' && cameraService.controller != null) {
+                          if (_inputSource == 'Live Camera' &&
+                              cameraService.controller != null) {
                             try {
-                              final xfile = await cameraService.controller!.takePicture();
+                              final xfile =
+                                  await cameraService.controller!.takePicture();
                               final bytes = await xfile.readAsBytes();
                               await detectionCtrl.analyzeImageBytes(bytes);
                               _loadRecentHistory();
+                            } catch (_) {
                               if (context.mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Frame captured and analyzed successfully!')),
+                                  const SnackBar(
+                                      content: Text(
+                                          'Unable to capture or analyze this frame. Check camera access and the on-device model.')),
                                 );
                               }
-                            } catch (_) {}
+                            }
                           } else if (_inputSource != 'Live Camera') {
-                            _processSampleScene(_sampleSceneAssets[_inputSource]!);
+                            _processSampleScene(
+                                _sampleSceneAssets[_inputSource]!);
                           }
                         },
                       ),
                     ),
                     const SizedBox(width: 10),
                     IconButton(
-                      icon: const Icon(Icons.fullscreen_rounded, color: AppColors.neonAccent),
+                      icon: const Icon(Icons.fullscreen_rounded,
+                          color: AppColors.neonAccent),
                       tooltip: 'Fullscreen Scanner',
                       style: IconButton.styleFrom(
                         backgroundColor: AppColors.elevatedSurface,
@@ -512,7 +629,8 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     if (_inputSource != 'Live Camera') {
-      final path = _sampleSceneAssets[_inputSource] ?? 'assets/samples/classroom.jpg';
+      final path =
+          _sampleSceneAssets[_inputSource] ?? 'assets/samples/classroom.jpg';
       return Image.asset(path, fit: BoxFit.cover);
     }
 
@@ -526,9 +644,11 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.videocam_outlined, color: AppColors.mutedText, size: 40),
+            const Icon(Icons.videocam_outlined,
+                color: AppColors.mutedText, size: 40),
             const SizedBox(height: 8),
-            const Text('Camera initializing or testing with Sample Scene', style: TextStyle(color: AppColors.secondaryText, fontSize: 12)),
+            const Text('Camera initializing…',
+                style: TextStyle(color: AppColors.secondaryText, fontSize: 12)),
             const SizedBox(height: 10),
             ElevatedButton(
               onPressed: () => cameraService.initialize(),
@@ -561,10 +681,22 @@ class _HomeScreenState extends State<HomeScreen> {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Real-time Detections', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.primaryText)),
+                  const Text('Real-time Detections',
+                      style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.primaryText)),
                   const SizedBox(height: 4),
-                  Text('$total', style: const TextStyle(fontSize: 34, fontWeight: FontWeight.w800, color: AppColors.neonAccent)),
-                  const Text('Objects currently detected', style: TextStyle(fontSize: 11, color: Color(0xFF10B981), fontWeight: FontWeight.w500)),
+                  Text('$total',
+                      style: const TextStyle(
+                          fontSize: 34,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.neonAccent)),
+                  const Text('Objects currently detected',
+                      style: TextStyle(
+                          fontSize: 11,
+                          color: Color(0xFF10B981),
+                          fontWeight: FontWeight.w500)),
                 ],
               ),
               Container(
@@ -582,7 +714,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       shape: BoxShape.circle,
                       color: const Color(0xFF10B981).withValues(alpha: 0.25),
                     ),
-                    child: const Icon(Icons.radar_rounded, size: 16, color: Color(0xFF10B981)),
+                    child: const Icon(Icons.radar_rounded,
+                        size: 16, color: Color(0xFF10B981)),
                   ),
                 ),
               ),
@@ -603,12 +736,18 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Detected Objects', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.primaryText)),
+              const Text('Detected Objects',
+                  style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.primaryText)),
               const SizedBox(height: 12),
               if (counts.isEmpty)
                 const Padding(
                   padding: EdgeInsets.symmetric(vertical: 12.0),
-                  child: Text('No objects currently in view.', style: TextStyle(fontSize: 12, color: AppColors.mutedText)),
+                  child: Text('No objects currently in view.',
+                      style:
+                          TextStyle(fontSize: 12, color: AppColors.mutedText)),
                 )
               else
                 ...counts.entries.map((e) {
@@ -621,15 +760,22 @@ class _HomeScreenState extends State<HomeScreen> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text(e.key.toUpperCase(), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.primaryText)),
-                            Text('${e.value} (${pct.toStringAsFixed(0)}%)', style: const TextStyle(fontSize: 11, color: AppColors.neonAccent)),
+                            Text(e.key.toUpperCase(),
+                                style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.primaryText)),
+                            Text('${e.value} (${pct.toStringAsFixed(0)}%)',
+                                style: const TextStyle(
+                                    fontSize: 11, color: AppColors.neonAccent)),
                           ],
                         ),
                         const SizedBox(height: 4),
                         LinearProgressIndicator(
                           value: total > 0 ? (e.value / total) : 0,
                           backgroundColor: AppColors.elevatedSurface,
-                          valueColor: const AlwaysStoppedAnimation<Color>(AppColors.neonAccent),
+                          valueColor: const AlwaysStoppedAnimation<Color>(
+                              AppColors.neonAccent),
                           minHeight: 4,
                           borderRadius: BorderRadius.circular(2),
                         ),
@@ -654,13 +800,24 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Detection Settings', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.primaryText)),
+              const Text('Detection Settings',
+                  style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.primaryText)),
               const SizedBox(height: 8),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('Confidence Threshold', style: TextStyle(fontSize: 11, color: AppColors.secondaryText)),
-                  Text('${(detectionCtrl.settings.minimumConfidence * 100).toInt()}%', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.neonAccent)),
+                  const Text('Confidence Threshold',
+                      style: TextStyle(
+                          fontSize: 11, color: AppColors.secondaryText)),
+                  Text(
+                      '${(detectionCtrl.settings.minimumConfidence * 100).toInt()}%',
+                      style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.neonAccent)),
                 ],
               ),
               SliderTheme(
@@ -677,7 +834,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   max: 0.95,
                   onChanged: (val) {
                     detectionCtrl.updateSettings(
-                      DetectionSettings(minimumConfidence: val),
+                      detectionCtrl.settings.copyWith(minimumConfidence: val),
                     );
                   },
                 ),
@@ -695,11 +852,18 @@ class _HomeScreenState extends State<HomeScreen> {
       children: [
         const Text(
           'Recent Detections',
-          style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.primaryText),
+          style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              color: AppColors.primaryText),
         ),
         TextButton(
           onPressed: () => context.push('/history'),
-          child: const Text('View All', style: TextStyle(color: AppColors.neonAccent, fontSize: 12, fontWeight: FontWeight.bold)),
+          child: const Text('View All',
+              style: TextStyle(
+                  color: AppColors.neonAccent,
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold)),
         ),
       ],
     );
@@ -711,13 +875,7 @@ class _HomeScreenState extends State<HomeScreen> {
       builder: (context, snapshot) {
         final list = (snapshot.data != null && snapshot.data!.isNotEmpty)
             ? snapshot.data!.take(5).toList()
-            : [
-                DetectionHistory(objectName: 'Person', confidence: 0.94, timestamp: DateTime.now(), boundingBox: Rect.zero),
-                DetectionHistory(objectName: 'Laptop', confidence: 0.92, timestamp: DateTime.now().subtract(const Duration(minutes: 1)), boundingBox: Rect.zero),
-                DetectionHistory(objectName: 'Cell phone', confidence: 0.89, timestamp: DateTime.now().subtract(const Duration(minutes: 3)), boundingBox: Rect.zero),
-                DetectionHistory(objectName: 'Bottle', confidence: 0.88, timestamp: DateTime.now().subtract(const Duration(minutes: 5)), boundingBox: Rect.zero),
-                DetectionHistory(objectName: 'Chair', confidence: 0.86, timestamp: DateTime.now().subtract(const Duration(minutes: 8)), boundingBox: Rect.zero),
-              ];
+            : const <DetectionHistory>[];
 
         return SizedBox(
           height: 80,
@@ -742,13 +900,21 @@ class _HomeScreenState extends State<HomeScreen> {
                   children: [
                     Text(
                       item.objectName.toUpperCase(),
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.primaryText),
+                      style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                          color: AppColors.primaryText),
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 2),
-                    Text('$conf% Confidence', style: const TextStyle(fontSize: 10, color: AppColors.neonAccent)),
+                    Text('$conf% Confidence',
+                        style: const TextStyle(
+                            fontSize: 10, color: AppColors.neonAccent)),
                     const SizedBox(height: 2),
-                    Text('${item.timestamp.hour}:${item.timestamp.minute.toString().padLeft(2, '0')}', style: const TextStyle(fontSize: 9, color: AppColors.mutedText)),
+                    Text(
+                        '${item.timestamp.hour}:${item.timestamp.minute.toString().padLeft(2, '0')}',
+                        style: const TextStyle(
+                            fontSize: 9, color: AppColors.mutedText)),
                   ],
                 ),
               );
@@ -763,22 +929,76 @@ class _HomeScreenState extends State<HomeScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.primaryText)),
-        Text(subtitle, style: const TextStyle(fontSize: 11, color: AppColors.secondaryText)),
+        Text(title,
+            style: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.bold,
+                color: AppColors.primaryText)),
+        Text(subtitle,
+            style:
+                const TextStyle(fontSize: 11, color: AppColors.secondaryText)),
       ],
     );
   }
 
   Widget _buildModuleGrid(BuildContext context) {
     final modules = [
-      {'title': 'Vision Chatbot', 'desc': 'Multimodal AI assistant with camera view', 'icon': Icons.smart_toy_outlined, 'route': '/chatbot', 'color': AppColors.neonAccent},
-      {'title': 'Target Lookup', 'desc': 'Search and track specific objects in scene', 'icon': Icons.radar_rounded, 'route': '/find_object', 'color': AppColors.brightViolet},
-      {'title': 'Threat Sentinel', 'desc': 'Hazard alarms for weapons and danger items', 'icon': Icons.security_rounded, 'route': '/alerts', 'color': AppColors.error},
-      {'title': 'Biometric Face ID', 'desc': 'FAISS vector identity verification', 'icon': Icons.face_retouching_natural_rounded, 'route': '/face_id', 'color': Colors.cyanAccent},
-      {'title': 'OCR & Translate', 'desc': 'Text extraction, 18-language translation', 'icon': Icons.document_scanner_rounded, 'route': '/document_screening', 'color': Colors.amberAccent},
-      {'title': 'Video Review', 'desc': 'Automated video timeline object search', 'icon': Icons.movie_filter_rounded, 'route': '/video_review', 'color': Colors.tealAccent},
-      {'title': 'Telemetry & Research', 'desc': 'mAP, accuracy curves & SQLite logs', 'icon': Icons.analytics_outlined, 'route': '/statistics', 'color': Colors.lightGreenAccent},
-      {'title': 'System Settings', 'desc': 'Configure server IP, sirens & voice TTS', 'icon': Icons.tune_rounded, 'route': '/settings', 'color': Colors.deepOrangeAccent},
+      {
+        'title': 'Vision Chatbot',
+        'desc': 'Multimodal AI assistant with camera view',
+        'icon': Icons.smart_toy_outlined,
+        'route': '/chatbot',
+        'color': AppColors.neonAccent
+      },
+      {
+        'title': 'Target Lookup',
+        'desc': 'Search and track specific objects in scene',
+        'icon': Icons.radar_rounded,
+        'route': '/find_object',
+        'color': AppColors.brightViolet
+      },
+      {
+        'title': 'Threat Sentinel',
+        'desc': 'Hazard alarms for weapons and danger items',
+        'icon': Icons.security_rounded,
+        'route': '/alerts',
+        'color': AppColors.error
+      },
+      {
+        'title': 'Biometric Face ID',
+        'desc': 'FAISS vector identity verification',
+        'icon': Icons.face_retouching_natural_rounded,
+        'route': '/face_id',
+        'color': Colors.cyanAccent
+      },
+      {
+        'title': 'OCR & Translate',
+        'desc': 'Text extraction, 18-language translation',
+        'icon': Icons.document_scanner_rounded,
+        'route': '/document_screening',
+        'color': Colors.amberAccent
+      },
+      {
+        'title': 'Video Review',
+        'desc': 'Automated video timeline object search',
+        'icon': Icons.movie_filter_rounded,
+        'route': '/video_review',
+        'color': Colors.tealAccent
+      },
+      {
+        'title': 'Telemetry & Research',
+        'desc': 'mAP, accuracy curves & SQLite logs',
+        'icon': Icons.analytics_outlined,
+        'route': '/statistics',
+        'color': Colors.lightGreenAccent
+      },
+      {
+        'title': 'System Settings',
+        'desc': 'Configure server IP, sirens & voice TTS',
+        'icon': Icons.tune_rounded,
+        'route': '/settings',
+        'color': Colors.deepOrangeAccent
+      },
     ];
 
     return GridView.builder(
@@ -807,11 +1027,20 @@ class _HomeScreenState extends State<HomeScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(m['icon'] as IconData, color: m['color'] as Color, size: 22),
+                Icon(m['icon'] as IconData,
+                    color: m['color'] as Color, size: 22),
                 const SizedBox(height: 6),
-                Text(m['title'] as String, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.primaryText)),
+                Text(m['title'] as String,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                        color: AppColors.primaryText)),
                 const SizedBox(height: 2),
-                Text(m['desc'] as String, style: const TextStyle(fontSize: 9, color: AppColors.secondaryText), maxLines: 1, overflow: TextOverflow.ellipsis),
+                Text(m['desc'] as String,
+                    style: const TextStyle(
+                        fontSize: 9, color: AppColors.secondaryText),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis),
               ],
             ),
           ),

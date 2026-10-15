@@ -1,14 +1,17 @@
 import os
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
+import math
 import subprocess
+import tempfile
+import threading
 import time
 import cv2
 import numpy as np
 import base64
 from typing import Optional, Dict, Any, List, Union
 from fastapi import FastAPI, HTTPException, Body, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 from ultralytics import YOLO
@@ -89,7 +92,36 @@ class SummarizeRequest(BaseModel):
 class VideoReviewRequest(BaseModel):
     video_base64: str
     target_object: Optional[str] = "person"
-    confidence_threshold: Optional[float] = 0.25
+    confidence_threshold: float = Field(default=0.25, ge=0.0, le=1.0)
+    iou_threshold: float = Field(default=0.45, ge=0.0, le=1.0)
+    max_detections: int = Field(default=100, ge=1, le=300)
+
+class DetectionRequest(ImageRequest):
+    confidence_threshold: float = Field(default=0.25, ge=0.0, le=1.0)
+    iou_threshold: float = Field(default=0.45, ge=0.0, le=1.0)
+    max_detections: int = Field(default=100, ge=1, le=300)
+
+class VideoOCRRequest(BaseModel):
+    video_base64: str
+    frame_interval_seconds: float = Field(default=1.0, gt=0.0, le=30.0)
+
+class DrowsinessVideoRequest(BaseModel):
+    video_base64: str
+    ear_threshold: float = 0.25
+    consecutive_frames: int = 15
+
+class DrowsinessFrameRequest(ImageRequest):
+    session_id: str
+    ear_threshold: float = 0.25
+    consecutive_frames: int = 15
+
+drowsiness_lock = threading.Lock()
+drowsiness_sessions: Dict[str, Dict[str, Any]] = {}
+face_landmarker = None
+face_landmarker_lock = threading.Lock()
+
+LEFT_EYE = [33, 160, 158, 133, 153, 144]
+RIGHT_EYE = [362, 385, 387, 263, 373, 380]
 
 def decode_image(base64_str: str) -> np.ndarray:
     try:
@@ -111,13 +143,20 @@ async def health_check():
     return {"status": "healthy"}
 
 @app.post('/detect')
-async def detect_objects(req: ImageRequest):
+async def detect_objects(req: DetectionRequest):
     try:
         img = decode_image(req.image)
         if img is None:
             raise HTTPException(status_code=400, detail="Invalid image format")
 
-        results = yolo_model.predict(img, conf=0.25, agnostic_nms=True, verbose=False)
+        results = yolo_model.predict(
+            img,
+            conf=req.confidence_threshold,
+            iou=req.iou_threshold,
+            max_det=req.max_detections,
+            agnostic_nms=True,
+            verbose=False,
+        )
         
         detections = []
         for r in results:
@@ -323,7 +362,6 @@ async def summarize_text(req: SummarizeRequest):
 @app.post('/video/review')
 async def review_video(req: VideoReviewRequest):
     try:
-        import tempfile
         video_bytes = base64.b64decode(req.video_base64)
         with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as tf:
             tf.write(video_bytes)
@@ -335,7 +373,7 @@ async def review_video(req: VideoReviewRequest):
 
         timeline = []
         target = (req.target_object or "").lower().strip()
-        conf_thresh = req.confidence_threshold or 0.25
+        conf_thresh = req.confidence_threshold
 
         frame_idx = 0
         while cap.isOpened():
@@ -344,7 +382,13 @@ async def review_video(req: VideoReviewRequest):
             if frame_idx % frame_interval == 0:
                 sec = frame_idx / fps
                 time_str = f"{int(sec//60):02d}:{int(sec%60):02d}"
-                res = yolo_model.predict(frame, conf=conf_thresh, verbose=False)
+                res = yolo_model.predict(
+                    frame,
+                    conf=conf_thresh,
+                    iou=req.iou_threshold,
+                    max_det=req.max_detections,
+                    verbose=False,
+                )
                 frame_matches = []
                 for r in res:
                     for box in r.boxes:
@@ -372,6 +416,223 @@ async def review_video(req: VideoReviewRequest):
         return {"target": target, "total_events": len(timeline), "timeline": timeline}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+def _decode_video_to_temp(video_base64: str) -> str:
+    try:
+        video_bytes = base64.b64decode(video_base64, validate=True)
+        if not video_bytes:
+            raise ValueError("Empty video data")
+        with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as video_file:
+            video_file.write(video_bytes)
+            return video_file.name
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Failed to decode video: {exc}")
+
+@app.post('/video/ocr')
+def video_ocr(req: VideoOCRRequest):
+    if ocr_reader is None:
+        raise HTTPException(status_code=503, detail="OCR is unavailable because its model could not be loaded.")
+    if req.frame_interval_seconds <= 0:
+        raise HTTPException(status_code=422, detail="frame_interval_seconds must be positive.")
+
+    video_path = _decode_video_to_temp(req.video_base64)
+    cap = None
+    try:
+        cap = cv2.VideoCapture(video_path)
+        if not cap.isOpened():
+            raise HTTPException(status_code=400, detail="The uploaded video could not be opened.")
+        fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+        interval = max(1, int(fps * req.frame_interval_seconds))
+        timeline = []
+        seen_text = set()
+        frame_idx = 0
+        while True:
+            ok, frame = cap.read()
+            if not ok:
+                break
+            if frame_idx % interval == 0:
+                timestamp = frame_idx / fps
+                detections = ocr_reader.readtext(frame)
+                frame_text = []
+                for _, text, confidence in detections:
+                    clean_text = " ".join(str(text).split())
+                    normalized = clean_text.casefold()
+                    if not clean_text or normalized in seen_text:
+                        continue
+                    seen_text.add(normalized)
+                    frame_text.append({
+                        "text": clean_text,
+                        "confidence": float(confidence),
+                    })
+                if frame_text:
+                    timeline.append({
+                        "seconds": round(timestamp, 2),
+                        "timestamp": f"{int(timestamp // 60):02d}:{int(timestamp % 60):02d}",
+                        "texts": frame_text,
+                    })
+            frame_idx += 1
+
+        combined_text = "\n".join(
+            item["text"] for frame_result in timeline for item in frame_result["texts"]
+        )
+        return {
+            "frame_interval_seconds": req.frame_interval_seconds,
+            "total_frames_processed": (frame_idx + interval - 1) // interval,
+            "timeline": timeline,
+            "full_text": combined_text,
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Video OCR failed: {exc}")
+    finally:
+        if cap is not None:
+            cap.release()
+        try:
+            os.unlink(video_path)
+        except OSError:
+            pass
+
+def _get_face_landmarker():
+    global face_landmarker
+    if face_landmarker is not None:
+        return face_landmarker
+    model_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "face_landmarker.task")
+    if not os.path.isfile(model_path):
+        raise HTTPException(status_code=503, detail="The Face Landmarker model file is missing.")
+    try:
+        import mediapipe as mp
+        options = mp.tasks.vision.FaceLandmarkerOptions(
+            base_options=mp.tasks.BaseOptions(model_asset_path=model_path),
+            running_mode=mp.tasks.vision.RunningMode.IMAGE,
+            num_faces=1,
+        )
+        face_landmarker = mp.tasks.vision.FaceLandmarker.create_from_options(options)
+        return face_landmarker
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"Face Landmarker could not be initialized: {exc}")
+
+def _eye_aspect_ratio(eye_points, landmarks, width: int, height: int) -> float:
+    points = [(landmarks[index].x * width, landmarks[index].y * height) for index in eye_points]
+    vertical_one = math.dist(points[1], points[5])
+    vertical_two = math.dist(points[2], points[4])
+    horizontal = math.dist(points[0], points[3])
+    if horizontal == 0:
+        return 0.0
+    return (vertical_one + vertical_two) / (2.0 * horizontal)
+
+def _drowsiness_result(image: np.ndarray, threshold: float) -> Optional[float]:
+    import mediapipe as mp
+    rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_image)
+    result = _get_face_landmarker().detect(mp_image)
+    if not result.face_landmarks:
+        return None
+    landmarks = result.face_landmarks[0]
+    height, width = image.shape[:2]
+    left = _eye_aspect_ratio(LEFT_EYE, landmarks, width, height)
+    right = _eye_aspect_ratio(RIGHT_EYE, landmarks, width, height)
+    return (left + right) / 2.0
+
+@app.post('/drowsiness/frame')
+def drowsiness_frame(req: DrowsinessFrameRequest):
+    if not 0.15 <= req.ear_threshold <= 0.35:
+        raise HTTPException(status_code=422, detail="ear_threshold must be between 0.15 and 0.35.")
+    if not 1 <= req.consecutive_frames <= 100:
+        raise HTTPException(status_code=422, detail="consecutive_frames must be between 1 and 100.")
+    try:
+        frame = decode_image(req.image)
+        with face_landmarker_lock:
+            ear = _drowsiness_result(frame, req.ear_threshold)
+        now = time.time()
+        with drowsiness_lock:
+            session = drowsiness_sessions.setdefault(
+                req.session_id,
+                {"closed_frames": 0, "incidents": 0, "last_seen": now, "alert_active": False},
+            )
+            session["last_seen"] = now
+            if ear is None:
+                session["closed_frames"] = 0
+                session["alert_active"] = False
+            elif ear < req.ear_threshold:
+                session["closed_frames"] += 1
+                if session["closed_frames"] >= req.consecutive_frames and not session["alert_active"]:
+                    session["incidents"] += 1
+                    session["alert_active"] = True
+            else:
+                session["closed_frames"] = 0
+                session["alert_active"] = False
+            expired = [key for key, value in drowsiness_sessions.items() if now - value["last_seen"] > 1800]
+            for key in expired:
+                drowsiness_sessions.pop(key, None)
+            return {
+                "face_detected": ear is not None,
+                "ear": round(ear, 4) if ear is not None else None,
+                "drowsy": session["alert_active"],
+                "closed_frames": session["closed_frames"],
+                "incidents": session["incidents"],
+            }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Drowsiness analysis failed: {exc}")
+
+@app.post('/drowsiness/video')
+def drowsiness_video(req: DrowsinessVideoRequest):
+    if not 0.15 <= req.ear_threshold <= 0.35:
+        raise HTTPException(status_code=422, detail="ear_threshold must be between 0.15 and 0.35.")
+    if not 1 <= req.consecutive_frames <= 100:
+        raise HTTPException(status_code=422, detail="consecutive_frames must be between 1 and 100.")
+    video_path = _decode_video_to_temp(req.video_base64)
+    cap = None
+    consecutive_closed = 0
+    incidents = []
+    frame_idx = 0
+    try:
+        cap = cv2.VideoCapture(video_path)
+        if not cap.isOpened():
+            raise HTTPException(status_code=400, detail="The uploaded video could not be opened.")
+        fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+        interval = max(1, int(fps / 2))
+        with face_landmarker_lock:
+            while True:
+                ok, frame = cap.read()
+                if not ok:
+                    break
+                if frame_idx % interval == 0:
+                    ear = _drowsiness_result(frame, req.ear_threshold)
+                    if ear is None:
+                        consecutive_closed = 0
+                    elif ear < req.ear_threshold:
+                        consecutive_closed += interval
+                        if consecutive_closed >= req.consecutive_frames:
+                            incidents.append({
+                                "seconds": round(frame_idx / fps, 2),
+                                "timestamp": f"{int(frame_idx / fps // 60):02d}:{int(frame_idx / fps % 60):02d}",
+                                "ear": round(ear, 4),
+                            })
+                            consecutive_closed = 0
+                    else:
+                        consecutive_closed = 0
+                frame_idx += 1
+        return {
+            "total_incidents": len(incidents),
+            "frames_analyzed": (frame_idx + interval - 1) // interval,
+            "ear_threshold": req.ear_threshold,
+            "consecutive_frames": req.consecutive_frames,
+            "incidents": incidents,
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Drowsiness video analysis failed: {exc}")
+    finally:
+        if cap is not None:
+            cap.release()
+        try:
+            os.unlink(video_path)
+        except OSError:
+            pass
 
 if __name__ == '__main__':
     uvicorn.run(app, host="0.0.0.0", port=8000)

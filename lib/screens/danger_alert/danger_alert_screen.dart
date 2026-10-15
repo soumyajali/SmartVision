@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../controllers/detection_controller.dart';
 import '../../core/constants/app_colors.dart';
@@ -11,19 +12,10 @@ class DangerAlertScreen extends StatefulWidget {
   State<DangerAlertScreen> createState() => _DangerAlertScreenState();
 }
 
-class _DangerAlertScreenState extends State<DangerAlertScreen> with SingleTickerProviderStateMixin {
+class _DangerAlertScreenState extends State<DangerAlertScreen>
+    with SingleTickerProviderStateMixin {
   bool _sirenActive = false;
-  bool _threatDetected = true;
-  final String _detectedThreat = 'Knife';
-  final double _threatConfidence = 0.94;
   late AnimationController _pulseController;
-
-  final List<Map<String, dynamic>> _hazardLogs = [
-    {'time': '22:14:08', 'type': 'Knife / Blade', 'confidence': '94%', 'location': 'Main Camera View', 'severity': 'CRITICAL'},
-    {'time': '21:45:20', 'type': 'Scissors / Sharp', 'confidence': '85%', 'location': 'Table Surface', 'severity': 'MEDIUM'},
-    {'time': '18:12:05', 'type': 'Fire / Smoke', 'confidence': '89%', 'location': 'Hazard Zone B', 'severity': 'CRITICAL'},
-    {'time': '14:02:11', 'type': 'Gas Cylinder', 'confidence': '92%', 'location': 'Perimeter Scan', 'severity': 'HIGH'},
-  ];
 
   @override
   void initState() {
@@ -40,35 +32,32 @@ class _DangerAlertScreenState extends State<DangerAlertScreen> with SingleTicker
     super.dispose();
   }
 
-  void _triggerSirenAlarm() {
+  void _toggleThreatAnnouncement(String threatName) {
     final speechService = context.read<SpeechService>();
-    setState(() => _sirenActive = !_sirenActive);
     if (_sirenActive) {
-      speechService.speak('Warning! Critical threat detected: $_detectedThreat. Please take caution immediately.');
+      speechService.stop();
+      setState(() => _sirenActive = false);
     } else {
-      speechService.speak('Alarm silenced.');
+      setState(() => _sirenActive = true);
+      speechService.speak('Warning. Hazard detected: $threatName.');
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final detectionCtrl = context.watch<DetectionController>();
-    final isThreatActive = detectionCtrl.hasActiveHazard || _threatDetected;
-    final threatName = detectionCtrl.activeHazardLabel?.toUpperCase() ?? _detectedThreat;
+    final hazards = detectionCtrl.currentResults
+        .where((result) => result.isHazard)
+        .toList();
+    final activeHazard = hazards.firstOrNull;
+    final isThreatActive = activeHazard != null;
+    final threatName = activeHazard?.label.toUpperCase() ?? '';
+    final threatConfidence = activeHazard?.confidence ?? 0.0;
 
     return Scaffold(
       backgroundColor: AppColors.primaryBackground,
       appBar: AppBar(
         title: const Text('Threat & Hazard Sentinel'),
-        actions: [
-          IconButton(
-            icon: Icon(isThreatActive ? Icons.security_rounded : Icons.shield_outlined, color: AppColors.neonAccent),
-            tooltip: 'Toggle Threat Status',
-            onPressed: () {
-              setState(() => _threatDetected = !_threatDetected);
-            },
-          ),
-        ],
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
@@ -82,10 +71,12 @@ class _DangerAlertScreenState extends State<DangerAlertScreen> with SingleTicker
                 return Container(
                   padding: const EdgeInsets.all(18),
                   decoration: BoxDecoration(
-                    color: AppColors.error.withValues(alpha: 0.12 + (glow * 0.12)),
+                    color:
+                        AppColors.error.withValues(alpha: 0.12 + (glow * 0.12)),
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(
-                      color: AppColors.error.withValues(alpha: 0.6 + (glow * 0.4)),
+                      color:
+                          AppColors.error.withValues(alpha: 0.6 + (glow * 0.4)),
                       width: 1.5,
                     ),
                     boxShadow: [
@@ -106,7 +97,8 @@ class _DangerAlertScreenState extends State<DangerAlertScreen> with SingleTicker
                               color: AppColors.error.withValues(alpha: 0.2),
                               shape: BoxShape.circle,
                             ),
-                            child: const Icon(Icons.warning_amber_rounded, color: AppColors.error, size: 30),
+                            child: const Icon(Icons.warning_amber_rounded,
+                                color: AppColors.error, size: 30),
                           ),
                           const SizedBox(width: 14),
                           Expanded(
@@ -114,7 +106,7 @@ class _DangerAlertScreenState extends State<DangerAlertScreen> with SingleTicker
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 const Text(
-                                  'CRITICAL THREAT DETECTED',
+                                  'HAZARD DETECTED',
                                   style: TextStyle(
                                     color: AppColors.error,
                                     fontWeight: FontWeight.bold,
@@ -124,8 +116,10 @@ class _DangerAlertScreenState extends State<DangerAlertScreen> with SingleTicker
                                 ),
                                 const SizedBox(height: 2),
                                 Text(
-                                  'Dangerous Object: $threatName (${(_threatConfidence * 100).toInt()}% confidence)',
-                                  style: const TextStyle(color: AppColors.primaryText, fontSize: 13),
+                                  '$threatName · ${(threatConfidence * 100).toStringAsFixed(1)}% confidence',
+                                  style: const TextStyle(
+                                      color: AppColors.primaryText,
+                                      fontSize: 13),
                                 ),
                               ],
                             ),
@@ -138,16 +132,29 @@ class _DangerAlertScreenState extends State<DangerAlertScreen> with SingleTicker
                           Expanded(
                             child: ElevatedButton.icon(
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: _sirenActive ? AppColors.warning : AppColors.error,
-                                foregroundColor: Colors.black,
-                                padding: const EdgeInsets.symmetric(vertical: 12),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                backgroundColor: _sirenActive
+                                    ? AppColors.warning
+                                    : AppColors.error,
+                                foregroundColor: Colors.white,
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 12),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10)),
                               ),
-                              onPressed: _triggerSirenAlarm,
-                              icon: Icon(_sirenActive ? Icons.volume_off : Icons.campaign_rounded, size: 20),
+                              onPressed: () =>
+                                  _toggleThreatAnnouncement(threatName),
+                              icon: Icon(
+                                  _sirenActive
+                                      ? Icons.stop_circle_outlined
+                                      : Icons.campaign_rounded,
+                                  size: 20),
                               label: Text(
-                                _sirenActive ? 'SILENCE SIREN' : 'SOUND SIREN ALARM',
-                                style: const TextStyle(fontWeight: FontWeight.bold, letterSpacing: 0.5),
+                                _sirenActive
+                                    ? 'STOP ANNOUNCEMENT'
+                                    : 'ANNOUNCE HAZARD',
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: 0.5),
                               ),
                             ),
                           ),
@@ -171,43 +178,84 @@ class _DangerAlertScreenState extends State<DangerAlertScreen> with SingleTicker
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: AppColors.success.withValues(alpha: 0.15),
+                      color: (detectionCtrl.isDetecting
+                              ? AppColors.success
+                              : AppColors.warning)
+                          .withValues(alpha: 0.15),
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(Icons.check_circle_rounded, color: AppColors.success, size: 26),
+                    child: Icon(
+                      detectionCtrl.isDetecting
+                          ? Icons.check_circle_rounded
+                          : Icons.pause_circle_outline_rounded,
+                      color: detectionCtrl.isDetecting
+                          ? AppColors.success
+                          : AppColors.warning,
+                      size: 26,
+                    ),
                   ),
                   const SizedBox(width: 14),
-                  const Column(
+                  Expanded(
+                      child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Area Secure', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.primaryText)),
-                      Text('No active hazardous objects detected in feed', style: TextStyle(color: AppColors.secondaryText, fontSize: 12)),
+                      Text(
+                        detectionCtrl.isDetecting
+                            ? 'No hazard in latest frame'
+                            : 'Monitoring is stopped',
+                        style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15,
+                            color: AppColors.primaryText),
+                      ),
+                      Text(
+                        detectionCtrl.isDetecting
+                            ? 'No hazardous detections in the most recent analysis.'
+                            : 'Start live detection before relying on hazard monitoring.',
+                        style: const TextStyle(
+                            color: AppColors.secondaryText, fontSize: 12),
+                      ),
                     ],
-                  )
+                  )),
                 ],
               ),
             ),
 
           const SizedBox(height: 20),
 
+          if (!detectionCtrl.isDetecting)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 20),
+              child: OutlinedButton.icon(
+                onPressed: () => context.push('/camera_detection'),
+                icon: const Icon(Icons.videocam_outlined),
+                label: const Text('Open live camera detection'),
+              ),
+            ),
+
           // Monitored Hazards Categories
           const Text(
-            'Monitored Hazard Categories',
-            style: TextStyle(color: AppColors.primaryText, fontWeight: FontWeight.bold, fontSize: 14),
+            'Hazards in Latest Analysis',
+            style: TextStyle(
+                color: AppColors.primaryText,
+                fontWeight: FontWeight.bold,
+                fontSize: 14),
           ),
           const SizedBox(height: 10),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              _buildHazardChip('🔪 Knife / Blade', true),
-              _buildHazardChip('✂️ Scissors', false),
-              _buildHazardChip('🔥 Fire / Flame', false),
-              _buildHazardChip('🔫 Weapon / Gun', false),
-              _buildHazardChip('🛢️ Gas Cylinder', false),
-              _buildHazardChip('⚠️ Suspicious Bag', false),
-            ],
-          ),
+          if (hazards.isEmpty)
+            const Text(
+              'No hazard labels are present in the current results.',
+              style: TextStyle(color: AppColors.secondaryText, fontSize: 12),
+            )
+          else
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: hazards.map((result) {
+                final confidence = (result.confidence * 100).toStringAsFixed(1);
+                return _buildHazardChip('${result.label} · $confidence%', true);
+              }).toList(),
+            ),
 
           const SizedBox(height: 24),
 
@@ -219,48 +267,21 @@ class _DangerAlertScreenState extends State<DangerAlertScreen> with SingleTicker
               borderRadius: BorderRadius.circular(16),
               border: Border.all(color: AppColors.border),
             ),
-            child: Column(
+            child: const Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Emergency Protocol', style: TextStyle(color: AppColors.primaryText, fontWeight: FontWeight.bold, fontSize: 14)),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: AppColors.warning,
-                          side: const BorderSide(color: AppColors.warning),
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                        ),
-                        onPressed: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Dispatched security alert broadcast notification')),
-                          );
-                        },
-                        icon: const Icon(Icons.notifications_active_rounded, size: 18),
-                        label: const Text('Broadcast Alert'),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.primaryViolet,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                        ),
-                        onPressed: () {
-                          context.read<SpeechService>().speak('Connecting emergency security dispatch.');
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Security response team notified')),
-                          );
-                        },
-                        icon: const Icon(Icons.phone_in_talk_rounded, size: 18),
-                        label: const Text('Call Security'),
-                      ),
-                    ),
-                  ],
+                Text('Alert Controls',
+                    style: TextStyle(
+                        color: AppColors.primaryText,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14)),
+                SizedBox(height: 12),
+                Text(
+                  'This app can announce detected hazards using device text-to-speech. No security dispatch or emergency calling service is configured.',
+                  style: TextStyle(
+                      color: AppColors.secondaryText,
+                      fontSize: 12,
+                      height: 1.4),
                 ),
               ],
             ),
@@ -269,11 +290,17 @@ class _DangerAlertScreenState extends State<DangerAlertScreen> with SingleTicker
           const SizedBox(height: 24),
 
           // Incident Log History
-          const Row(
+          Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('Recent Threat Incidents', style: TextStyle(color: AppColors.primaryText, fontWeight: FontWeight.bold, fontSize: 14)),
-              Text('Security Audit Log', style: TextStyle(color: AppColors.mutedText, fontSize: 12)),
+              const Text('Current Hazard Results',
+                  style: TextStyle(
+                      color: AppColors.primaryText,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14)),
+              Text('${hazards.length} detected',
+                  style: const TextStyle(
+                      color: AppColors.mutedText, fontSize: 12)),
             ],
           ),
           const SizedBox(height: 10),
@@ -284,39 +311,57 @@ class _DangerAlertScreenState extends State<DangerAlertScreen> with SingleTicker
               border: Border.all(color: AppColors.border),
             ),
             child: Column(
-              children: _hazardLogs.map((log) {
-                final isCritical = log['severity'] == 'CRITICAL';
-                return ListTile(
-                  leading: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: isCritical
-                          ? AppColors.error.withValues(alpha: 0.15)
-                          : AppColors.warning.withValues(alpha: 0.15),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      Icons.warning_amber_rounded,
-                      color: isCritical ? AppColors.error : AppColors.warning,
-                      size: 18,
-                    ),
-                  ),
-                  title: Text(log['type'], style: const TextStyle(color: AppColors.primaryText, fontWeight: FontWeight.bold, fontSize: 14)),
-                  subtitle: Text("${log['location']} • ${log['time']}", style: const TextStyle(color: AppColors.secondaryText, fontSize: 12)),
-                  trailing: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: AppColors.elevatedSurface,
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(color: AppColors.border),
-                    ),
-                    child: Text(
-                      log['confidence'],
-                      style: const TextStyle(color: AppColors.neonAccent, fontSize: 12, fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                );
-              }).toList(),
+              children: hazards.isEmpty
+                  ? const [
+                      ListTile(
+                        leading: Icon(Icons.shield_outlined,
+                            color: AppColors.mutedText),
+                        title: Text('No current hazard results',
+                            style: TextStyle(
+                                color: AppColors.secondaryText, fontSize: 13)),
+                      ),
+                    ]
+                  : hazards.map((result) {
+                      return ListTile(
+                        leading: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: AppColors.error.withValues(alpha: 0.15),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.warning_amber_rounded,
+                            color: AppColors.error,
+                            size: 18,
+                          ),
+                        ),
+                        title: Text(result.label,
+                            style: const TextStyle(
+                                color: AppColors.primaryText,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14)),
+                        subtitle: Text(
+                            'Latest analysis · ${(result.confidence * 100).toStringAsFixed(1)}% confidence',
+                            style: const TextStyle(
+                                color: AppColors.secondaryText, fontSize: 12)),
+                        trailing: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: AppColors.elevatedSurface,
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: AppColors.border),
+                          ),
+                          child: Text(
+                            '${(result.confidence * 100).toStringAsFixed(0)}%',
+                            style: const TextStyle(
+                                color: AppColors.neonAccent,
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      );
+                    }).toList(),
             ),
           ),
         ],
@@ -328,7 +373,9 @@ class _DangerAlertScreenState extends State<DangerAlertScreen> with SingleTicker
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
       decoration: BoxDecoration(
-        color: isTriggered ? AppColors.error.withValues(alpha: 0.18) : AppColors.cardBackground,
+        color: isTriggered
+            ? AppColors.error.withValues(alpha: 0.18)
+            : AppColors.cardBackground,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
           color: isTriggered ? AppColors.error : AppColors.border,

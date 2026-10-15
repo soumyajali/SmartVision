@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 
 import '../../controllers/detection_controller.dart';
 import '../../core/constants/app_colors.dart';
-import '../../services/smartvision_api_service.dart';
 import '../../services/speech_service.dart';
 
 class ChatMessage {
@@ -29,13 +28,12 @@ class VisionChatbotScreen extends StatefulWidget {
 class _VisionChatbotScreenState extends State<VisionChatbotScreen> {
   final TextEditingController _textController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-  final SmartVisionApiService _apiService = SmartVisionApiService();
-
   bool _isTyping = false;
 
   final List<ChatMessage> _messages = [
     ChatMessage(
-      text: "👋 Welcome to **SmartVision AI Assistant**! I am your multimodal neural companion. Ask me anything about what's in your camera view, object counts, hazard warnings, or scene explanations.",
+      text:
+          "SmartVision's on-device scene assistant can answer questions about the latest local detection results. Start detection or analyze an image first.",
       isUser: false,
       timestamp: DateTime.now().subtract(const Duration(seconds: 10)),
     ),
@@ -43,11 +41,11 @@ class _VisionChatbotScreenState extends State<VisionChatbotScreen> {
 
   final List<String> _quickPrompts = [
     "What do you see in the scene?",
-    "Are there any safety hazards?",
+    "Are any configured hazards detected?",
     "How many objects are detected?",
-    "Suggest a recipe or culinary prep ideas",
-    "Explain how YOLOv8 object detection works",
-    "Describe the distance of objects in front of me",
+    "How many people are detected?",
+    "What objects are visible?",
+    "Can you estimate object distances?",
   ];
 
   @override
@@ -89,29 +87,17 @@ class _VisionChatbotScreenState extends State<VisionChatbotScreen> {
     });
     _scrollToBottom();
 
-    // Prepare active vision context from DetectionController
     final detectionCtrl = context.read<DetectionController>();
     final results = detectionCtrl.currentResults;
-
-    final Map<String, int> counts = {};
-    for (var r in results) {
+    final counts = <String, int>{};
+    for (final r in results) {
       counts[r.label] = (counts[r.label] ?? 0) + 1;
     }
-
-    final contextPayload = {
-      'counts': counts,
-      'detections': results.map((r) => r.label).toList(),
-      'hazards': results.where((r) => r.isHazard).map((r) => r.label).toList(),
-      'details': results.map((r) => {
-        'label': r.label,
-        'confidence': r.confidence,
-        'distance_m': r.distanceM,
-      }).toList(),
-    };
-
-    final response = await _apiService.askChatbot(
-      query: query,
-      context: contextPayload,
+    final response = _answerFromLocalScene(
+      query,
+      counts,
+      results.where((item) => item.isHazard).map((item) => item.label).toSet(),
+      detectionCtrl.isDetecting,
     );
 
     if (mounted) {
@@ -129,12 +115,61 @@ class _VisionChatbotScreenState extends State<VisionChatbotScreen> {
     }
   }
 
+  String _answerFromLocalScene(
+    String query,
+    Map<String, int> counts,
+    Set<String> hazards,
+    bool isDetecting,
+  ) {
+    final normalized = query.toLowerCase();
+    if (normalized.contains('distance') || normalized.contains('far')) {
+      return 'Object distance cannot be measured reliably from this single '
+          'camera image. This app has no depth sensor or calibrated depth model.';
+    }
+    if (normalized.contains('hazard') || normalized.contains('danger')) {
+      if (hazards.isEmpty) {
+        return isDetecting
+            ? 'No configured hazard classes were detected in the latest frame.'
+            : 'No recent detection result is available. Run object detection first.';
+      }
+      return 'Configured hazard classes detected in the latest result: '
+          '${hazards.join(', ')}.';
+    }
+    if (normalized.contains('how many') || normalized.contains('count')) {
+      final requestedLabel = counts.keys
+          .where((label) => normalized.contains(label.toLowerCase()))
+          .firstOrNull;
+      if (requestedLabel != null) {
+        final count = counts[requestedLabel]!;
+        return '$count $requestedLabel${count == 1 ? '' : 's'} detected in '
+            'the latest result.';
+      }
+      final total = counts.values.fold<int>(0, (sum, count) => sum + count);
+      return isDetecting || counts.isNotEmpty
+          ? '$total object(s) across ${counts.length} class(es) in the latest result.'
+          : 'No recent detection result is available. Run object detection first.';
+    }
+    if (counts.isEmpty) {
+      return isDetecting
+          ? 'No objects were detected in the latest frame.'
+          : 'No recent detection result is available. Run object detection first.';
+    }
+    final summary = counts.entries
+        .map((entry) =>
+            '${entry.value} ${entry.key}${entry.value == 1 ? '' : 's'}')
+        .join(', ');
+    return 'Latest on-device detection: $summary. I can report detected '
+        'classes, counts, and configured hazards; I do not have a local '
+        'generative language model for open-ended questions.';
+  }
+
   void _clearChat() {
     setState(() {
       _messages.clear();
       _messages.add(
         ChatMessage(
-          text: "Chat history cleared. How can I assist you with your visual environment?",
+          text:
+              "Chat history cleared. How can I assist you with your visual environment?",
           isUser: false,
           timestamp: DateTime.now(),
         ),
@@ -158,14 +193,18 @@ class _VisionChatbotScreenState extends State<VisionChatbotScreen> {
                 color: AppColors.primaryViolet.withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: const Icon(Icons.auto_awesome, color: AppColors.neonAccent, size: 20),
+              child: const Icon(Icons.auto_awesome,
+                  color: AppColors.neonAccent, size: 20),
             ),
             const SizedBox(width: 10),
             const Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Vision Chatbot AI', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                Text('Multimodal Scene Understanding', style: TextStyle(fontSize: 11, color: AppColors.mutedText)),
+                Text('Vision Chatbot AI',
+                    style:
+                        TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                Text('Multimodal Scene Understanding',
+                    style: TextStyle(fontSize: 11, color: AppColors.mutedText)),
               ],
             ),
           ],
@@ -185,14 +224,19 @@ class _VisionChatbotScreenState extends State<VisionChatbotScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             decoration: const BoxDecoration(
               color: AppColors.secondaryBackground,
-              border: Border(bottom: BorderSide(color: AppColors.border, width: 0.8)),
+              border: Border(
+                  bottom: BorderSide(color: AppColors.border, width: 0.8)),
             ),
             child: Row(
               children: [
                 Icon(
-                  activeDetections.isNotEmpty ? Icons.visibility : Icons.visibility_off_outlined,
+                  activeDetections.isNotEmpty
+                      ? Icons.visibility
+                      : Icons.visibility_off_outlined,
                   size: 18,
-                  color: activeDetections.isNotEmpty ? AppColors.neonAccent : AppColors.mutedText,
+                  color: activeDetections.isNotEmpty
+                      ? AppColors.neonAccent
+                      : AppColors.mutedText,
                 ),
                 const SizedBox(width: 8),
                 Expanded(
@@ -203,14 +247,17 @@ class _VisionChatbotScreenState extends State<VisionChatbotScreen> {
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w500,
-                      color: activeDetections.isNotEmpty ? AppColors.neonAccent : AppColors.mutedText,
+                      color: activeDetections.isNotEmpty
+                          ? AppColors.neonAccent
+                          : AppColors.mutedText,
                     ),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
                 if (detectionCtrl.hasActiveHazard)
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                     decoration: BoxDecoration(
                       color: const Color(0xFFFF1744).withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(12),
@@ -218,7 +265,10 @@ class _VisionChatbotScreenState extends State<VisionChatbotScreen> {
                     ),
                     child: const Text(
                       'HAZARD DETECTED',
-                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFFFF8A80)),
+                      style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFFFF8A80)),
                     ),
                   ),
               ],
@@ -247,12 +297,16 @@ class _VisionChatbotScreenState extends State<VisionChatbotScreen> {
                   SizedBox(
                     width: 14,
                     height: 14,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.neonAccent),
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: AppColors.neonAccent),
                   ),
                   SizedBox(width: 10),
                   Text(
                     'SmartVision AI is analyzing scene...',
-                    style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic, color: AppColors.mutedText),
+                    style: TextStyle(
+                        fontSize: 12,
+                        fontStyle: FontStyle.italic,
+                        color: AppColors.mutedText),
                   ),
                 ],
               ),
@@ -272,7 +326,9 @@ class _VisionChatbotScreenState extends State<VisionChatbotScreen> {
                 return ActionChip(
                   backgroundColor: AppColors.cardBackground,
                   side: const BorderSide(color: AppColors.border),
-                  label: Text(prompt, style: const TextStyle(fontSize: 12, color: AppColors.secondaryText)),
+                  label: Text(prompt,
+                      style: const TextStyle(
+                          fontSize: 12, color: AppColors.secondaryText)),
                   onPressed: () => _handleSendMessage(prompt),
                 );
               },
@@ -292,13 +348,16 @@ class _VisionChatbotScreenState extends State<VisionChatbotScreen> {
                   Expanded(
                     child: TextField(
                       controller: _textController,
-                      style: const TextStyle(color: AppColors.primaryText, fontSize: 14),
+                      style: const TextStyle(
+                          color: AppColors.primaryText, fontSize: 14),
                       decoration: InputDecoration(
                         hintText: 'Ask anything about what is seen...',
-                        hintStyle: const TextStyle(color: AppColors.mutedText, fontSize: 14),
+                        hintStyle: const TextStyle(
+                            color: AppColors.mutedText, fontSize: 14),
                         filled: true,
                         fillColor: AppColors.cardBackground,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 12),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(24),
                           borderSide: const BorderSide(color: AppColors.border),
@@ -309,7 +368,8 @@ class _VisionChatbotScreenState extends State<VisionChatbotScreen> {
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(24),
-                          borderSide: const BorderSide(color: AppColors.neonAccent),
+                          borderSide:
+                              const BorderSide(color: AppColors.neonAccent),
                         ),
                       ),
                       onSubmitted: (_) => _handleSendMessage(),
@@ -326,7 +386,8 @@ class _VisionChatbotScreenState extends State<VisionChatbotScreen> {
                       ),
                     ),
                     child: IconButton(
-                      icon: const Icon(Icons.arrow_upward_rounded, color: Colors.black),
+                      icon: const Icon(Icons.arrow_upward_rounded,
+                          color: Colors.black),
                       onPressed: () => _handleSendMessage(),
                     ),
                   ),
@@ -347,10 +408,13 @@ class _VisionChatbotScreenState extends State<VisionChatbotScreen> {
       alignment: msg.isUser ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
         margin: const EdgeInsets.symmetric(vertical: 6),
-        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.8),
+        constraints:
+            BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.8),
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: msg.isUser ? AppColors.primaryViolet.withValues(alpha: 0.3) : AppColors.cardBackground,
+          color: msg.isUser
+              ? AppColors.primaryViolet.withValues(alpha: 0.3)
+              : AppColors.cardBackground,
           borderRadius: BorderRadius.only(
             topLeft: const Radius.circular(16),
             topRight: const Radius.circular(16),
@@ -358,7 +422,9 @@ class _VisionChatbotScreenState extends State<VisionChatbotScreen> {
             bottomRight: Radius.circular(msg.isUser ? 4 : 16),
           ),
           border: Border.all(
-            color: msg.isUser ? AppColors.primaryViolet.withValues(alpha: 0.6) : AppColors.border,
+            color: msg.isUser
+                ? AppColors.primaryViolet.withValues(alpha: 0.6)
+                : AppColors.border,
           ),
         ),
         child: Column(
@@ -370,7 +436,9 @@ class _VisionChatbotScreenState extends State<VisionChatbotScreen> {
                 Icon(
                   msg.isUser ? Icons.person : Icons.auto_awesome,
                   size: 14,
-                  color: msg.isUser ? AppColors.brightViolet : AppColors.neonAccent,
+                  color: msg.isUser
+                      ? AppColors.brightViolet
+                      : AppColors.neonAccent,
                 ),
                 const SizedBox(width: 6),
                 Text(
@@ -378,16 +446,21 @@ class _VisionChatbotScreenState extends State<VisionChatbotScreen> {
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.bold,
-                    color: msg.isUser ? AppColors.brightViolet : AppColors.neonAccent,
+                    color: msg.isUser
+                        ? AppColors.brightViolet
+                        : AppColors.neonAccent,
                   ),
                 ),
                 const Spacer(),
-                Text(timeStr, style: const TextStyle(fontSize: 10, color: AppColors.mutedText)),
+                Text(timeStr,
+                    style: const TextStyle(
+                        fontSize: 10, color: AppColors.mutedText)),
                 if (!msg.isUser) ...[
                   const SizedBox(width: 8),
                   GestureDetector(
                     onTap: () => speechService.speak(msg.text),
-                    child: const Icon(Icons.volume_up_outlined, size: 16, color: AppColors.mutedText),
+                    child: const Icon(Icons.volume_up_outlined,
+                        size: 16, color: AppColors.mutedText),
                   ),
                 ],
               ],
@@ -395,7 +468,8 @@ class _VisionChatbotScreenState extends State<VisionChatbotScreen> {
             const SizedBox(height: 8),
             SelectableText(
               msg.text,
-              style: const TextStyle(color: AppColors.primaryText, fontSize: 13.5, height: 1.45),
+              style: const TextStyle(
+                  color: AppColors.primaryText, fontSize: 13.5, height: 1.45),
             ),
           ],
         ),
