@@ -307,12 +307,6 @@ class MainLayoutShell extends StatelessWidget {
                           Icons.face_rounded, '/face_id', location),
                       _buildNavItem(
                           context,
-                          'Drowsiness Monitor',
-                          Icons.remove_red_eye_outlined,
-                          '/drowsiness',
-                          location),
-                      _buildNavItem(
-                          context,
                           'Video Fast Review',
                           Icons.movie_filter_rounded,
                           '/video_review',
@@ -474,12 +468,6 @@ class MainLayoutShell extends StatelessWidget {
                       Icons.warning_amber_rounded, '/alerts', currentLocation),
                   _buildNavItem(context, 'Face ID & Biometrics',
                       Icons.face_rounded, '/face_id', currentLocation),
-                  _buildNavItem(
-                      context,
-                      'Drowsiness Monitoring',
-                      Icons.remove_red_eye_outlined,
-                      '/drowsiness',
-                      currentLocation),
                   _buildNavItem(
                       context,
                       'Video Fast Review',

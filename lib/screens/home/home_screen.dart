@@ -236,6 +236,19 @@ class _HomeScreenState extends State<HomeScreen> {
             side: const BorderSide(color: AppColors.border),
             onPressed: () => context.push('/alerts'),
           ),
+          const SizedBox(width: 8),
+          ActionChip(
+            avatar: const Icon(Icons.remove_red_eye_outlined,
+                size: 14, color: Colors.cyanAccent),
+            label: const Text('Drowsiness Monitor',
+                style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.primaryText)),
+            backgroundColor: AppColors.cardBackground,
+            side: const BorderSide(color: AppColors.border),
+            onPressed: () => context.push('/drowsiness'),
+          ),
         ],
       ),
     );
